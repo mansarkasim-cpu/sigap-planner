@@ -1,0 +1,957 @@
+'use client';
+import { useEffect, useState } from 'react';
+import apiClient from '../lib/api-client';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Autocomplete from '@mui/material/Autocomplete';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
+import LinearProgress from '@mui/material/LinearProgress';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
+export type Activity = {
+  id?: string;
+  task_name?: string;
+  task_number?: number;
+  task_duration?: number;
+  [key: string]: any;
+};
+
+export type WorkOrder = {
+  id: string;
+  doc_no?: string;
+  sigap_id?: number;
+  vendor_cabang?: string; // location field from external API
+  work_type?: string;
+  type_work?: string;
+  date_doc?: string;
+  asset_name?: string;
+  description?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  raw?: {
+    activities?: Activity[];
+    [key: string]: any;
+  };
+  tasks?: any[];
+  created_at?: string;
+  progress?: number;
+};
+
+type Props = {
+  onRefreshRequested?: (fn: () => Promise<void>) => void;
+};
+
+export default function WorkOrderList({ onRefreshRequested }: Props) {
+  // format stored dates (possibly SQL 'YYYY-MM-DD HH:mm:ss' without timezone)
+  function formatUtcDisplay(raw?: string | null) {
+    if (!raw) return '-';
+    const s = String(raw).trim();
+    // If stored as SQL-like 'YYYY-MM-DD HH:mm:ss' return the same local datetime
+    const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+    const m = sqlRx.exec(s);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    if (m) {
+      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+    }
+    // fallback: parse ISO and show local components (best-effort)
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return '-';
+    return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  }
+  const [list, setList] = useState<WorkOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [locations, setLocations] = useState<string[]>([]);
+  const [locationFilter, setLocationFilter] = useState<string>('');
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [q, setQ] = useState('');
+
+  const [editing, setEditing] = useState<WorkOrder | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editNote, setEditNote] = useState<string>('');
+  const [dateHistory, setDateHistory] = useState<any[]>([]);
+
+  const [taskModal, setTaskModal] = useState<{ open: boolean; wo: WorkOrder | null }>({ open: false, wo: null });
+  const [technicians, setTechnicians] = useState<Array<any>>([]);
+  const [techQuery, setTechQuery] = useState<string>('');
+  const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string[]>>({});
+  const [currentUser, setCurrentUser] = useState<any | null>(undefined);
+  const [editStartInput, setEditStartInput] = useState<string>('');
+  const [editEndInput, setEditEndInput] = useState<string>('');
+
+  async function load(p = page, query = q, location = locationFilter) {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      params.set('page', String(p));
+      params.set('pageSize', String(pageSize));
+      if (location) params.set('location', location);
+      const res = await apiClient(`/work-orders?${params.toString()}`);
+      const data = Array.isArray(res) ? res : (res?.data ?? []);
+      const meta = (res && typeof res === 'object' && !Array.isArray(res)) ? (res.meta ?? { page: p, pageSize, total: 0 }) : { page: p, pageSize, total: 0 };
+      const listData = Array.isArray(data) ? data : [];
+      // derive available locations from returned (unfiltered) data
+      const allListData = listData;
+      const locs = Array.from(new Set(allListData.map((w: WorkOrder) => (w.vendor_cabang ?? w.raw?.vendor_cabang ?? '').toString().trim()).filter(Boolean)));
+      const sts = Array.from(new Set(allListData.map((w: WorkOrder) => ((w as any).status ?? w.raw?.status ?? 'NEW').toString().trim()).filter(Boolean)));
+      setStatuses(sts);
+      setLocations(locs);
+      // apply client-side filtering by location (case-insensitive) so filter works
+      let displayed = allListData;
+      console.debug('test ', allListData);
+      if (location) {
+        const low = location.toString().toLowerCase().trim();
+        displayed = allListData.filter((w: WorkOrder) => {
+          const v = (w.vendor_cabang ?? w.raw?.vendor_cabang ?? '').toString().toLowerCase().trim();
+          return v === low;
+        });
+      }
+      // apply client-side filtering by selected statuses (if any)
+      if (selectedStatuses && selectedStatuses.length > 0) {
+        const normSet = new Set(selectedStatuses.map(s => s.toString().toUpperCase().replace(/[-\s]/g, '_')));
+        displayed = displayed.filter((w: WorkOrder) => {
+          const sRaw = ((w as any).status ?? w.raw?.status ?? 'NEW').toString();
+          const sNorm = sRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
+          return normSet.has(sNorm);
+        });
+      }
+      setList(displayed);
+      setTotal(typeof meta.total === 'number' ? meta.total : 0);
+    } catch (err: any) {
+      console.error('load work orders', err);
+      setError(err?.body?.message || err?.message || 'Gagal memuat');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(1, q); setPage(1); }, [q, locationFilter, selectedStatuses]);
+
+  // expose the refresh function to parent via callback (so WorkOrderForm can trigger it)
+  useEffect(() => {
+    if (typeof onRefreshRequested === 'function') {
+      onRefreshRequested(async () => {
+        await load(1, q, locationFilter);
+        setPage(1);
+      });
+    }
+    // we intentionally omit onRefreshRequested from deps to only register once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onPrev() { if (page > 1) { setPage(p => { const np = p - 1; load(np); return np; }); } }
+  function onNext() { const maxPage = Math.ceil(total / pageSize); if (page < maxPage) { setPage(p => { const np = p + 1; load(np); return np; }); } }
+
+  function openEdit(w: WorkOrder) {
+    setEditing(w);
+    setEditNote('');
+    setEditStartInput(toInputDatetime(w.start_date));
+    setEditEndInput(toInputDatetime(w.end_date));
+    // load date history for this workorder (if authenticated)
+    (async () => {
+      try {
+        const h = await apiClient(`/work-orders/${encodeURIComponent(w.id)}/date-history`);
+        const rows = h?.data ?? h;
+        if (Array.isArray(rows)) setDateHistory(rows);
+        else setDateHistory([]);
+      } catch (e) {
+        setDateHistory([]);
+      }
+    })();
+  }
+
+  function openTaskModal(w: WorkOrder) {
+    console.debug('[openTaskModal]');
+    console.debug('workorder:', w);
+    // Require start_date on work order. If missing, prompt user to fill dates first.
+    if (!w.start_date) {
+      alert('Work Order belum memiliki Start Date. Isi Start Date dan End Date terlebih dahulu.');
+      setEditing(w);
+      return;
+    }
+
+    // reset technician search and selections when opening modal
+    setTechQuery('');
+    setTechnicians([]);
+    setSelectedAssignees({});
+    setTaskModal({ open: true, wo: w });
+    // load technicians (users with role=technician) and workorder detail (assignments)
+    (async () => {
+      let filteredTechs: any[] = [];
+      try {
+        // determine workorder site/location (use vendor_cabang or raw.site)
+        const woSiteRaw = (w.vendor_cabang ?? w.raw?.vendor_cabang ?? w.raw?.site ?? '');
+        const woSite = String(woSiteRaw || '').toLowerCase().trim();
+        // determine assignment date/time from workorder start_date (must exist)
+        // parse stored start_date robustly and interpret SQL datetimes without timezone as UTC
+        const pad = (n: number) => String(n).padStart(2, '0');
+        function parseToUtcDate(val?: string | null): Date | null {
+          if (!val) return null;
+          const s = String(val).trim();
+          const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+          const m = sqlRx.exec(s);
+          if (m) {
+            const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
+            // interpret stored value as UTC, then shift to backend-local (+8h) for assignment calculations
+            const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(parsed.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+          return null;
+        }
+
+        const sdUtc = parseToUtcDate(String(w.start_date));
+        if (!sdUtc) {
+          alert('Start Date tidak valid. Isi Start Date yang benar terlebih dahulu.');
+          setEditing(w);
+          return;
+        }
+        const assignDate = `${sdUtc.getUTCFullYear()}-${pad(sdUtc.getUTCMonth() + 1)}-${pad(sdUtc.getUTCDate())}`;
+        const assignTime = `${pad(sdUtc.getUTCHours())}:${pad(sdUtc.getUTCMinutes())}`;
+        console.debug('[openTaskModal] assignDate/time (local)', { assignDate, assignTime, raw: w.start_date });
+        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&time=${encodeURIComponent(assignTime)}` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
+        console.debug(schedUrl);
+
+        try {
+          console.debug('[openTaskModal] fetching scheduled technicians', { schedUrl });
+          const sched = await apiClient(schedUrl);
+          console.debug(sched);
+
+          const schedRows = Array.isArray(sched) ? sched : (sched?.data ?? []);
+          console.debug('[openTaskModal] scheduled-technicians response', { count: Array.isArray(schedRows) ? schedRows.length : 0 });
+          if (schedRows && schedRows.length > 0) {
+            filteredTechs = schedRows;
+            console.debug('[openTaskModal] using scheduled-technicians sample', (schedRows as any[]).slice(0, 5));
+          } else {
+            // fallback: load site-filtered technicians
+            // console.log('[openTaskModal] scheduled-technicians empty — falling back to /users?role=technician');
+            // const techs = await apiClient('/users?role=technician');
+            // const list = Array.isArray(techs) ? techs : (techs?.data ?? []);
+            // console.log('[openTaskModal] /users?role=technician response', { count: Array.isArray(list) ? list.length : 0 });
+            // if (woSite) {
+            //   filteredTechs = list.filter((t: any) => {
+            //     const tSite = String(t.site ?? t.vendor_cabang ?? t.location ?? '').toLowerCase().trim();
+            //     return tSite === woSite;
+            //   });
+            //   console.log('[openTaskModal] after site-filtering technicians', { count: filteredTechs.length });
+            // } else {
+            //   filteredTechs = list;
+            // }
+            filteredTechs = schedRows;
+          }
+        } catch (e) {
+          console.warn('scheduled-technicians fetch failed, falling back', e);
+          const techs = await apiClient('/users?role=technician');
+          const list = Array.isArray(techs) ? techs : (techs?.data ?? []);
+          console.debug('[openTaskModal] fallback /users?role=technician response', { count: Array.isArray(list) ? list.length : 0 });
+          filteredTechs = list;
+        }
+
+        console.debug('[openTaskModal] final filteredTechs', { count: filteredTechs.length, sample: filteredTechs.slice(0, 5) });
+        setTechnicians(filteredTechs);
+      } catch (e) {
+        console.warn('Failed to load technicians from shift assignments', e);
+        setTechnicians([]);
+        filteredTechs = [];
+      }
+
+      // load full workorder detail to get existing assignments and tasks
+      try {
+        const res = await apiClient(`/work-orders/${encodeURIComponent(w.id)}`);
+        const woDetail = res?.data ?? res;
+        // load tasks for this work order (fallback to raw.activities if no tasks)
+        try {
+          console.debug('[openTaskModal] fetching tasks for workorder', { workOrderId: w.id });
+          const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(w.id)}/tasks`);
+          const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+          console.debug('[openTaskModal] tasks fetch result', { count: Array.isArray(tasks) ? tasks.length : 0, sample: (tasks as any[]).slice(0, 5) });
+          // attach tasks to woDetail for modal rendering
+          woDetail.tasks = tasks;
+        } catch (e) {
+          console.debug('[openTaskModal] /tasks fetch failed, falling back to raw.activities', e);
+          // fallback: map raw.activities -> tasks for display
+          const acts = Array.isArray(woDetail.raw?.activities) ? woDetail.raw.activities : [];
+          woDetail.tasks = acts.map((act: any, idx: number) => ({ id: `raw-${idx}`, name: act.task_name || act.name || `Task ${idx + 1}`, duration_min: act.task_duration }));
+        }
+        // update modal workorder with full details (assignments)
+        setTaskModal({ open: true, wo: woDetail });
+
+        // build selectedAssignees from task.assignments for each task (tasks came from /work-orders/:id/tasks)
+        const nextSelected: Record<string, string[]> = {};
+        const taskRows = Array.isArray(woDetail.tasks) ? woDetail.tasks : [];
+        // only pre-check assignments whose assignee is present in the filtered technician list
+        const techIds = new Set((Array.isArray(filteredTechs) ? filteredTechs : []).map(t => String(t.id)));
+        console.debug('[openTaskModal] building selectedAssignees from task.assignments', { taskCount: taskRows.length, techIdsCount: techIds.size });
+        for (const t of taskRows) {
+          const key = String(t.id ?? t.task_id ?? t.external_id ?? '');
+          if (!key) continue;
+          const assigns = Array.isArray(t.assignments) ? t.assignments : [];
+          const keeps: string[] = [];
+          for (const a of assigns) {
+            const assId = String(a?.user?.id ?? a.user_id ?? a.userId ?? '');
+            if (!assId) continue;
+            if (!techIds.has(assId)) {
+              console.debug('[openTaskModal] skipping assignment because assignee not in filtered technicians', { assId, key });
+              continue;
+            }
+            if (!keeps.includes(assId)) keeps.push(assId);
+          }
+          if (keeps.length > 0) nextSelected[key] = keeps;
+        }
+        console.debug('[openTaskModal] selectedAssignees prepared', nextSelected);
+        setSelectedAssignees(nextSelected);
+      } catch (err) {
+        console.warn('Failed to load workorder detail', err);
+      }
+
+      // load current user info (auth status)
+      try {
+        const me = await apiClient('/auth/me');
+        setCurrentUser(me?.data ?? me);
+      } catch (err) {
+        // if unauthorized or error, mark as not authenticated
+        setCurrentUser(null);
+      }
+    })();
+  }
+
+  function closeTaskModal() {
+    setTaskModal({ open: false, wo: null });
+    // reset tech query so checklist isn't filtered on next open
+    setTechQuery('');
+    // refresh work order list so changes made in the modal are reflected
+    try {
+      load(page, q);
+    } catch (e) {
+      console.warn('Failed to refresh work order list after closing modal', e);
+    }
+  }
+
+  async function saveEdit(id: string, start_date?: string | null, end_date?: string | null) {
+    setEditLoading(true);
+    try {
+      const body: any = {};
+      // accept ISO strings (from datetime-local) or null
+      if (start_date !== undefined) body.start_date = start_date || null;
+      if (end_date !== undefined) body.end_date = end_date || null;
+        if (editNote && editNote.trim().length) body.note = editNote.trim();
+      await apiClient(`/work-orders/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      load(page, q);
+      setEditing(null);
+    } catch (err: any) {
+      console.error('save edit', err);
+      alert('Gagal menyimpan: ' + (err?.body?.message || err?.message));
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function toInputDatetime(iso?: string | null) {
+    if (!iso) return '';
+    const s = String(iso).trim();
+    const rx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+    const m = rx.exec(s);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    if (m) {
+      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+      return `${yyyy}-${mm}-${dd}T${pad(Number(hh))}:${pad(Number(mi))}`;
+    }
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return '';
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  }
+
+  function parseDdMMyyyyToIso(input?: string | null) {
+    if (!input) return null;
+    const s = input.toString().trim();
+    // expect 'dd/mm/yyyy HH:MM' or 'dd/mm/yyyy'
+    const rx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2}))?$/;
+    const m = rx.exec(s);
+    if (!m) return null;
+    const dd = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const yyyy = parseInt(m[3], 10);
+    const hh = m[4] ? parseInt(m[4], 10) : 0;
+    const mi = m[5] ? parseInt(m[5], 10) : 0;
+    const dt = new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0));
+    if (isNaN(dt.getTime())) return null;
+    return dt.toISOString();
+  }
+
+  function getColorForStatus(s: string) {
+    const k = (s || '').toString().toUpperCase();
+    switch (k) {
+      case 'ASSIGNED': return '#0ea5e9'; // blue
+      case 'DEPLOYED': return '#06b6d4'; // teal
+      case 'READY_TO_DEPLOY': return '#7c3aed'; // purple
+      case 'IN_PROGRESS': return '#f97316'; // orange
+      case 'IN-PROGRESS': return '#f97316';
+      case 'COMPLETED': return '#10b981'; // green
+      case 'NEW': return '#64748b'; // gray
+      case 'OPEN': return '#64748b';
+      case 'CANCELLED': return '#ef4444';
+      case 'CLOSED': return '#334155';
+      default: return '#6b7280';
+    }
+  }
+
+  const STATUS_OPTIONS = [
+    'NEW',
+    'ASSIGNED',
+    'READY TO DEPLOY',
+    'DEPLOYED',
+    'IN PROGRESS',
+    'COMPLETED'
+  ];
+
+  function shouldShowAssignColumn(wo: WorkOrder | null) {
+    const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
+    return !(s === 'IN_PROGRESS' || s === 'COMPLETED');
+  }
+
+  function renderStatusBadge(s: string) {
+    const color = getColorForStatus(s);
+    return (
+      <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 12, fontWeight: 600 }}>
+        {String(s).replace('_', ' ')}
+      </span>
+    );
+  }
+
+  async function handleDeploy(woId: string) {
+    try {
+      await apiClient(`/work-orders/${encodeURIComponent(woId)}/deploy`, { method: 'POST' });
+      // refresh modal and list
+      const woRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}`);
+      const woDetail = woRes?.data ?? woRes;
+      const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}/tasks`);
+      const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+      setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
+      load(page, q);
+    } catch (e) {
+      console.error('deploy failed', e);
+      alert('Deploy gagal: ' + (e?.message || e));
+    }
+  }
+
+  async function handleUndeploy(woId: string) {
+    try {
+      await apiClient(`/work-orders/${encodeURIComponent(woId)}/undeploy`, { method: 'POST' });
+      const woRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}`);
+      const woDetail = woRes?.data ?? woRes;
+      const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}/tasks`);
+      const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+      setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
+      load(page, q);
+    } catch (e) {
+      console.error('undeploy failed', e);
+      alert('Undeploy gagal: ' + (e?.message || e));
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+            <Select
+              value={locationFilter}
+              onChange={e => setLocationFilter(String(e.target.value))}
+              displayEmpty
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">Semua Lokasi</MenuItem>
+              {locations.map(s => (
+                <MenuItem key={s} value={s}>{s}</MenuItem>
+              ))}
+            </Select>
+
+            <Select
+              multiple
+              displayEmpty
+              size="small"
+              value={selectedStatuses}
+              onChange={e => setSelectedStatuses(typeof e.target.value === 'string' ? e.target.value.split(',') : (e.target.value as string[]))}
+              renderValue={(selected) => (
+                selected && (selected as string[]).length > 0 ? (
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {(selected as string[]).map((val) => (
+                      <Chip key={val} label={val} size="small" />
+                    ))}
+                  </Box>
+                ) : 'Semua Status'
+              )}
+              sx={{ minWidth: 220 }}
+            >
+              {STATUS_OPTIONS.map(opt => (
+                <MenuItem key={opt} value={opt}>
+                  <Checkbox checked={selectedStatuses.indexOf(opt) > -1} />
+                  {opt}
+                </MenuItem>
+              ))}
+            </Select>
+
+            <TextField
+              placeholder="Search doc_no / asset / desc"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              size="small"
+              sx={{ flex: 1, minWidth: 240 }}
+            />
+
+            <Button variant="contained" color="primary" size="small" onClick={() => load(1, q)} disabled={loading}>Search</Button>
+            <Button variant="outlined" size="small" onClick={() => load(1, q)} disabled={loading}>Refresh</Button>
+
+            <Box sx={{ alignSelf: 'center', ml: 'auto', color: 'text.secondary' }}>{total} item</Box>
+          </Box>
+
+          {loading ? <Typography variant="body2">Loading...</Typography> : null}
+          {error ? <Typography variant="body2" color="error">{error}</Typography> : null}
+        </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <TableContainer component={Paper} sx={{ mb: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Doc No</TableCell>
+                <TableCell>Jenis Work Order</TableCell>
+                <TableCell>Start</TableCell>
+                <TableCell>End</TableCell>
+                <TableCell>Asset</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Location</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Progress</TableCell>
+                <TableCell>Action</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {list.map(w => {
+                const activities = (w.raw?.activities ?? []) as Activity[];
+                const statusRaw = ((w as any).status ?? w.raw?.status ?? 'NEW').toString();
+                const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
+                return (
+                  <TableRow key={w.id} hover>
+                    <TableCell>{w.doc_no ?? w.id}</TableCell>
+                    <TableCell>{w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '-'}</TableCell>
+                    <TableCell>{formatUtcDisplay(w.start_date)}</TableCell>
+                    <TableCell>{formatUtcDisplay(w.end_date)}</TableCell>
+                    <TableCell>{w.asset_name ?? '-'}</TableCell>
+                    <TableCell>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'NEW')}</TableCell>
+                    <TableCell>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
+                    <TableCell sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.description ?? '-'}</TableCell>
+                    <TableCell sx={{ width: 180 }}>
+                      {statusNorm === 'IN_PROGRESS' && typeof (w as any).progress === 'number' ? (
+                        (() => {
+                          const prog = Math.max(0, Math.min(1, (w as any).progress || 0));
+                          const statusColor = getColorForStatus(statusRaw);
+                          return (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 700 }}>{Math.round(prog * 100)}%</Typography>
+                              <LinearProgress variant="determinate" value={Math.round(prog * 100)} sx={{ height: 8, borderRadius: 2, backgroundColor: '#f1f5f9', '& .MuiLinearProgress-bar': { background: statusColor } }} />
+                            </Box>
+                          );
+                        })()
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">-</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {Array.isArray(activities) && activities.length > 0 && (
+                          <Button size="small" variant="outlined" onClick={() => openTaskModal(w)}>Lihat Task ({activities.length})</Button>
+                        )}
+                        {!(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                          <Button size="small" variant="contained" color="secondary" onClick={() => openEdit(w)}>Edit Dates</Button>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Button onClick={onPrev} disabled={page <= 1} size="small">Prev</Button>
+          <Typography variant="body2">Page {page} / {Math.max(1, Math.ceil(total / pageSize))}</Typography>
+          <Button onClick={onNext} disabled={page >= Math.max(1, Math.ceil(total / pageSize))} size="small">Next</Button>
+        </Box>
+      </div>
+
+      {/* Task Modal */}
+      {taskModal.open && taskModal.wo && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: 16
+        }}>
+          <div style={{ background: 'white', padding: 16, width: '95%', maxWidth: 900, borderRadius: 8, maxHeight: '86vh', overflow: 'auto', boxShadow: '0 6px 30px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Task - {taskModal.wo.doc_no ?? taskModal.wo.id}</h2>
+                <div style={{ color: '#666', fontSize: 13 }}>{taskModal.wo.description}</div>
+              </div>
+              <div style={{ textAlign: 'right', minWidth: 180 }}>
+                <div style={{ fontSize: 13, marginBottom: 8 }}>
+                  {currentUser === undefined ? (
+                    <span style={{ color: '#666' }}>Checking auth...</span>
+                  ) : currentUser === null ? (
+                    <span style={{ color: '#c00' }}>Not authenticated</span>
+                  ) : (
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{currentUser.name || currentUser.username || currentUser.email}</div>
+                      <div style={{ color: '#666', fontSize: 12 }}>{currentUser.email} — {currentUser.role ?? currentUser.type}</div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  {(taskModal.wo as any)?.status === 'READY_TO_DEPLOY' && (
+                    <button onClick={() => handleDeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#7c3aed', color: 'white', borderRadius: 6 }}>Deploy</button>
+                  )}
+                  {(taskModal.wo as any)?.status === 'DEPLOYED' && (
+                    <button onClick={() => handleUndeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#ef4444', color: 'white', borderRadius: 6 }}>Undeploy</button>
+                  )}
+                  <button onClick={closeTaskModal} style={{ padding: '6px 10px' }}>Close</button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '50px' }} />
+                  <col />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '340px' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>No</th>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>Task Name</th>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd', textAlignLast: 'right' }}>Duration (min)</th>
+                    {shouldShowAssignColumn(taskModal.wo as any) && (
+                      <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>Assign technicians</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray(taskModal.wo.tasks) && taskModal.wo.tasks.map((act: any, idx: number) => {
+                    const taskKey = (act.id ?? act.task_id ?? String(idx));
+                    const selected = selectedAssignees[taskKey] || [];
+                    // robust detection for whether task has realisasi
+                    function taskHasRealisasi(t: any) {
+                      try {
+                        // 1) task-local explicit lists (common patterns)
+                        const lists = ['realisasi','realisasis','realisasi_list','realisasi_entries','realisasiItems','realisasi_items','realisasiEntries'];
+                        for (const k of lists) {
+                          const v = t[k];
+                          if (Array.isArray(v) && v.length > 0) return true;
+                        }
+
+                        // 2) assignment records that are attached directly to the task (if present)
+                        if (Array.isArray(t.assignments)) {
+                          for (const a of t.assignments) {
+                            if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                            if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                            const s = (a.status || a.state || '').toString().toUpperCase();
+                            if (s.includes('COMP') || s.includes('VERIF') || s.includes('DONE') || s.includes('APPROV')) return true;
+                          }
+                        }
+
+                        // 3) workorder-level assignments: some data models store realisasi on a separate `assignment` table
+                        const woAssigns = Array.isArray((taskModal.wo as any)?.assignments) ? (taskModal.wo as any).assignments : [];
+                        if (woAssigns.length > 0) {
+                          for (const a of woAssigns) {
+                            // match by explicit task_id first, then by name fallback
+                            const aTaskId = (a.task_id ?? a.taskId ?? a.task?.id) ? String(a.task_id ?? a.taskId ?? a.task?.id) : null;
+                            const tId = (t.id ?? t.task_id ?? t.external_id) ? String(t.id ?? t.task_id ?? t.external_id) : null;
+                            if (aTaskId && tId && aTaskId === tId) {
+                              if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                              if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                              const s = (a.status || a.state || '').toString().toUpperCase();
+                              if (s.includes('COMP') || s.includes('VERIF') || s.includes('DONE') || s.includes('APPROV')) return true;
+                            }
+                            // name-based fallback (older rows)
+                            const aName = (a.task_name || a.taskName || a.task?.name || '').toString().trim().toLowerCase();
+                            const tName = (t.name || t.task_name || t.taskName || '').toString().trim().toLowerCase();
+                            if (aName && tName && aName === tName) {
+                              if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                              if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                              const s2 = (a.status || a.state || '').toString().toUpperCase();
+                              if (s2.includes('COMP') || s2.includes('VERIF') || s2.includes('DONE') || s2.includes('APPROV')) return true;
+                            }
+                          }
+                        }
+
+                        // 4) task-level flags and timestamps
+                        if (t.completed === true || t.is_completed === true || String(t.status || '').toUpperCase().includes('COMP')) return true;
+                        if (t.completed_at || t.realisasi_at || t.approved_at) return true;
+                      } catch (e) {
+                        // ignore
+                      }
+                      return false;
+                    }
+                    const hasRealisasi = taskHasRealisasi(act) || Boolean(act.has_realisasi || act.realisasi_count);
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f1f1f1' }}>
+                        <td style={{ padding: 12, verticalAlign: 'top' }}>{act.task_number ?? idx + 1}</td>
+                        <td style={{ padding: 12, verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ fontWeight: 700 }}>{act.name ?? act.task_name ?? '-'}</div>
+                            {hasRealisasi ? (
+                              <span style={{ background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Realisasi ✓</span>
+                            ) : (
+                              (() => {
+                                const pendingCount = Number(act.pending_realisasi_count || act.pendingCount || 0);
+                                const hasPending = Boolean(act.has_pending || pendingCount > 0);
+                                if (hasPending) {
+                                  return <span style={{ background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Pending{pendingCount ? ` (${pendingCount})` : ''}</span>;
+                                }
+                                // explicit 'Belum Realisasi' state when neither realisasi nor pending exist
+                                return <span style={{ background: '#64748b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Belum Realisasi</span>;
+                              })()
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>ID: {act.id ?? '-'}</div>
+                          {/* show already-assigned technicians */}
+                          {Array.isArray(act.assignments) && act.assignments.length > 0 && (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {act.assignments.map((asgn: any) => (
+                                  <div
+                                    key={asgn.id}
+                                    style={{ background: '#eef2ff', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'center' }}
+                                  >
+                                    <span style={{ fontSize: 13, fontWeight: 600 }}>{asgn.user?.name ?? asgn.user?.nipp ?? asgn.user?.email ?? asgn.assigned_to ?? 'Unknown'}</span>
+                                    {currentUser && !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) && (
+                                      <button onClick={async () => {
+                                        try {
+                                          await apiClient(`/tasks/${encodeURIComponent(act.id)}/assign/${encodeURIComponent(asgn.id)}`, { method: 'DELETE' });
+                                        } catch (err) {
+                                          try {
+                                            await apiClient(`/tasks/${encodeURIComponent(act.id)}/assign/${encodeURIComponent(asgn.id)}`, { method: 'DELETE' });
+                                          } catch (e) { console.error('unassign failed', e); alert('Unassign failed'); return; }
+                                        }
+                                        try {
+                                          const woRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}`);
+                                          const woDetail = woRes?.data ?? woRes;
+                                          const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}/tasks`);
+                                          const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+                                          setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
+                                        } catch (e) { console.warn('refresh workorder after unassign failed', e); }
+                                      }} style={{ background: 'transparent', border: 'none', color: '#c00', cursor: 'pointer' }}>Unassign</button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                        </td>
+                        <td style={{ padding: 12, verticalAlign: 'top', textAlign: 'right' }}>{(act.duration_min ?? act.task_duration) ?? '-'}</td>
+                        {shouldShowAssignColumn(taskModal.wo as any) ? (
+                          <td style={{ padding: 12, verticalAlign: 'top' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <Autocomplete
+                                multiple
+                                options={technicians || []}
+                                getOptionLabel={(t: any) => (t.name || t.nipp || t.email || '').toString()}
+                                filterSelectedOptions
+                                value={(selectedAssignees[taskKey] || []).map((id: any) => technicians.find((t: any) => t.id === id)).filter(Boolean)}
+                                onChange={(e, newVal) => setSelectedAssignees(prev => ({ ...prev, [taskKey]: newVal.map((n: any) => n.id) }))}
+                                renderInput={(params) => <TextField {...params} placeholder="Cari teknisi (nama / email / id)" size="small" />}
+                              />
+
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                                  {(technicians || []).slice(0, 200).map((t: any) => {
+                                    const isSel = (selectedAssignees[taskKey] || []).includes(t.id);
+                                    return (
+                                      <Chip
+                                        key={t.id}
+                                        label={(t.name || t.nipp || t.email || '').toString()}
+                                        onClick={() => {
+                                          setSelectedAssignees(prev => {
+                                            const cur = new Set(prev[taskKey] || []);
+                                            if (cur.has(t.id)) cur.delete(t.id); else cur.add(t.id);
+                                            return { ...prev, [taskKey]: Array.from(cur) };
+                                          });
+                                        }}
+                                        clickable
+                                        color={isSel ? 'primary' : 'default'}
+                                        variant={isSel ? 'filled' : 'outlined'}
+                                        size="small"
+                                        sx={{ marginRight: 0.5 }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start', marginTop: 8 }}>
+                                {currentUser === undefined ? (
+                                  <Button size="small" disabled>Checking...</Button>
+                                ) : currentUser === null ? (
+                                  <>
+                                    <Button size="small" variant="contained" color="primary" onClick={() => { window.location.href = '/login'; }}>Login to assign</Button>
+                                    <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
+                                  </>
+                                ) : !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
+                                  <>
+                                    <Button size="small" variant="contained" onClick={async () => {
+                                      const ass = selectedAssignees[taskKey] || [];
+                                      if (!ass || ass.length === 0) { alert('Pilih minimal 1 teknisi'); return; }
+                                      try {
+                                        const unique = Array.from(new Set(ass));
+                                        for (const uid of unique) {
+                                          await apiClient(`/tasks/${encodeURIComponent(act.id ?? act.task_id ?? String(idx))}/assign`, { method: 'POST', body: { userId: uid, assignedBy: currentUser?.id } } as any);
+                                        }
+                                        alert('Assignment created');
+                                        try {
+                                          const woRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}`);
+                                          const woDetail = woRes?.data ?? woRes;
+                                          const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}/tasks`);
+                                          const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+                                          setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
+                                        } catch (e) { console.warn('refresh tasks after assign failed', e); }
+                                        load(page, q);
+                                      } catch (err) {
+                                        console.error('assign error', err);
+                                        alert(err?.body?.message || err?.message || 'Assignment failed');
+                                      }
+                                    }}>Assign</Button>
+                                    <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
+                                  </>
+                                ) : (
+                                  <Button size="small" disabled>Deployed</Button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        ) : (
+                          <td style={{ padding: 12, verticalAlign: 'top' }} />
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Dates Dialog (styled) */}
+      <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit Dates — {editing?.doc_no ?? editing?.id}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Start Date & Time"
+              type="datetime-local"
+              size="small"
+              value={editStartInput}
+              onChange={e => setEditStartInput(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.start_date)}</div>
+
+            <TextField
+              label="End Date & Time"
+              type="datetime-local"
+              size="small"
+              value={editEndInput}
+              onChange={e => setEditEndInput(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.end_date)}</div>
+
+            <TextField
+              label="Keterangan (opsional)"
+              placeholder="Alasan atau catatan perubahan tanggal"
+              multiline
+              rows={4}
+              value={editNote}
+              onChange={e => setEditNote(e.target.value)}
+              fullWidth
+              size="small"
+            />
+
+            {Array.isArray(dateHistory) && dateHistory.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>History perubahan tanggal</div>
+                <div style={{ maxHeight: 240, overflow: 'auto' }}>
+                  {dateHistory.map((h, idx) => (
+                    <div key={h.id || idx} style={{ padding: 12, borderBottom: '1px solid #f5f5f5' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: 13, color: '#333', fontWeight: 700 }}>{h.changed_at ? new Date(h.changed_at).toLocaleString() : '-'}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>{h.changed_by ? `${h.changed_by.nipp ?? h.changed_by.id ?? '-'} • ${h.changed_by.name ?? h.changed_by.email ?? '-'}` : '-'}</div>
+                      </div>
+                      <div style={{ marginTop: 6, color: '#444' }}>
+                        <div>Start: {h.old_start ? formatUtcDisplay(h.old_start) : '-'} → {h.new_start ? formatUtcDisplay(h.new_start) : '-'}</div>
+                        <div>End: {h.old_end ? formatUtcDisplay(h.old_end) : '-'} → {h.new_end ? formatUtcDisplay(h.new_end) : '-'}</div>
+                      </div>
+                      {h.note && <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>Catatan: {h.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setEditing(null)} disabled={editLoading}>Batal</Button>
+          <Button variant="contained" color="primary" onClick={async () => {
+            // Convert datetime-local (YYYY-MM-DDTHH:MM) to SQL datetime string 'YYYY-MM-DD HH:MM:00'
+            function datetimeLocalToSql(local?: string | null) {
+              if (!local) return null;
+              const rx = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+              const m = rx.exec(local);
+              if (!m) return null;
+              const [, yy, mm, dd, hh, mi] = m as any;
+              return `${yy}-${mm}-${dd} ${hh}:${mi}:00`;
+            }
+
+            // basic validation: ensure input matches expected pattern
+            if (editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { alert('Start date tidak valid'); return; }
+            if (editEndInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editEndInput)) { alert('End date tidak valid'); return; }
+
+            const sSql = datetimeLocalToSql(editStartInput || null);
+            const eSql = datetimeLocalToSql(editEndInput || null);
+            await saveEdit(editing!.id, sSql, eSql);
+          }} disabled={editLoading}>{editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+}

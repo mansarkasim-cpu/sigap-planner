@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 3, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":""}},
+    {"offset": {"line": 7, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/gantt/page.tsx"],"sourcesContent":["// app/gantt/page.tsx\r\n'use client';\r\nimport React from 'react';\r\nimport GanttChart from '../../components/GanttChart';\r\n\r\nexport default function Page() {\r\n  return (\r\n    <main style={{ padding: 20 }}>\r\n      <h1>Gantt Chart</h1>\r\n      <GanttChart />\r\n    </main>\r\n  );\r\n}\r\n"],"names":[],"mappings":"AAAA,qBAAqB;;;;;;AAGrB;AAFA;;;AAIe,SAAS;IACtB,qBACE,qPAAC;QAAK,OAAO;YAAE,SAAS;QAAG;;0BACzB,qPAAC;0BAAG;;;;;;0BACJ,qPAAC,2IAAU;;;;;;;;;;;AAGjB"}}]
+}
