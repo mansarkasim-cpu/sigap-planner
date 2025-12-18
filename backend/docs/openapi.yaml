@@ -1,0 +1,486 @@
+openapi: 3.1.0
+info:
+  title: SIGAP Planner - Full API
+  version: 1.0.0
+servers:
+  - url: http://localhost:4000/api
+security:
+  - bearerAuth: []
+paths:
+  /:
+    get:
+      summary: API root / health
+      responses:
+        "200":
+          description: API status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  api:
+                    type: string
+                  docs:
+                    type: string
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              sample:
+                value:
+                  name: "Budi Teknisi"
+                  email: "budi@example.com"
+                  password: "secretpass"
+                  role: "technician"
+                  city: "Jakarta"
+                  location:
+                    lat: -6.200000
+                    lon: 106.816666
+                    address: "Jl. Merdeka 1"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "409":
+          description: Conflict (email exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      summary: Login with username + password
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+            examples:
+              sample:
+                value:
+                  username: "test@example.com"
+                  password: "secretpass"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      summary: Current user (requires Bearer)
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /wo:
+    get:
+      summary: List work orders
+      tags: [WorkOrders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Work orders list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WorkOrder"
+
+  /wo/{wo_id}:
+    get:
+      summary: Get work order by id or business wo_id
+      tags: [WorkOrders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: wo_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Work order detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /assignment:
+    post:
+      summary: Create assignment
+      tags: [Assignments]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentCreate"
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /assignments:
+    get:
+      summary: List assignments (filter by user)
+      tags: [Assignments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: user
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Assignments list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Assignment"
+
+  /realisasi:
+    post:
+      summary: Submit realisasi (multipart or JSON)
+      tags: [Realisasi]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                payload:
+                  type: string
+                  description: JSON string containing realisasi fields (assignment_id, start_time, end_time, actions_taken, etc.)
+                photos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                signature:
+                  type: string
+                  format: binary
+            encoding:
+              payload:
+                contentType: application/json
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RealisasiPayload"
+      responses:
+        "201":
+          description: Realisasi created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  realisasi_id:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /upload/presign:
+    post:
+      summary: Get presigned URL for direct upload (S3/MinIO)
+      tags: [Upload]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, contentType]
+              properties:
+                filename:
+                  type: string
+                contentType:
+                  type: string
+      responses:
+        "200":
+          description: Presigned URL response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  key:
+                    type: string
+                  expiresIn:
+                    type: integer
+                  publicUrl:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /files/upload:
+    post:
+      summary: Simple file upload (backend stores file) - optional
+      tags: [Upload]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  key:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Bad request (validation)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+        city:
+          type: string
+        location:
+          type: object
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+            address:
+              type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+
+    WorkOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        wo_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+
+    AssignmentCreate:
+      type: object
+      required:
+        - wo_id
+        - assigned_to
+      properties:
+        wo_id:
+          type: string
+        assigned_to:
+          type: string
+        scheduled_start:
+          type: string
+          format: date-time
+
+    Assignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+        work_order:
+          $ref: "#/components/schemas/WorkOrder"
+        scheduledAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+
+    RealisasiPayload:
+      type: object
+      required:
+        - assignment_id
+        - start_time
+        - end_time
+        - actions_taken
+      properties:
+        assignment_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        actions_taken:
+          type: string
+        notes:
+          type: string
+        man_hours:
+          type: number
+        photos:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string

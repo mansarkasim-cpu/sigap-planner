@@ -1,0 +1,26 @@
+// src/routes/workorder.routes.ts
+import { Router } from 'express';
+import * as ctrl from '../controllers/workOrderController';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+
+// daftar paginated & search: GET /api/work-orders?q=&page=&pageSize=
+router.get('/', ctrl.listWorkOrdersPaginated);
+
+// tambah dari SIGAP (existing)
+router.post('/add', ctrl.fetchAndCreateFromSigap);
+router.post('/fetch-and-create', ctrl.fetchAndCreateFromSigap);
+
+// update start/end date: PATCH /api/work-orders/:id
+// protect date edits and record who changed them
+router.patch('/:id', authMiddleware, ctrl.updateWorkOrderDates);
+
+// get date-change history
+router.get('/:id/date-history', authMiddleware, ctrl.getWorkOrderDateHistory);
+
+router.get('/:id', ctrl.getWorkOrderById); 
+router.post('/:id/deploy', authMiddleware, ctrl.deployWorkOrder);
+router.post('/:id/undeploy', authMiddleware, ctrl.undeployWorkOrder);
+
+export default router;
