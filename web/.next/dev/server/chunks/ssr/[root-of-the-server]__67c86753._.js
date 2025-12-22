@@ -219,7 +219,7 @@ function clearApiLogs() {
         ;
     } catch (_) {}
 }
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || 'http://localhost:4000/api';
 async function handleResp(res) {
     const text = await res.text();
     let data;

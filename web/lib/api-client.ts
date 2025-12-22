@@ -1,5 +1,5 @@
 // lib/api-client.ts
-export type ApiOptions = RequestInit & { body?: any };
+export type ApiOptions = Omit<RequestInit, 'body'> & { body?: any };
 
 export type ApiLog = {
   id: string;
@@ -27,7 +27,7 @@ export function clearApiLogs() {
   } catch (_) {}
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 async function handleResp(res: Response) {
   const text = await res.text();
@@ -165,3 +165,28 @@ export default async function apiClient(path: string, opts?: RequestInit) {
     } catch (_) {}
   }
 }
+
+// Convenience named export compatible with existing frontend imports
+export async function apiFetch(path: string, opts?: ApiOptions) {
+  return apiClient(path, opts as RequestInit);
+}
+
+// Upload file using presigned URL flow (returns { key, url })
+export async function uploadFilePresign(file: File | Blob, opts?: { filename?: string; contentType?: string }) {
+  const filename = opts?.filename || (file instanceof File ? file.name : 'file');
+  const contentType = opts?.contentType || (file instanceof File ? file.type || 'application/octet-stream' : 'application/octet-stream');
+
+  const presign = await apiFetch('/upload/presign', { method: 'POST', body: { filename, contentType } });
+  if (!presign || !presign.url) throw new Error('Presign failed');
+
+  const putRes = await fetch(presign.url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file as BodyInit,
+  });
+
+  if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
+  return { key: presign.key || filename, url: presign.publicUrl || presign.url };
+}
+
+// Explicit named export list to help static analyzers resolve exports

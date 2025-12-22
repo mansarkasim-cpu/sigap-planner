@@ -234,7 +234,7 @@ function clearApiLogs() {
         if ("TURBOPACK compile-time truthy", 1) window.__apiLogs = [];
     } catch (_) {}
 }
-const API_BASE = __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || 'http://localhost:4000/api';
 async function handleResp(res) {
     const text = await res.text();
     let data;
