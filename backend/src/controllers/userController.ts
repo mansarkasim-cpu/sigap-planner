@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { AppDataSource } from '../ormconfig';
 import { User } from '../entities/User';
 
@@ -72,7 +73,9 @@ export async function createUser(req: Request, res: Response) {
       if (existsEmail) return res.status(409).json({ message: 'Email already exists' });
     }
 
-    const u = repo().create({ name, email: email ?? undefined, password, role: role || 'technician', site, nipp } as any);
+    // hash password if provided
+    const hashed = password ? await bcrypt.hash(String(password), 10) : undefined;
+    const u = repo().create({ name, email: email ?? undefined, password: hashed, role: role || 'technician', site, nipp } as any);
     const saved = await repo().save(u as any);
     return res.status(201).json({ message: 'created', data: saved });
   } catch (err: any) {
@@ -100,7 +103,10 @@ export async function updateUser(req: Request, res: Response) {
 
     u.name = name ?? u.name;
     u.email = email ?? u.email;
-    if (password !== undefined) u.password = password;
+    if (password !== undefined) {
+      // hash provided password
+      u.password = password ? await bcrypt.hash(String(password), 10) : undefined;
+    }
     u.role = role ?? u.role;
     u.site = site ?? u.site;
     u.nipp = nipp ?? u.nipp;

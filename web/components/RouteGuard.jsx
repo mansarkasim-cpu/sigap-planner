@@ -8,13 +8,22 @@ export default function RouteGuard(){
 
   useEffect(()=>{
     if (typeof window === 'undefined') return
-    const token = localStorage.getItem('token')
-    // allow unauthenticated access to public pages
+
+    // try localStorage first, fallback to cookie check
+    let token = null
+    try { token = localStorage.getItem('token') } catch (e) { token = null }
+    if (!token) {
+      try {
+        token = document.cookie.split(';').map(s => s.trim()).find(s => s.startsWith('token='))?.split('=')[1] || null
+      } catch (e) { token = null }
+    }
+
+    // allow unauthenticated access to public pages (use startsWith for routes)
     const publicPaths = ['/login','/']
-    if (publicPaths.some(p => pathname === p)) return
+    if (publicPaths.some(p => pathname && pathname.startsWith(p))) return
 
     // For all other pages, require token
-    if (!token) router.push('/login')
+    if (!token) router.replace('/login')
   }, [pathname, router])
 
   return null

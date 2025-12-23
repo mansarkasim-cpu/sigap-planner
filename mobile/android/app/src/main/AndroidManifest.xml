@@ -35,7 +35,7 @@
             android:value="2" />
         <!-- FileProvider needed by image_picker for Android -->
         <provider
-            android:name="io.flutter.plugins.imagepicker.FileProvider"
+            android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">

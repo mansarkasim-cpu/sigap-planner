@@ -95,8 +95,9 @@ function RouteGuard() {
         if ("TURBOPACK compile-time truthy", 1) return;
         //TURBOPACK unreachable
         ;
-        const token = undefined;
-        // allow unauthenticated access to public pages
+        // try localStorage first, fallback to cookie check
+        let token;
+        // allow unauthenticated access to public pages (use startsWith for routes)
         const publicPaths = undefined;
     }, [
         pathname,
@@ -115,8 +116,9 @@ __turbopack_context__.s([
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react.js [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/next/dist/client/app-dir/link.js [app-ssr] (ecmascript)");
-var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$Logout$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/@mui/icons-material/Logout.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$AccountCircle$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/web/node_modules/@mui/icons-material/AccountCircle.js [app-ssr] (ecmascript)");
 'use client';
+;
 ;
 ;
 ;
@@ -131,6 +133,9 @@ function AuthButton() {
             setToken(null);
         }
     }, []);
+    const menuRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const [menuVisible, setMenuVisible] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [hovered, setHovered] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
     function logout() {
         try {
             localStorage.removeItem('token');
@@ -155,29 +160,116 @@ function AuthButton() {
         ;
     }
     if (token) {
-        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-            onClick: logout,
-            title: "Logout",
-            "aria-label": "Logout",
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             style: {
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0
+                position: 'relative'
             },
-            className: "nav-link",
-            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$Logout$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
-                style: {
-                    fontSize: 18
-                }
-            }, void 0, false, {
-                fileName: "[project]/web/components/AuthButton.jsx",
-                lineNumber: 32,
-                columnNumber: 9
-            }, this)
-        }, void 0, false, {
+            children: [
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                    onClick: (e)=>{
+                        setMenuVisible((v)=>!v);
+                    },
+                    title: "Account",
+                    "aria-label": "Account",
+                    className: "nav-link",
+                    style: {
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    },
+                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$AccountCircle$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
+                        style: {
+                            fontSize: 18
+                        }
+                    }, void 0, false, {
+                        fileName: "[project]/web/components/AuthButton.jsx",
+                        lineNumber: 36,
+                        columnNumber: 11
+                    }, this)
+                }, void 0, false, {
+                    fileName: "[project]/web/components/AuthButton.jsx",
+                    lineNumber: 35,
+                    columnNumber: 9
+                }, this),
+                menuVisible && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    ref: menuRef,
+                    style: {
+                        position: 'absolute',
+                        right: 0,
+                        marginTop: 6,
+                        background: '#fff',
+                        border: '1px solid #ddd',
+                        borderRadius: 4,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                        zIndex: 50
+                    },
+                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        style: {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            minWidth: 180
+                        },
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$client$2f$app$2d$dir$2f$link$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["default"], {
+                                href: "/account/change-password",
+                                className: "nav-link",
+                                onClick: ()=>{
+                                    setMenuVisible(false);
+                                },
+                                onMouseEnter: ()=>setHovered('changepw'),
+                                onMouseLeave: ()=>setHovered(null),
+                                style: {
+                                    padding: '8px 12px',
+                                    textDecoration: 'none',
+                                    color: hovered === 'changepw' ? '#111' : '#111',
+                                    background: hovered === 'changepw' ? '#f5f5f5' : '#fff',
+                                    display: 'block'
+                                },
+                                children: "Change Password"
+                            }, void 0, false, {
+                                fileName: "[project]/web/components/AuthButton.jsx",
+                                lineNumber: 41,
+                                columnNumber: 15
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                onClick: logout,
+                                onMouseEnter: ()=>setHovered('logout'),
+                                onMouseLeave: ()=>setHovered(null),
+                                style: {
+                                    textAlign: 'left',
+                                    padding: '8px 12px',
+                                    background: hovered === 'logout' ? '#f5f5f5' : '#fff',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    display: 'block',
+                                    color: '#111'
+                                },
+                                className: "nav-link",
+                                children: "Logout"
+                            }, void 0, false, {
+                                fileName: "[project]/web/components/AuthButton.jsx",
+                                lineNumber: 57,
+                                columnNumber: 15
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/web/components/AuthButton.jsx",
+                        lineNumber: 40,
+                        columnNumber: 13
+                    }, this)
+                }, void 0, false, {
+                    fileName: "[project]/web/components/AuthButton.jsx",
+                    lineNumber: 39,
+                    columnNumber: 11
+                }, this)
+            ]
+        }, void 0, true, {
             fileName: "[project]/web/components/AuthButton.jsx",
-            lineNumber: 31,
+            lineNumber: 34,
             columnNumber: 7
         }, this);
     }
@@ -187,7 +279,7 @@ function AuthButton() {
         children: "Login"
     }, void 0, false, {
         fileName: "[project]/web/components/AuthButton.jsx",
-        lineNumber: 38,
+        lineNumber: 82,
         columnNumber: 5
     }, this);
 }
