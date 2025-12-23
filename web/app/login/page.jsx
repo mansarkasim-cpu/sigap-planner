@@ -1,5 +1,6 @@
 "use client"
 import { useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
@@ -12,6 +13,12 @@ import apiClient from '../../lib/api-client'
 
 export default function LoginPage(){
   const router = useRouter()
+  useEffect(() => {
+    try {
+      const t = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      if (t) router.replace('/dashboard')
+    } catch (e) {}
+  }, [router])
   const [nipp, setNipp] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,7 +49,7 @@ export default function LoginPage(){
           try { document.cookie = `sigap_role=${encodeURIComponent(roleValue)}; Path=/; SameSite=Lax` } catch (e) {}
         }
       } catch (e) {}
-      router.push('/dashboard')
+      router.replace('/dashboard')
     }catch(err){
       console.error('login error', err)
       setError(err?.message || 'Login failed')
@@ -63,12 +70,9 @@ export default function LoginPage(){
           <TextField label="NIPP" value={nipp} onChange={e=>setNipp(e.target.value)} fullWidth sx={{mb:2}} />
           <TextField label="Password" type="password" value={password} onChange={e=>setPassword(e.target.value)} fullWidth sx={{mb:2}} />
 
-          <Box sx={{display:'flex', alignItems:'center', justifyContent:'space-between', mt:2}}>
+          <Box sx={{display:'flex', alignItems:'center', justifyContent:'flex-end', mt:2}}>
             <Button type="submit" variant="contained" disabled={loading}>
               {loading ? <CircularProgress size={18} color="inherit" /> : 'Masuk'}
-            </Button>
-            <Button variant="text" onClick={()=>router.push('/')}>
-              Kembali
             </Button>
           </Box>
         </form>

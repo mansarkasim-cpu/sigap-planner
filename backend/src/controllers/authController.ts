@@ -123,3 +123,32 @@ export async function meHandler(req: Request, res: Response) {
     return res.status(500).json({ code: "INTERNAL_ERROR", message: "Internal server error" });
   }
 }
+
+export async function changePasswordHandler(req: Request, res: Response) {
+  try {
+    const reqUser = (req as any).user;
+    if (!reqUser?.id) return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Missing token' });
+    const { currentPassword, newPassword } = req.body || {};
+    if (!newPassword) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'newPassword is required' });
+
+    const repo = AppDataSource.getRepository(User);
+    const user = await repo.findOne({ where: { id: reqUser.id } as any });
+    if (!user) return res.status(404).json({ code: 'NOT_FOUND', message: 'User not found' });
+
+    // if user has an existing password, require currentPassword
+    if (user.password) {
+      if (!currentPassword) return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'currentPassword is required' });
+      const ok = await bcrypt.compare(String(currentPassword), user.password);
+      if (!ok) return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Invalid current password' });
+    }
+
+    const hashed = await bcrypt.hash(String(newPassword), 10);
+    user.password = hashed;
+    await repo.save(user as any);
+
+    return res.json({ message: 'password updated' });
+  } catch (err) {
+    console.error('changePassword error', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to change password' });
+  }
+}
