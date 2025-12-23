@@ -13,14 +13,14 @@ export type ApiLog = {
   durationMs?: number;
 };
 
-export function getApiLogs(): ApiLog[] {
+function getApiLogs(): ApiLog[] {
   try {
     // @ts-ignore
     return (typeof window !== 'undefined' && window.__apiLogs) ? window.__apiLogs.slice() : [];
   } catch (_) { return []; }
 }
 
-export function clearApiLogs() {
+function clearApiLogs() {
   try {
     // @ts-ignore
     if (typeof window !== 'undefined') window.__apiLogs = [];
@@ -179,7 +179,7 @@ export async function apiFetch(path: string, opts?: ApiOptions) {
 }
 
 // Upload file using presigned URL flow (returns { key, url })
-export async function uploadFilePresign(file: File | Blob, opts?: { filename?: string; contentType?: string }) {
+async function uploadFilePresign(file: File | Blob, opts?: { filename?: string; contentType?: string }) {
   const filename = opts?.filename || (file instanceof File ? file.name : 'file');
   const contentType = opts?.contentType || (file instanceof File ? file.type || 'application/octet-stream' : 'application/octet-stream');
 
@@ -197,3 +197,4 @@ export async function uploadFilePresign(file: File | Blob, opts?: { filename?: s
 }
 
 // Explicit named export list to help static analyzers resolve exports
+export { uploadFilePresign, getApiLogs, clearApiLogs };
