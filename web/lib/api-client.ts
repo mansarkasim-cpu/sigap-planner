@@ -27,7 +27,11 @@ export function clearApiLogs() {
   } catch (_) {}
 }
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+// Prefer explicit public API URL from environment. In browser, fallback to
+// window.location.origin + '/api' so Next.js apps that proxy API under same
+// origin work without needing an env var. As last resort (server-side dev)
+// fallback to localhost:4000/api.
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 async function handleResp(res: Response) {
   const text = await res.text();
@@ -43,7 +47,10 @@ async function handleResp(res: Response) {
 }
 
 export default async function apiClient(path: string, opts?: RequestInit) {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  // resolve base URL with robust fallbacks to avoid "Failed to fetch" in prod
+  const resolvedBase = API_BASE
+    || (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:4000/api');
+  const url = path.startsWith('http') ? path : `${resolvedBase}${path.startsWith('/') ? '' : '/'}${path}`;
 
   function getAuthHeader(): Record<string,string> {
     try {
