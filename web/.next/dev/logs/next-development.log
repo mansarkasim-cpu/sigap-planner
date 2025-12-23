@@ -1,8 +1,18 @@
-[00:00:02.942] Server  WARN     ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-[00:00:03.323] Server  LOG      ✓ Ready in 2.5s
-[00:00:06.635] Server  LOG      ○ Compiling /shifts ...
-[00:00:08.992] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:00:10.145] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+[00:00:01.332] Server  WARN     ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[00:00:01.518] Server  LOG      ✓ Ready in 1114ms
+[00:00:08.840] Server  LOG      ○ Compiling / ...
+[00:00:10.916] Server  ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
+
+npx @next/codemod@latest new-link .
+
+Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/codemods#remove-a-tags-from-link-components
+[00:00:11.353] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:11.977] Browser ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
+
+npx @next/codemod@latest new-link .
+
+Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/codemods#remove-a-tags-from-link-components
+[00:00:11.977] Browser ERROR   uncaughtError: Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
 
 - A server/client branch `if (typeof window !== 'undefined')`.
 - Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
@@ -12,43 +22,43 @@
 
 It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
 
-%s%s https://react.dev/link/hydration-mismatch 
+https://react.dev/link/hydration-mismatch
 
   ...
-    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
-      <AppDevOverlayErrorBoundary globalError={[...]}>
-        <ReplaySsrOnlyErrors>
-        <DevRootHTTPAccessFallbackBoundary>
-          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
-            <HTTPAccessFallbackErrorBoundary pathname="/shifts" notFound={<NotAllowedRootHTTPFallbackError>} ...>
-              <RedirectBoundary>
-                <RedirectErrorBoundary router={{...}}>
-                  <Head>
-                  <__next_root_layout_boundary__>
-                    <SegmentViewNode type="layout" pagePath="/web/app/l...">
-                      <SegmentTrieNode>
-                      <link>
-                      <script>
-                      <script>
-                      <script>
-                      <RootLayout>
-                        <html lang="id">
-                          <body
--                           cz-shortcut-listen="true"
-                          >
-                  ...
+    <link>
+    <script>
+    <script>
+    <script>
+    <RootLayout>
+      <html lang="id">
+        <body>
+          <MuiProviders>
+            <ThemeProvider theme={{...}}>
+              <ThemeProvider themeId={undefined} theme={{...}}>
+                <ThemeProvider theme={{...}}>
+                  <RtlProvider value={false}>
+                    <DefaultPropsProvider value={{}}>
+                      <CssBaseline>
++                     <header className="site-header">
+-                     <style data-emotion="css-global 1cops6v" data-s="">
+                      ...
 
-[00:00:10.145] Browser DEBUG   [api] -> GET http://localhost:4000/api/users?page=1&pageSize=1000 {}
-[00:00:10.145] Browser DEBUG   [api] -> GET http://localhost:4000/api/shift-groups {}
-[00:00:10.145] Browser DEBUG   [api] -> GET http://localhost:4000/api/shift-assignments?date=2025-12-22 {}
-[00:00:10.145] Browser DEBUG   [api] -> GET http://localhost:4000/api/shift-assignments?date=2025-12-22 {}
-[00:00:12.127] Browser DEBUG   [api] <- GET http://localhost:4000/api/shift-groups {"durationMs":359,"status":200}
-[00:00:12.127] Browser DEBUG   [api] <- GET http://localhost:4000/api/users?page=1&pageSize=1000 {"durationMs":365,"status":200}
-[00:00:12.128] Browser DEBUG   [api] <- GET http://localhost:4000/api/shift-assignments?date=2025-12-22 {"durationMs":361,"status":200}
-[00:00:12.128] Browser DEBUG   [api] <- GET http://localhost:4000/api/shift-assignments?date=2025-12-22 {"durationMs":359,"status":200}
-[00:00:12.128] Browser DEBUG   [api] -> GET http://localhost:4000/api/shift-groups?site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {}
-[00:00:12.128] Browser DEBUG   [api] -> GET http://localhost:4000/api/users?page=1&pageSize=1000&site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {}
-[00:00:12.128] Browser DEBUG   [api] -> GET http://localhost:4000/api/shift-assignments?date=2025-12-22&site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {}
-[00:00:12.128] Browser DEBUG   [api] <- GET http://localhost:4000/api/shift-groups?site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {"durationMs":209,"status":200}
-[00:00:12.128] Browser DEBUG   [api] <- GET http://localhost:4000/api/users?page=1&pageSize=1000&site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {"durationMs":209,"status":200}
-[00:00:12.128] Browser DEBUG   [api] <- GET http://localhost:4000/api/shift-assignments?date=2025-12-22&site=SITE%20TERMINAL%20PETIKEMAS%20MAKASSAR {"durationMs":209,"status":200}
+[00:00:24.254] Browser DEBUG   [api] -> POST http://localhost:4000/api/auth/login {"body":{"nipp":"999999","password":"qwerty"}}
+[00:00:24.544] Browser DEBUG   [api] <- POST http://localhost:4000/api/auth/login {"durationMs":290,"status":200}
+[00:00:26.088] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:00:26.088] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:00:26.238] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":135,"status":200}
+[00:00:26.238] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":163,"status":200}
+[00:00:31.132] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:31.356] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:00:31.356] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":34,"status":200}
+[00:00:35.231] Browser DEBUG   [api] -> GET http://localhost:4000/api/users?page=1&pageSize=10 {}
+[00:00:35.231] Browser DEBUG   [api] -> GET http://localhost:4000/api/users?page=1&pageSize=10 {}
+[00:00:35.231] Browser DEBUG   [api] <- GET http://localhost:4000/api/users?page=1&pageSize=10 {"durationMs":59,"status":200}
+[00:00:35.231] Browser DEBUG   [api] <- GET http://localhost:4000/api/users?page=1&pageSize=10 {"durationMs":56,"status":200}
+[00:00:37.853] Browser ERROR   Accessing element.ref was removed in React 19. ref is now a regular prop. It will be removed from the JSX Element type in a future release.
+[00:02:12.702] Browser ERROR   Accessing element.ref was removed in React 19. ref is now a regular prop. It will be removed from the JSX Element type in a future release.
+[00:02:29.005] Browser DEBUG   [api] -> POST http://localhost:4000/api/users {"body":{"email":"gunawan.zulkarnain@pelindo.co.id","name":"Gunawan Zulkarnain","nipp":"103305","password":"qwerty","role":"admin","site":"Main Site"}}
+[00:02:29.374] Browser DEBUG   [api] <- POST http://localhost:4000/api/users {"durationMs":276,"status":201}
+[00:02:29.375] Browser DEBUG   [api] -> GET http://localhost:4000/api/users?page=1&pageSize=10 {}
+[00:02:29.375] Browser DEBUG   [api] <- GET http://localhost:4000/api/users?page=1&pageSize=10 {"durationMs":92,"status":200}
