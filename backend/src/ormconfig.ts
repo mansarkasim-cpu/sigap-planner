@@ -2,16 +2,30 @@ import 'reflect-metadata';
 import { DataSource } from "typeorm";
 import * as dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 dotenv.config();
 
-const isProd = process.env.NODE_ENV === "production";
-const entitiesPath = isProd
-  ? path.join(__dirname, "entities", "*.js")
-  : path.join(__dirname, "src", "entities", "*.ts");
+// Determine whether compiled JS entity files exist in the runtime directory.
+// This handles cases where NODE_ENV may not be set when running the compiled
+// code under systemd. If compiled JS entities are present (dist run), use
+// the .js globs; otherwise fall back to .ts for dev.
+const hasCompiledEntities = (() => {
+  try {
+    const entitiesDir = path.join(__dirname, 'entities');
+    if (!fs.existsSync(entitiesDir)) return false;
+    return fs.readdirSync(entitiesDir).some((f) => f.endsWith('.js'));
+  } catch (e) {
+    return false;
+  }
+})();
 
-const migrationsPath = isProd
-  ? path.join(__dirname, "migration", "*.js")
-  : path.join(__dirname, "migration", "*.ts");
+const entitiesGlob = hasCompiledEntities
+  ? path.join(__dirname, './entities/*.js')
+  : path.join(__dirname, './entities/*.ts');
+
+const migrationsGlob = hasCompiledEntities
+  ? path.join(__dirname, './migrations/*.js')
+  : path.join(__dirname, './migrations/*.ts');
 
 export const AppDataSource = new DataSource({
   // type: "postgres",
@@ -28,11 +42,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'sigap',
   synchronize: false,
   logging: false,
-  // Entities: gunakan .ts saat dev (ts-node) dan .js saat production (dist)
-  entities: isProd
-    ? [path.join(__dirname, './entities/*.js')]
-    : [path.join(__dirname, './entities/*.ts')],
-  migrations: isProd
-    ? [path.join(__dirname, './migrations/*.js')]
-    : [path.join(__dirname, './migrations/*.ts')],
+  // Use detected globs so the runtime loads the correct entity files.
+  entities: [entitiesGlob],
+  migrations: [migrationsGlob],
 });
