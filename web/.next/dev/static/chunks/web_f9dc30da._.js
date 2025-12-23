@@ -212,12 +212,18 @@ if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelper
 
 // lib/api-client.ts
 __turbopack_context__.s([
+    "API_BASE",
+    ()=>API_BASE,
+    "apiFetch",
+    ()=>apiFetch,
     "clearApiLogs",
     ()=>clearApiLogs,
     "default",
     ()=>apiClient,
     "getApiLogs",
-    ()=>getApiLogs
+    ()=>getApiLogs,
+    "uploadFilePresign",
+    ()=>uploadFilePresign
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = /*#__PURE__*/ __turbopack_context__.i("[project]/web/node_modules/next/dist/build/polyfills/process.js [app-client] (ecmascript)");
 function getApiLogs() {
@@ -234,7 +240,7 @@ function clearApiLogs() {
         if ("TURBOPACK compile-time truthy", 1) window.__apiLogs = [];
     } catch (_) {}
 }
-const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || 'http://localhost:4000/api';
+const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || '';
 async function handleResp(res) {
     const text = await res.text();
     let data;
@@ -252,7 +258,9 @@ async function handleResp(res) {
     return data;
 }
 async function apiClient(path, opts) {
-    const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    // resolve base URL with robust fallbacks to avoid "Failed to fetch" in prod
+    const resolvedBase = API_BASE || (("TURBOPACK compile-time truthy", 1) ? `${window.location.origin}/api` : "TURBOPACK unreachable");
+    const url = path.startsWith('http') ? path : `${resolvedBase}${path.startsWith('/') ? '' : '/'}${path}`;
     function getAuthHeader() {
         try {
             if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
@@ -404,6 +412,35 @@ async function apiClient(path, opts) {
         } catch (_) {}
     }
 }
+async function apiFetch(path, opts) {
+    return apiClient(path, opts);
+}
+// Upload file using presigned URL flow (returns { key, url })
+async function uploadFilePresign(file, opts) {
+    const filename = opts?.filename || (file instanceof File ? file.name : 'file');
+    const contentType = opts?.contentType || (file instanceof File ? file.type || 'application/octet-stream' : 'application/octet-stream');
+    const presign = await apiFetch('/upload/presign', {
+        method: 'POST',
+        body: {
+            filename,
+            contentType
+        }
+    });
+    if (!presign || !presign.url) throw new Error('Presign failed');
+    const putRes = await fetch(presign.url, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': contentType
+        },
+        body: file
+    });
+    if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
+    return {
+        key: presign.key || filename,
+        url: presign.publicUrl || presign.url
+    };
+}
+;
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);
 }

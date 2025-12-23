@@ -197,12 +197,18 @@ function AuthButton() {
 
 // lib/api-client.ts
 __turbopack_context__.s([
+    "API_BASE",
+    ()=>API_BASE,
+    "apiFetch",
+    ()=>apiFetch,
     "clearApiLogs",
     ()=>clearApiLogs,
     "default",
     ()=>apiClient,
     "getApiLogs",
-    ()=>getApiLogs
+    ()=>getApiLogs,
+    "uploadFilePresign",
+    ()=>uploadFilePresign
 ]);
 function getApiLogs() {
     try {
@@ -219,7 +225,7 @@ function clearApiLogs() {
         ;
     } catch (_) {}
 }
-const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || 'http://localhost:4000/api';
+const API_BASE = ("TURBOPACK compile-time value", "http://localhost:4000/api") || '';
 async function handleResp(res) {
     const text = await res.text();
     let data;
@@ -237,7 +243,9 @@ async function handleResp(res) {
     return data;
 }
 async function apiClient(path, opts) {
-    const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    // resolve base URL with robust fallbacks to avoid "Failed to fetch" in prod
+    const resolvedBase = API_BASE || (("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : 'http://localhost:4000/api');
+    const url = path.startsWith('http') ? path : `${resolvedBase}${path.startsWith('/') ? '' : '/'}${path}`;
     function getAuthHeader() {
         try {
             if ("TURBOPACK compile-time truthy", 1) return {};
@@ -363,6 +371,35 @@ async function apiClient(path, opts) {
         } catch (_) {}
     }
 }
+async function apiFetch(path, opts) {
+    return apiClient(path, opts);
+}
+// Upload file using presigned URL flow (returns { key, url })
+async function uploadFilePresign(file, opts) {
+    const filename = opts?.filename || (file instanceof File ? file.name : 'file');
+    const contentType = opts?.contentType || (file instanceof File ? file.type || 'application/octet-stream' : 'application/octet-stream');
+    const presign = await apiFetch('/upload/presign', {
+        method: 'POST',
+        body: {
+            filename,
+            contentType
+        }
+    });
+    if (!presign || !presign.url) throw new Error('Presign failed');
+    const putRes = await fetch(presign.url, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': contentType
+        },
+        body: file
+    });
+    if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
+    return {
+        key: presign.key || filename,
+        url: presign.publicUrl || presign.url
+    };
+}
+;
 }),
 "[project]/web/components/Nav.jsx [app-ssr] (ecmascript)", ((__turbopack_context__) => {
 "use strict";

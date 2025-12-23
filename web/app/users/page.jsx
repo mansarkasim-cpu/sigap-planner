@@ -85,13 +85,14 @@ export default function UsersPage() {
 
   useEffect(() => { load(); }, [roleFilter, siteFilter, nameQ, page, pageSize]);
 
-  function openCreate() { setEditing({ name:'', email:'', role:'technician', site:'', nipp:'' }); setModalOpen(true); }
+  function openCreate() { setEditing({ name:'', email:'', role:'technician', site:'', nipp:'', password: '' }); setModalOpen(true); }
   function openEdit(u) { setEditing(u); setModalOpen(true); }
 
   async function save() {
     if (!editing) return;
     try {
       if (!editing.name || !editing.nipp) return alert('Name and NIPP are required');
+      if (!editing.id && !editing.password) return alert('Password is required for new users');
       if (editing.id) {
         await apiClient(`/users/${encodeURIComponent(editing.id)}`, { method: 'PATCH', body: editing });
       } else {
@@ -235,6 +236,9 @@ export default function UsersPage() {
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField label="Email" fullWidth size="small" value={editing?.email||''} onChange={e=>setEditing({...editing, email: e.target.value})} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField label="Password" type="password" fullWidth size="small" value={editing?.password||''} onChange={e=>setEditing({...editing, password: e.target.value})} />
             </Grid>
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
