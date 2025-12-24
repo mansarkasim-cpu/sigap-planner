@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -60,6 +59,12 @@ class LocalDB {
     final file = File(p.join(dir.path, filename));
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
+  }
+
+  // Public helper to save photo bytes to a file and return the path.
+  Future<String> savePhotoFile(Uint8List bytes, {String? filename}) async {
+    final fn = filename ?? 'realisasi_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    return await _savePhotoToFile(bytes, fn);
   }
 
   Future<void> saveChecklist({required String assignmentId, required String taskId, required Uint8List photoBytes, bool checked = true}) async {
