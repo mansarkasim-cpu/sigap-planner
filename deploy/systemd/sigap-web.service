@@ -1,0 +1,18 @@
+[Unit]
+Description=Sigap Next.js Application
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/sigap/web
+Environment=NODE_ENV=production
+Environment=NEXT_PUBLIC_API_URL=https://sigap.jasamaritim.co.id/api
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=10000
+
+[Install]
+WantedBy=multi-user.target
