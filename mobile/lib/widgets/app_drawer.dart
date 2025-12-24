@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/api.dart';
 import '../config.dart';
 import '../screens/profile.dart';
@@ -15,11 +16,22 @@ class AppDrawer extends StatefulWidget {
 class _AppDrawerState extends State<AppDrawer> {
   Map<String, dynamic>? user;
   bool loading = false;
+  String _version = '';
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      setState(() { _version = '${info.version}+${info.buildNumber}'; });
+    } catch (_) {
+      // ignore
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -101,6 +113,14 @@ class _AppDrawerState extends State<AppDrawer> {
               },
             ),
             ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: () async { Navigator.pop(context); await _logout(); }),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('App version', style: TextStyle(color: Colors.grey)),
+                Text(_version.isNotEmpty ? _version : '-', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ]),
+            ),
           ],
         ),
       ),

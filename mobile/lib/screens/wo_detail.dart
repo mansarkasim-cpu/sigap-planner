@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/local_db.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import '../services/api.dart';
 import '../widgets/app_drawer.dart';
@@ -315,6 +313,25 @@ class _WODetailScreenState extends State<WODetailScreen> {
         if (msg.contains('already')) {
           Navigator.of(context).popUntil((route) => route.isFirst);
           return;
+        }
+
+        // Attempt to queue the realisasi for later upload using saved checklist photo if available
+        try {
+          await LocalDB.instance.init();
+          final saved = await LocalDB.instance.getChecklistForAssignment(widget.assignmentId);
+          Uint8List? savedBytes;
+          if (saved.isNotEmpty) {
+            final first = saved.first;
+            if (first['photoBytes'] != null) savedBytes = first['photoBytes'] as Uint8List;
+          }
+          if (savedBytes != null) {
+            final photoPath = await LocalDB.instance.savePhotoFile(savedBytes, filename: 'queued_${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+            final qid = '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
+            await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, notes: _keterangan, photoPath: photoPath);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim, gambar disimpan dan akan dikirim ulang nanti.')));
+          }
+        } catch (qe) {
+          debugPrint('queueing failed: $qe');
         }
       } catch (_) {}
     } finally {

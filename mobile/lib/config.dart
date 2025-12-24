@@ -26,7 +26,8 @@ class Config {
 				return 'https://staging.sigap.jasamaritim.co.id/api';
 			case Flavor.prod:
 			default:
-				return 'https://sigap.jasamaritim.co.id/api';
+				// Use plain HTTP for production API by default (can be overridden with --dart-define=API_BASE)
+				return 'http://sigap.jasamaritim.co.id/api';
 		}
 	}
 }

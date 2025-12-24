@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 import '../config.dart';
 import 'wo_detail.dart';
+import '../services/retry_uploader.dart';
 import '../widgets/app_drawer.dart';
 
 class InboxScreen extends StatefulWidget {
@@ -66,7 +67,6 @@ class _InboxScreenState extends State<InboxScreen> {
                 if (techId.isNotEmpty) candidates.add(techId);
                 candidates.addAll(currentUserIdentifiers);
                 for (final cand in candidates) {
-                  if (cand == null) continue;
                   final cid = cand.toString();
                   if (cid.isEmpty) continue;
                   if (tried.contains(cid)) continue;
@@ -79,7 +79,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       try {
                         final ures = await api.get('/users?nipp=${Uri.encodeComponent(cid)}');
                         final ulist = (ures is Map && ures['data'] is List) ? ures['data'] as List : (ures is List ? ures : []);
-                        if (ulist is List && ulist.isNotEmpty) {
+                        if (ulist.isNotEmpty) {
                           final first = ulist[0];
                           final uid = (first is Map) ? (first['id'] ?? first['user_id'] ?? '')?.toString() ?? '' : '';
                           if (uid.isNotEmpty) resolvedCid = uid;
@@ -122,7 +122,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 try {
                   final ures = await api.get('/users?nipp=${Uri.encodeComponent(resolvedMid)}');
                   final ulist = (ures is Map && ures['data'] is List) ? ures['data'] as List : (ures is List ? ures : []);
-                  if (ulist is List && ulist.isNotEmpty) {
+                  if (ulist.isNotEmpty) {
                     final first = ulist[0];
                     final uid = (first is Map) ? (first['id'] ?? first['user_id'] ?? '')?.toString() ?? '' : '';
                     if (uid.isNotEmpty) resolvedMid = uid;
@@ -172,7 +172,7 @@ class _InboxScreenState extends State<InboxScreen> {
           try {
             final ures = await api.get('/users?nipp=${Uri.encodeComponent(resolvedTech)}');
             final ulist = (ures is Map && ures['data'] is List) ? ures['data'] as List : (ures is List ? ures : []);
-            if (ulist is List && ulist.isNotEmpty) {
+            if (ulist.isNotEmpty) {
               final first = ulist[0];
               final uid = (first is Map) ? (first['id'] ?? first['user_id'] ?? '')?.toString() ?? '' : '';
               if (uid.isNotEmpty) resolvedTech = uid;
@@ -286,6 +286,8 @@ class _InboxScreenState extends State<InboxScreen> {
   void initState() {
     super.initState();
     _loadPrefs();
+    // start background uploader to retry queued realisasi
+    RetryUploader.instance.start(base: API_BASE);
   }
 
   Timer? _pollTimer;
@@ -293,6 +295,7 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    RetryUploader.instance.stop();
     super.dispose();
   }
 
@@ -366,7 +369,7 @@ class _InboxScreenState extends State<InboxScreen> {
       // dedupe current user identifiers
       final uniqIds = <String>{};
       final dedupedIds = <String>[];
-      for (final v in ids) { if (v != null && v.toString().isNotEmpty && !uniqIds.contains(v)) { uniqIds.add(v); dedupedIds.add(v); } }
+      for (final v in ids) { if (v.toString().isNotEmpty && !uniqIds.contains(v)) { uniqIds.add(v); dedupedIds.add(v); } }
       setState(() { isLeadShift = leaderFlag; leaderMemberIds = deduped; currentUserId = userId; currentUserIdentifiers = dedupedIds; });
     } catch (e) {
       debugPrint('failed to determine user role: $e');
@@ -530,11 +533,14 @@ class _InboxScreenState extends State<InboxScreen> {
               if (desc.isNotEmpty) Text(desc.toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 6),
               Row(children: [
-                if (asset != null && asset.toString().isNotEmpty) ...[const Icon(Icons.build, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(asset.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey))],
+                if (asset != null && asset.toString().isNotEmpty)
+                  Expanded(child: Row(children: [const Icon(Icons.build, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(asset.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis))])),
                 const SizedBox(width: 12),
-                if (woType != null && woType.toString().isNotEmpty) ...[const Icon(Icons.category, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(woType.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey))],
+                if (woType != null && woType.toString().isNotEmpty)
+                  Padding(padding: const EdgeInsets.only(right: 8.0), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 120), child: Row(children: [const Icon(Icons.category, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(woType.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis))]))),
                 const SizedBox(width: 12),
-                if (techName != null && techName.toString().isNotEmpty) ...[const Icon(Icons.person, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(techName.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey))],
+                if (techName != null && techName.toString().isNotEmpty)
+                  ConstrainedBox(constraints: const BoxConstraints(maxWidth: 120), child: Row(children: [const Icon(Icons.person, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(techName.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis))])),
               ]),
               const SizedBox(height: 8),
               LinearProgressIndicator(value: progressValue),
@@ -903,22 +909,38 @@ class _InboxScreenState extends State<InboxScreen> {
                 Text('${items.length} assignment(s)', style: const TextStyle(color: Colors.grey)),
               ]),
               const SizedBox(height: 8),
-              // WO info row
+              // WO info row (constrained to avoid overflow on narrow screens)
               Row(children: [
-                if (assetName != null && assetName.toString().isNotEmpty) Expanded(child: Text(assetName.toString(), style: const TextStyle(color: Colors.black87))),
-                if (woType != null && woType.toString().isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6)), child: Text(woType.toString(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12))),
+                if (assetName != null && assetName.toString().isNotEmpty)
+                  Expanded(child: Text(assetName.toString(), style: const TextStyle(color: Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                if (woType != null && woType.toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6)), child: Text(woType.toString(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                    ),
+                  ),
+                if (status != null && status.toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)), child: Text(status.toString(), style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                    ),
+                  ),
                 const SizedBox(width: 8),
-                if (status != null && status.toString().isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)), child: Text(status.toString(), style: const TextStyle(fontWeight: FontWeight.w600))),
-                const SizedBox(width: 8),
-                Text('$percent%', style: const TextStyle(color: Colors.grey)),
+                SizedBox(width: 48, child: Text('$percent%', style: const TextStyle(color: Colors.grey), textAlign: TextAlign.right)),
               ]),
               const SizedBox(height: 6),
-              Row(children: [
-                if (startField != null && startField.toString().isNotEmpty) Row(children: [const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(_formatUtcDisplay(startField), style: const TextStyle(fontSize: 12, color: Colors.grey))]),
-                const SizedBox(width: 12),
-                if (endField != null && endField.toString().isNotEmpty) Row(children: [const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(_formatUtcDisplay(endField), style: const TextStyle(fontSize: 12, color: Colors.grey))]),
-                const SizedBox(width: 12),
-                if (locationField != null && locationField.toString().isNotEmpty) Row(children: [const Icon(Icons.location_on, size: 14, color: Colors.grey), const SizedBox(width: 6), Text(locationField.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey))]),
+              // Use Wrap so these meta fields can wrap on narrow screens instead of overflowing
+              Wrap(spacing: 12, runSpacing: 6, children: [
+                if (startField != null && startField.toString().isNotEmpty)
+                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(_formatUtcDisplay(startField), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
+                if (endField != null && endField.toString().isNotEmpty)
+                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(_formatUtcDisplay(endField), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
+                if (locationField != null && locationField.toString().isNotEmpty)
+                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.location_on, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(locationField.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
               ]),
               const SizedBox(height: 8),
               // show description (if available)
@@ -953,10 +975,20 @@ class _InboxScreenState extends State<InboxScreen> {
                   color: Colors.grey.shade50,
                   child: ListTile(
                     leading: CircleAvatar(radius: 18, backgroundColor: Theme.of(context).colorScheme.primary, child: Text('${idx+1}', style: const TextStyle(color: Colors.white))),
-                    title: Text(taskName.isNotEmpty ? taskName : 'Assignment', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      taskName.isNotEmpty ? taskName : 'Assignment',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                     subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [if (duration != null && duration.toString().isNotEmpty) Text('${duration.toString()} min', style: const TextStyle(color: Colors.grey)), const SizedBox(width: 8), if (assigneeDisplay.isNotEmpty) Text(assigneeDisplay, style: const TextStyle(color: Colors.grey))]),
-                      if (scheduled != null && scheduled.toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top:4.0), child: Text(_formatUtcDisplay(scheduled), style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                      Row(children: [
+                        if (duration != null && duration.toString().isNotEmpty)
+                          Padding(padding: const EdgeInsets.only(right: 8.0), child: Text('${duration.toString()} min', style: const TextStyle(color: Colors.grey))),
+                        if (assigneeDisplay.isNotEmpty)
+                          Expanded(child: Text(assigneeDisplay, style: const TextStyle(color: Colors.grey), overflow: TextOverflow.ellipsis)),
+                      ]),
+                      if (scheduled != null && scheduled.toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top:4.0), child: Text(_formatUtcDisplay(scheduled), style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis)),
                     ]),
                     trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), decoration: BoxDecoration(color: statusColor(), borderRadius: BorderRadius.circular(8)), child: Text(aStatus.toString(), style: const TextStyle(fontSize: 12))),
                     onTap: () { if ((wo is Map ? (wo['id'] ?? wo['doc_no']) : woKey) != null) Navigator.push(context, MaterialPageRoute(builder: (_) => WODetailScreen(woId: (wo is Map ? (wo['id'] ?? wo['doc_no']).toString() : woKey), assignmentId: assignmentId.toString(), baseUrl: API_BASE, token: _token ?? ''))); },

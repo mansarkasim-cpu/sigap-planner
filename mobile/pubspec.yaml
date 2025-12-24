@@ -1,7 +1,7 @@
 name: sigap_mobile
 description: SIGAP Planner - Mobile technician (skeleton)
 publish_to: "none"
-version: 0.0.1
+version: 1.0.0+1
 environment:
   sdk: ">=3.0.0 <4.0.0"
 dependencies:
@@ -14,6 +14,7 @@ dependencies:
   path: ^1.8.3
   provider: ^6.0.5
   shared_preferences: ^2.1.1
+  package_info_plus: ^4.0.0
   fluttertoast: ^8.2.1
   url_launcher: ^6.1.10
   image_picker: ^0.8.7+4
