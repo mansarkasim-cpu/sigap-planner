@@ -57,7 +57,29 @@ app.use("/api/docs", swaggerRoutes);
 
 // static uploads (dev)
 import path from "path";
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+import fs from "fs";
+
+// Serve uploads from a configurable directory. In production the process
+// cwd may differ from the source tree; prefer explicit `UPLOADS_DIR` env var
+// but fall back to several sensible locations (project-level `uploads` or
+// `upload`, or compiled `dist/../uploads`). This registers both `/uploads`
+// and `/upload` so existing links work.
+const UPLOADS_DIR_ENV = process.env.UPLOADS_DIR || '';
+const uploadsCandidates = [
+  UPLOADS_DIR_ENV,
+  path.join(process.cwd(), 'uploads'),
+  path.join(__dirname, '..', 'uploads'),
+  path.join(process.cwd(), 'upload'),
+  path.join(__dirname, '..', 'upload'),
+].map(p => (p || '').toString());
+
+const uploadsDirFound = uploadsCandidates.find((p) => p && fs.existsSync(p));
+
+// Fallback if none exists
+const finalUploadsDir = uploadsDirFound || (UPLOADS_DIR_ENV || path.join(process.cwd(), 'uploads'));
+
+app.use('/uploads', express.static(finalUploadsDir));
+app.use('/upload', express.static(finalUploadsDir));
 
 // handle preflight for all routes (optional but safe)
 app.options('*', cors());
