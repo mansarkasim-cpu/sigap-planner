@@ -1,17 +1,20 @@
-[00:00:00.741] Server  WARN     ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-[00:00:00.936] Server  LOG      ✓ Ready in 683ms
-[00:00:02.597] Server  ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
+[00:00:04.598] Server  WARN     ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[00:00:06.686] Server  LOG      ✓ Ready in 5.9s
+[00:00:10.599] Server  LOG      ○ Compiling / ...
+[00:00:27.155] Server  ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
 
 npx @next/codemod@latest new-link .
 
 Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/codemods#remove-a-tags-from-link-components
-[00:00:02.965] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:00:03.862] Browser ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
+[00:00:30.687] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:31.329] Browser ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
 
 npx @next/codemod@latest new-link .
 
 Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/codemods#remove-a-tags-from-link-components
-[00:00:03.863] Browser ERROR   uncaughtError: Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+[00:03:49.017] Server  LOG      ✓ Compiled in 1467ms
+[00:03:58.728] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:04:01.644] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
 
 - A server/client branch `if (typeof window !== 'undefined')`.
 - Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
@@ -21,7 +24,7 @@ Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/code
 
 It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
 
-https://react.dev/link/hydration-mismatch
+%s%s https://react.dev/link/hydration-mismatch 
 
   ...
     <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
@@ -29,7 +32,7 @@ https://react.dev/link/hydration-mismatch
         <ReplaySsrOnlyErrors>
         <DevRootHTTPAccessFallbackBoundary>
           <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
-            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+            <HTTPAccessFallbackErrorBoundary pathname="/login" notFound={<NotAllowedRootHTTPFallbackError>} ...>
               <RedirectBoundary>
                 <RedirectErrorBoundary router={{...}}>
                   <Head>
@@ -45,30 +48,15 @@ https://react.dev/link/hydration-mismatch
                           <body
 -                           cz-shortcut-listen="true"
                           >
-                            ...
-                              <CssBaseline>
-+                             <header className="site-header">
--                             <style data-emotion="css-global 1cops6v" data-s="">
-                              ...
                   ...
 
-[00:00:09.335] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:00:09.460] Browser ERROR   `legacyBehavior` is deprecated and will be removed in a future release. A codemod is available to upgrade your components:
-
-npx @next/codemod@latest new-link .
-
-Learn more: https://nextjs.org/docs/app/building-your-application/upgrading/codemods#remove-a-tags-from-link-components
-[00:00:39.757] Browser DEBUG   [api] -> POST http://localhost:4000/api/auth/login {"body":{"nipp":"999999","password":"123456"}}
-[00:00:40.123] Browser DEBUG   [api] <- POST http://localhost:4000/api/auth/login {"durationMs":364,"status":200}
-[00:00:41.726] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:00:41.726] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:00:41.909] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":141,"status":200}
-[00:00:41.909] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":186,"status":200}
-[00:01:42.860] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:01:42.860] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":316,"status":200}
-[00:02:42.858] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:02:42.858] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":274,"status":200}
-[00:03:42.866] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:03:42.866] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":287,"status":200}
-[00:04:42.858] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
-[00:04:42.858] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":292,"status":200}
+[00:04:32.334] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:04:41.241] Browser DEBUG   [api] -> POST http://localhost:4000/api/auth/login {"body":{"nipp":"999999","password":"123456"}}
+[00:04:42.042] Browser DEBUG   [api] <- POST http://localhost:4000/api/auth/login {"durationMs":802,"status":200}
+[00:04:44.710] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:04:44.710] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:04:45.325] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":520,"status":200}
+[00:04:45.325] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":605,"status":200}
+[00:05:05.597] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:05:05.846] Browser DEBUG   [api] -> GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {}
+[00:05:06.353] Browser DEBUG   [api] <- GET http://localhost:4000/api/work-orders?page=1&pageSize=2000 {"durationMs":547,"status":200}
