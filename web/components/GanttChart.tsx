@@ -102,19 +102,20 @@ const WORK_TYPE_COLORS: Record<string, string> = {
   'Default': '#3b82f6',
 };
 const STATUS_COLORS: Record<string, string> = {
-  'ASSIGNED': '#0ea5e9', // blue
-  'DEPLOYED': '#06b6d4', // teal
+  'ASSIGNED': '#1e40af', // strong blue (more distinct)
+  'DEPLOYED': '#db2777', // magenta/pink (contrasting)
   'READY_TO_DEPLOY': '#7c3aed', // purple
   'IN_PROGRESS': '#f97316', // orange
   'COMPLETED': '#10b981', // green
-  'NEW': '#64748b', // gray
+  'PREPARATION': '#64748b', // gray (formerly NEW)
+  'NEW': '#64748b', // legacy alias for compatibility
   'OPEN': '#64748b',
   'CANCELLED': '#ef4444', // red
   'CLOSED': '#334155',
 };
 
 // preferred legend order for statuses
-const STATUS_ORDER = ['NEW', 'ASSIGNED', 'READY_TO_DEPLOY', 'DEPLOYED', 'IN_PROGRESS', 'COMPLETED'];
+const STATUS_ORDER = ['PREPARATION', 'ASSIGNED', 'READY_TO_DEPLOY', 'DEPLOYED', 'IN_PROGRESS', 'COMPLETED'];
 
 // simple hex -> rgb helper and luminance check for label text color
 function hexToRgbStatic(hex: string | undefined | null) {
@@ -172,6 +173,13 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const svgWrapperRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(900);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const selectedDateLabel = useMemo(() => {
+    try {
+      const d = dateInputToDayStart(selectedDate);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+    } catch (e) { return selectedDate; }
+  }, [selectedDate]);
 
   useEffect(() => {
     const el = svgWrapperRef.current ?? containerRef.current;
@@ -514,6 +522,34 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
           boxSizing: 'border-box'
         }}
       >
+        {isFullscreen && (
+          <Box display="flex" gap={1} alignItems="center" sx={{ mt: 1, mb: 2, position: 'sticky', top: 0, zIndex: 40, background: '#fff', padding: '8px', borderBottom: '1px solid #eee' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography sx={{ fontWeight: 700, mr: 1 }}>Status colors:</Typography>
+              {STATUS_ORDER.map((status) => {
+                const color = STATUS_COLORS[status] || '#999';
+                const textColor = isDarkColor(color) ? '#ffffff' : '#000000';
+                return (
+                  <Chip
+                    key={status + '-fs'}
+                    label={status.replace(/_/g, ' ')}
+                    size="small"
+                    sx={{ backgroundColor: color, color: textColor, fontWeight: 700 }}
+                  />
+                );
+              })}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
+                <Box sx={{ width: 14, height: 14, backgroundColor: '#0f172a', borderRadius: 0.5, opacity: 0.12 }} />
+                <Typography sx={{ fontSize: 13, color: '#333' }}>Realisasi (actual)</Typography>
+              </Box>
+            </Box>
+
+            <Box sx={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ fontSize: 13, color: '#444', fontWeight: 700 }}>Tanggal</Typography>
+              <Typography sx={{ fontSize: 13, color: '#111' }}>{selectedDateLabel}</Typography>
+            </Box>
+          </Box>
+        )}
         <div ref={containerRef} style={{ overflowX: 'auto', height: isFullscreen ? '100%' : undefined }}>
           <div style={{ display:'flex', minWidth: Math.max(900, svgWidth) }}>
             {/* labels */}
@@ -532,8 +568,8 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   overflow:'hidden',
                   textOverflow:'ellipsis'
                 }}>
-                  <div style={{ fontSize:13, fontWeight:700 }}>{w.doc_no ?? w.id}</div>
-                  <div style={{ marginTop:4, color:'#666', fontSize:12 }}>{w.asset_name ?? ''} {w.work_type ? ` • ${w.work_type}` : ''}</div>
+                  <div style={{ fontSize:13, fontWeight:700 }}>{w.asset_name ?? ''}</div>
+                  <div style={{ marginTop:4, color:'#666', fontSize:12 }}>{w.doc_no ?? w.id} {w.work_type ? ` • ${w.work_type}` : ''}</div>
                 </div>
               ))}
             </div>

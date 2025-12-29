@@ -120,11 +120,12 @@ const WORK_TYPE_COLORS = {
     'Default': '#3b82f6'
 };
 const STATUS_COLORS = {
-    'ASSIGNED': '#0ea5e9',
-    'DEPLOYED': '#06b6d4',
+    'ASSIGNED': '#1e40af',
+    'DEPLOYED': '#db2777',
     'READY_TO_DEPLOY': '#7c3aed',
     'IN_PROGRESS': '#f97316',
     'COMPLETED': '#10b981',
+    'PREPARATION': '#64748b',
     'NEW': '#64748b',
     'OPEN': '#64748b',
     'CANCELLED': '#ef4444',
@@ -132,7 +133,7 @@ const STATUS_COLORS = {
 };
 // preferred legend order for statuses
 const STATUS_ORDER = [
-    'NEW',
+    'PREPARATION',
     'ASSIGNED',
     'READY_TO_DEPLOY',
     'DEPLOYED',
@@ -203,6 +204,21 @@ function GanttChart({ pageSize = 2000 }) {
     const svgWrapperRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
     const [containerWidth, setContainerWidth] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(900);
     const [isFullscreen, setIsFullscreen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const selectedDateLabel = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
+        "GanttChart.useMemo[selectedDateLabel]": ()=>{
+            try {
+                const d = dateInputToDayStart(selectedDate);
+                const pad = {
+                    "GanttChart.useMemo[selectedDateLabel].pad": (n)=>n.toString().padStart(2, '0')
+                }["GanttChart.useMemo[selectedDateLabel].pad"];
+                return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+            } catch (e) {
+                return selectedDate;
+            }
+        }
+    }["GanttChart.useMemo[selectedDateLabel]"], [
+        selectedDate
+    ]);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "GanttChart.useEffect": ()=>{
             const el = svgWrapperRef.current ?? containerRef.current;
@@ -535,12 +551,12 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Gantt Chart — Work Orders (per-hari)"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 402,
+                                    lineNumber: 410,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 401,
+                                lineNumber: 409,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -576,7 +592,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                 }
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 407,
+                                                lineNumber: 415,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$FormControl$2f$FormControl$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -590,7 +606,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                         children: "Site"
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 418,
+                                                        lineNumber: 426,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Select$2f$Select$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -608,7 +624,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                                 children: "-- All sites --"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                                lineNumber: 427,
+                                                                lineNumber: 435,
                                                                 columnNumber: 21
                                                             }, this),
                                                             sites.map((s)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$MenuItem$2f$MenuItem$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -616,19 +632,19 @@ function GanttChart({ pageSize = 2000 }) {
                                                                     children: s
                                                                 }, s, false, {
                                                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                                                    lineNumber: 428,
+                                                                    lineNumber: 436,
                                                                     columnNumber: 37
                                                                 }, this))
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 419,
+                                                        lineNumber: 427,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 417,
+                                                lineNumber: 425,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$FormControl$2f$FormControl$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -642,7 +658,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                         children: "Show"
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 433,
+                                                        lineNumber: 441,
                                                         columnNumber: 19
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Select$2f$Select$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -659,7 +675,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                                 children: "Planned + Actual"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                                lineNumber: 441,
+                                                                lineNumber: 449,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$MenuItem$2f$MenuItem$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -667,7 +683,7 @@ function GanttChart({ pageSize = 2000 }) {
                                                                 children: "Planned only"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                                lineNumber: 442,
+                                                                lineNumber: 450,
                                                                 columnNumber: 21
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$MenuItem$2f$MenuItem$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -675,25 +691,25 @@ function GanttChart({ pageSize = 2000 }) {
                                                                 children: "Actual only"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                                lineNumber: 443,
+                                                                lineNumber: 451,
                                                                 columnNumber: 21
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 434,
+                                                        lineNumber: 442,
                                                         columnNumber: 19
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 432,
+                                                lineNumber: 440,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                        lineNumber: 406,
+                                        lineNumber: 414,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -710,17 +726,17 @@ function GanttChart({ pageSize = 2000 }) {
                                                     onClick: ()=>setScale((s)=>Math.max(0.5, s * 0.9)),
                                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$ZoomOut$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 450,
+                                                        lineNumber: 458,
                                                         columnNumber: 98
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 450,
+                                                    lineNumber: 458,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 449,
+                                                lineNumber: 457,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Tooltip$2f$Tooltip$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -730,17 +746,17 @@ function GanttChart({ pageSize = 2000 }) {
                                                     onClick: ()=>setScale((s)=>Math.min(4, s * 1.1)),
                                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$ZoomIn$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 453,
+                                                        lineNumber: 461,
                                                         columnNumber: 96
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 453,
+                                                    lineNumber: 461,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 452,
+                                                lineNumber: 460,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Tooltip$2f$Tooltip$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -750,17 +766,17 @@ function GanttChart({ pageSize = 2000 }) {
                                                     onClick: load,
                                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$Refresh$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 456,
+                                                        lineNumber: 464,
                                                         columnNumber: 59
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 456,
+                                                    lineNumber: 464,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 455,
+                                                lineNumber: 463,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Tooltip$2f$Tooltip$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -770,49 +786,49 @@ function GanttChart({ pageSize = 2000 }) {
                                                     onClick: toggleFullscreen,
                                                     children: isFullscreen ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$FullscreenExit$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 460,
+                                                        lineNumber: 468,
                                                         columnNumber: 37
                                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$Fullscreen$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 460,
+                                                        lineNumber: 468,
                                                         columnNumber: 62
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 459,
+                                                    lineNumber: 467,
                                                     columnNumber: 19
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 458,
+                                                lineNumber: 466,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                        lineNumber: 448,
+                                        lineNumber: 456,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 405,
+                                lineNumber: 413,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/GanttChart.tsx",
-                        lineNumber: 400,
+                        lineNumber: 408,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/web/components/GanttChart.tsx",
-                    lineNumber: 399,
+                    lineNumber: 407,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 398,
+                lineNumber: 406,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -833,7 +849,7 @@ function GanttChart({ pageSize = 2000 }) {
                         children: "Status colors:"
                     }, void 0, false, {
                         fileName: "[project]/web/components/GanttChart.tsx",
-                        lineNumber: 476,
+                        lineNumber: 484,
                         columnNumber: 9
                     }, this),
                     STATUS_ORDER.map((status)=>{
@@ -849,7 +865,7 @@ function GanttChart({ pageSize = 2000 }) {
                             }
                         }, status, false, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 481,
+                            lineNumber: 489,
                             columnNumber: 13
                         }, this);
                     }),
@@ -871,7 +887,7 @@ function GanttChart({ pageSize = 2000 }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 490,
+                                lineNumber: 498,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -882,19 +898,19 @@ function GanttChart({ pageSize = 2000 }) {
                                 children: "Realisasi (actual)"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 491,
+                                lineNumber: 499,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/GanttChart.tsx",
-                        lineNumber: 489,
+                        lineNumber: 497,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 475,
+                lineNumber: 483,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -917,428 +933,568 @@ function GanttChart({ pageSize = 2000 }) {
                     boxSizing: 'border-box'
                 },
                 className: "jsx-98a0eb5974c95edc" + " " + "gantt-svg-wrapper",
-                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    ref: containerRef,
-                    style: {
-                        overflowX: 'auto',
-                        height: isFullscreen ? '100%' : undefined
-                    },
-                    className: "jsx-98a0eb5974c95edc",
-                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        style: {
-                            display: 'flex',
-                            minWidth: Math.max(900, svgWidth)
+                children: [
+                    isFullscreen && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                        display: "flex",
+                        gap: 1,
+                        alignItems: "center",
+                        sx: {
+                            mt: 1,
+                            mb: 2,
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 40,
+                            background: '#fff',
+                            padding: '8px',
+                            borderBottom: '1px solid #eee'
                         },
-                        className: "jsx-98a0eb5974c95edc",
                         children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                style: {
-                                    width: labelWidth,
-                                    borderRight: '1px solid #f0f0f0',
-                                    background: '#fafafa'
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                sx: {
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    flexWrap: 'wrap'
                                 },
-                                className: "jsx-98a0eb5974c95edc",
                                 children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        style: {
-                                            padding: '10px 12px',
-                                            fontWeight: 700
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                        sx: {
+                                            fontWeight: 700,
+                                            mr: 1
                                         },
-                                        className: "jsx-98a0eb5974c95edc",
-                                        children: "Work Order"
+                                        children: "Status colors:"
                                     }, void 0, false, {
                                         fileName: "[project]/web/components/GanttChart.tsx",
-                                        lineNumber: 521,
+                                        lineNumber: 528,
                                         columnNumber: 15
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        style: {
-                                            height: 8
-                                        },
-                                        className: "jsx-98a0eb5974c95edc"
-                                    }, void 0, false, {
-                                        fileName: "[project]/web/components/GanttChart.tsx",
-                                        lineNumber: 522,
-                                        columnNumber: 15
-                                    }, this),
-                                    validItems.map((w, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            style: {
-                                                height: rowHeight,
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'center',
-                                                padding: '6px 12px',
-                                                borderBottom: '1px solid #f1f1f1',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis'
-                                            },
-                                            className: "jsx-98a0eb5974c95edc",
-                                            children: [
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    style: {
-                                                        fontSize: 13,
-                                                        fontWeight: 700
-                                                    },
-                                                    className: "jsx-98a0eb5974c95edc",
-                                                    children: w.doc_no ?? w.id
-                                                }, void 0, false, {
-                                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 535,
-                                                    columnNumber: 19
-                                                }, this),
-                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                    style: {
-                                                        marginTop: 4,
-                                                        color: '#666',
-                                                        fontSize: 12
-                                                    },
-                                                    className: "jsx-98a0eb5974c95edc",
-                                                    children: [
-                                                        w.asset_name ?? '',
-                                                        " ",
-                                                        w.work_type ? ` • ${w.work_type}` : ''
-                                                    ]
-                                                }, void 0, true, {
-                                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                                    lineNumber: 536,
-                                                    columnNumber: 19
-                                                }, this)
-                                            ]
-                                        }, w.id, true, {
+                                    STATUS_ORDER.map((status)=>{
+                                        const color = STATUS_COLORS[status] || '#999';
+                                        const textColor = isDarkColor(color) ? '#ffffff' : '#000000';
+                                        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Chip$2f$Chip$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                            label: status.replace(/_/g, ' '),
+                                            size: "small",
+                                            sx: {
+                                                backgroundColor: color,
+                                                color: textColor,
+                                                fontWeight: 700
+                                            }
+                                        }, status + '-fs', false, {
                                             fileName: "[project]/web/components/GanttChart.tsx",
-                                            lineNumber: 524,
-                                            columnNumber: 17
-                                        }, this))
+                                            lineNumber: 533,
+                                            columnNumber: 19
+                                        }, this);
+                                    }),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                        sx: {
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 1,
+                                            ml: 1
+                                        },
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                                sx: {
+                                                    width: 14,
+                                                    height: 14,
+                                                    backgroundColor: '#0f172a',
+                                                    borderRadius: 0.5,
+                                                    opacity: 0.12
+                                                }
+                                            }, void 0, false, {
+                                                fileName: "[project]/web/components/GanttChart.tsx",
+                                                lineNumber: 542,
+                                                columnNumber: 17
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                                sx: {
+                                                    fontSize: 13,
+                                                    color: '#333'
+                                                },
+                                                children: "Realisasi (actual)"
+                                            }, void 0, false, {
+                                                fileName: "[project]/web/components/GanttChart.tsx",
+                                                lineNumber: 543,
+                                                columnNumber: 17
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                        lineNumber: 541,
+                                        columnNumber: 15
+                                    }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 520,
+                                lineNumber: 527,
                                 columnNumber: 13
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                style: {
-                                    flex: '1 0 auto',
-                                    minWidth: 600,
-                                    position: 'relative',
-                                    background: '#fff',
-                                    height: isFullscreen ? '100%' : svgHeight
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                sx: {
+                                    marginLeft: 'auto',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1
                                 },
-                                className: "jsx-98a0eb5974c95edc",
-                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                    width: svgWidth,
-                                    height: svgHeight,
-                                    style: {
-                                        width: isFullscreen ? '100%' : undefined,
-                                        height: isFullscreen ? '100%' : undefined
-                                    },
-                                    className: "jsx-98a0eb5974c95edc",
-                                    children: [
-                                        validItems.map((r, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
-                                                x: 0,
-                                                y: idx * rowHeight + 40,
-                                                width: svgWidth,
-                                                height: rowHeight,
-                                                fill: idx % 2 === 0 ? '#ffffff' : '#fbfbfb',
-                                                className: "jsx-98a0eb5974c95edc"
-                                            }, 'bg' + idx, false, {
-                                                fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 546,
-                                                columnNumber: 19
-                                            }, this)),
-                                        ticks.map((t, i)=>{
-                                            const x = msToX(t);
-                                            // show major label every 2 hours; minor ticks remain every 30 minutes
-                                            const showLabel = (t - dayStartMs) % (2 * 60 * 60 * 1000) === 0;
-                                            return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
-                                                className: "jsx-98a0eb5974c95edc",
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
-                                                        x1: x,
-                                                        y1: 30,
-                                                        x2: x,
-                                                        y2: 30 + Math.max(20, svgHeight - 40),
-                                                        stroke: "#e7e7e7",
-                                                        className: "jsx-98a0eb5974c95edc"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 562,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    showLabel && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
-                                                        x: x + 4,
-                                                        y: 20,
-                                                        fontSize: 11,
-                                                        fill: "#333",
-                                                        className: "jsx-98a0eb5974c95edc",
-                                                        children: new Date(t).toLocaleTimeString([], {
-                                                            hour: '2-digit',
-                                                            minute: '2-digit',
-                                                            hour12: false
-                                                        })
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 563,
-                                                        columnNumber: 37
-                                                    }, this)
-                                                ]
-                                            }, 'tick' + i, true, {
-                                                fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 561,
-                                                columnNumber: 21
-                                            }, this);
-                                        }),
-                                        showNow && nowX !== null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
-                                            className: "jsx-98a0eb5974c95edc",
-                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
-                                                x1: nowX,
-                                                y1: 30,
-                                                x2: nowX,
-                                                y2: 30 + Math.max(20, svgHeight - 40),
-                                                stroke: "#8b5cf6",
-                                                strokeWidth: 2,
-                                                strokeDasharray: "6,4",
-                                                className: "jsx-98a0eb5974c95edc"
-                                            }, void 0, false, {
-                                                fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 571,
-                                                columnNumber: 21
-                                            }, this)
-                                        }, void 0, false, {
-                                            fileName: "[project]/web/components/GanttChart.tsx",
-                                            lineNumber: 570,
-                                            columnNumber: 19
-                                        }, this),
-                                        validItems.map((w, idx)=>{
-                                            const sMsRaw = isoToMs(w.start_date);
-                                            const eMsRaw = isoToMs(w.end_date);
-                                            const realStartMsRaw = isoToMs(w.realisasi?.actualStart);
-                                            const realEndMsRaw = isoToMs(w.realisasi?.actualEnd);
-                                            if (sMsRaw == null || eMsRaw == null) return null;
-                                            const sMs = Math.max(sMsRaw, dayStartMs);
-                                            const eMs = Math.min(eMsRaw, dayEndMs);
-                                            if (eMs <= sMs) return null;
-                                            const x1 = msToX(sMs);
-                                            const x2 = msToX(eMs);
-                                            const width = clampBarWidth(x1, x2);
-                                            const y = idx * rowHeight + 40 + 6;
-                                            const rx = 6;
-                                            // bar color reflects status or work-type (original behavior)
-                                            const color = pickColorForWork(w);
-                                            // determine status normalized
-                                            const statusNorm = (w.status || w.raw && (w.raw.status || w.raw.doc_status) || '').toString().toUpperCase().replace(/[-\s]/g, '_');
-                                            // progress value: prefer top-level `progress` (0..1) then raw.progress; accept 0..1 or 0..100
-                                            let progressVal = null;
-                                            const pRaw = w.progress ?? w.raw?.progress ?? null;
-                                            if (typeof pRaw === 'number') {
-                                                if (pRaw > 1) progressVal = Math.max(0, Math.min(1, pRaw / 100));
-                                                else progressVal = Math.max(0, Math.min(1, pRaw));
-                                            }
-                                            // helper: determine readable text color for a background hex color
-                                            function hexToRgb(hex) {
-                                                if (!hex) return null;
-                                                const h = hex.replace('#', '').trim();
-                                                if (h.length === 3) {
-                                                    const r = parseInt(h[0] + h[0], 16);
-                                                    const g = parseInt(h[1] + h[1], 16);
-                                                    const b = parseInt(h[2] + h[2], 16);
-                                                    return {
-                                                        r,
-                                                        g,
-                                                        b
-                                                    };
-                                                }
-                                                if (h.length === 6) {
-                                                    const r = parseInt(h.substring(0, 2), 16);
-                                                    const g = parseInt(h.substring(2, 4), 16);
-                                                    const b = parseInt(h.substring(4, 6), 16);
-                                                    return {
-                                                        r,
-                                                        g,
-                                                        b
-                                                    };
-                                                }
-                                                return null;
-                                            }
-                                            function isDark(hex) {
-                                                const rgb = hexToRgb(hex) || {
-                                                    r: 0,
-                                                    g: 0,
-                                                    b: 0
-                                                };
-                                                // luminance approximation
-                                                const lum = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
-                                                return lum < 140;
-                                            }
-                                            // helper: darken a hex color by a fraction (0..1)
-                                            function darkenHex(hex, frac = 0.22) {
-                                                try {
-                                                    const rgb = hexToRgb(hex);
-                                                    if (!rgb) return hex;
-                                                    const r = Math.max(0, Math.min(255, Math.round(rgb.r * (1 - frac))));
-                                                    const g = Math.max(0, Math.min(255, Math.round(rgb.g * (1 - frac))));
-                                                    const b = Math.max(0, Math.min(255, Math.round(rgb.b * (1 - frac))));
-                                                    const toHex = (n)=>n.toString(16).padStart(2, '0');
-                                                    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-                                                } catch (e) {
-                                                    return hex;
-                                                }
-                                            }
-                                            // use a darker variant of the bar color for the progress overlay
-                                            const progressColor = darkenHex(color, 0.22);
-                                            const progressTextColorInside = isDark(progressColor) ? '#ffffff' : '#000000';
-                                            return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
-                                                style: {
-                                                    cursor: 'pointer'
-                                                },
-                                                onClick: ()=>setSelected(w),
-                                                className: "jsx-98a0eb5974c95edc",
-                                                children: [
-                                                    displayMode !== 'actual' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
-                                                        x: x1,
-                                                        y: y,
-                                                        rx: rx,
-                                                        ry: rx,
-                                                        width: width,
-                                                        height: rowHeight - 12,
-                                                        fill: color,
-                                                        opacity: 0.98,
-                                                        className: "jsx-98a0eb5974c95edc"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/web/components/GanttChart.tsx",
-                                                        lineNumber: 651,
-                                                        columnNumber: 25
-                                                    }, this),
-                                                    realStartMsRaw != null && realEndMsRaw != null && displayMode !== 'planned' && (()=>{
-                                                        const rs = Math.max(realStartMsRaw, dayStartMs);
-                                                        const re = Math.min(realEndMsRaw, dayEndMs);
-                                                        if (re <= rs) return null;
-                                                        const rx1 = msToX(rs);
-                                                        const rx2 = msToX(re);
-                                                        const rwidth = clampBarWidth(rx1, rx2);
-                                                        const ry = y + 6; // inset slightly
-                                                        const rheight = Math.max(6, rowHeight - 24);
-                                                        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
-                                                            children: [
-                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
-                                                                    x: rx1,
-                                                                    y: ry,
-                                                                    rx: 3,
-                                                                    ry: 3,
-                                                                    width: rwidth,
-                                                                    height: rheight,
-                                                                    fill: "#0f172a",
-                                                                    opacity: 0.12,
-                                                                    className: "jsx-98a0eb5974c95edc"
-                                                                }, void 0, false, {
-                                                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                                                    lineNumber: 666,
-                                                                    columnNumber: 29
-                                                                }, this),
-                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
-                                                                    x: rx1,
-                                                                    y: ry,
-                                                                    rx: 3,
-                                                                    ry: 3,
-                                                                    width: rwidth,
-                                                                    height: rheight,
-                                                                    fill: "none",
-                                                                    stroke: "#0f172a",
-                                                                    strokeWidth: 1,
-                                                                    opacity: 0.22,
-                                                                    className: "jsx-98a0eb5974c95edc"
-                                                                }, void 0, false, {
-                                                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                                                    lineNumber: 667,
-                                                                    columnNumber: 29
-                                                                }, this)
-                                                            ]
-                                                        }, void 0, true);
-                                                    })(),
-                                                    statusNorm === 'IN_PROGRESS' && progressVal !== null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
-                                                        children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
-                                                                x: x1,
-                                                                y: y,
-                                                                rx: rx,
-                                                                ry: rx,
-                                                                width: Math.max(minBarWidthPx, width * progressVal),
-                                                                height: rowHeight - 12,
-                                                                fill: progressColor,
-                                                                opacity: 0.72,
-                                                                className: "jsx-98a0eb5974c95edc"
-                                                            }, void 0, false, {
-                                                                fileName: "[project]/web/components/GanttChart.tsx",
-                                                                lineNumber: 675,
-                                                                columnNumber: 27
-                                                            }, this),
-                                                            (()=>{
-                                                                const progWidth = Math.max(minBarWidthPx, width * progressVal);
-                                                                const pctText = Math.round(progressVal * 100) + '%';
-                                                                if (progWidth > 28) {
-                                                                    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
-                                                                        x: x1 + 6,
-                                                                        y: y + (rowHeight - 12) / 2 + 4,
-                                                                        fontSize: 12,
-                                                                        fill: progressTextColorInside,
-                                                                        fontWeight: 700,
-                                                                        className: "jsx-98a0eb5974c95edc",
-                                                                        children: pctText
-                                                                    }, void 0, false, {
-                                                                        fileName: "[project]/web/components/GanttChart.tsx",
-                                                                        lineNumber: 681,
-                                                                        columnNumber: 38
-                                                                    }, this);
-                                                                }
-                                                                // outside label
-                                                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
-                                                                    x: x2 + 6,
-                                                                    y: y + (rowHeight - 12) / 2 + 4,
-                                                                    fontSize: 12,
-                                                                    fill: color,
-                                                                    fontWeight: 700,
-                                                                    className: "jsx-98a0eb5974c95edc",
-                                                                    children: pctText
-                                                                }, void 0, false, {
-                                                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                                                    lineNumber: 684,
-                                                                    columnNumber: 36
-                                                                }, this);
-                                                            })()
-                                                        ]
-                                                    }, void 0, true)
-                                                ]
-                                            }, 'bar' + w.id, true, {
-                                                fileName: "[project]/web/components/GanttChart.tsx",
-                                                lineNumber: 648,
-                                                columnNumber: 21
-                                            }, this);
-                                        })
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 543,
-                                    columnNumber: 15
-                                }, this)
-                            }, void 0, false, {
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                        sx: {
+                                            fontSize: 13,
+                                            color: '#444',
+                                            fontWeight: 700
+                                        },
+                                        children: "Tanggal"
+                                    }, void 0, false, {
+                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                        lineNumber: 548,
+                                        columnNumber: 15
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                        sx: {
+                                            fontSize: 13,
+                                            color: '#111'
+                                        },
+                                        children: selectedDateLabel
+                                    }, void 0, false, {
+                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                        lineNumber: 549,
+                                        columnNumber: 15
+                                    }, this)
+                                ]
+                            }, void 0, true, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 542,
+                                lineNumber: 547,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/GanttChart.tsx",
-                        lineNumber: 518,
+                        lineNumber: 526,
                         columnNumber: 11
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        ref: containerRef,
+                        style: {
+                            overflowX: 'auto',
+                            height: isFullscreen ? '100%' : undefined
+                        },
+                        className: "jsx-98a0eb5974c95edc",
+                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            style: {
+                                display: 'flex',
+                                minWidth: Math.max(900, svgWidth)
+                            },
+                            className: "jsx-98a0eb5974c95edc",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    style: {
+                                        width: labelWidth,
+                                        borderRight: '1px solid #f0f0f0',
+                                        background: '#fafafa'
+                                    },
+                                    className: "jsx-98a0eb5974c95edc",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            style: {
+                                                padding: '10px 12px',
+                                                fontWeight: 700
+                                            },
+                                            className: "jsx-98a0eb5974c95edc",
+                                            children: "Work Order"
+                                        }, void 0, false, {
+                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                            lineNumber: 557,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            style: {
+                                                height: 8
+                                            },
+                                            className: "jsx-98a0eb5974c95edc"
+                                        }, void 0, false, {
+                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                            lineNumber: 558,
+                                            columnNumber: 15
+                                        }, this),
+                                        validItems.map((w, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                style: {
+                                                    height: rowHeight,
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'center',
+                                                    padding: '6px 12px',
+                                                    borderBottom: '1px solid #f1f1f1',
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis'
+                                                },
+                                                className: "jsx-98a0eb5974c95edc",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        style: {
+                                                            fontSize: 13,
+                                                            fontWeight: 700
+                                                        },
+                                                        className: "jsx-98a0eb5974c95edc",
+                                                        children: w.asset_name ?? ''
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                                        lineNumber: 571,
+                                                        columnNumber: 19
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        style: {
+                                                            marginTop: 4,
+                                                            color: '#666',
+                                                            fontSize: 12
+                                                        },
+                                                        className: "jsx-98a0eb5974c95edc",
+                                                        children: [
+                                                            w.doc_no ?? w.id,
+                                                            " ",
+                                                            w.work_type ? ` • ${w.work_type}` : ''
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                                        lineNumber: 572,
+                                                        columnNumber: 19
+                                                    }, this)
+                                                ]
+                                            }, w.id, true, {
+                                                fileName: "[project]/web/components/GanttChart.tsx",
+                                                lineNumber: 560,
+                                                columnNumber: 17
+                                            }, this))
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                    lineNumber: 556,
+                                    columnNumber: 13
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    style: {
+                                        flex: '1 0 auto',
+                                        minWidth: 600,
+                                        position: 'relative',
+                                        background: '#fff',
+                                        height: isFullscreen ? '100%' : svgHeight
+                                    },
+                                    className: "jsx-98a0eb5974c95edc",
+                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                        width: svgWidth,
+                                        height: svgHeight,
+                                        style: {
+                                            width: isFullscreen ? '100%' : undefined,
+                                            height: isFullscreen ? '100%' : undefined
+                                        },
+                                        className: "jsx-98a0eb5974c95edc",
+                                        children: [
+                                            validItems.map((r, idx)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                                    x: 0,
+                                                    y: idx * rowHeight + 40,
+                                                    width: svgWidth,
+                                                    height: rowHeight,
+                                                    fill: idx % 2 === 0 ? '#ffffff' : '#fbfbfb',
+                                                    className: "jsx-98a0eb5974c95edc"
+                                                }, 'bg' + idx, false, {
+                                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                                    lineNumber: 582,
+                                                    columnNumber: 19
+                                                }, this)),
+                                            ticks.map((t, i)=>{
+                                                const x = msToX(t);
+                                                // show major label every 2 hours; minor ticks remain every 30 minutes
+                                                const showLabel = (t - dayStartMs) % (2 * 60 * 60 * 1000) === 0;
+                                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
+                                                    className: "jsx-98a0eb5974c95edc",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
+                                                            x1: x,
+                                                            y1: 30,
+                                                            x2: x,
+                                                            y2: 30 + Math.max(20, svgHeight - 40),
+                                                            stroke: "#e7e7e7",
+                                                            className: "jsx-98a0eb5974c95edc"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                                            lineNumber: 598,
+                                                            columnNumber: 23
+                                                        }, this),
+                                                        showLabel && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
+                                                            x: x + 4,
+                                                            y: 20,
+                                                            fontSize: 11,
+                                                            fill: "#333",
+                                                            className: "jsx-98a0eb5974c95edc",
+                                                            children: new Date(t).toLocaleTimeString([], {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                hour12: false
+                                                            })
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                                            lineNumber: 599,
+                                                            columnNumber: 37
+                                                        }, this)
+                                                    ]
+                                                }, 'tick' + i, true, {
+                                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                                    lineNumber: 597,
+                                                    columnNumber: 21
+                                                }, this);
+                                            }),
+                                            showNow && nowX !== null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
+                                                className: "jsx-98a0eb5974c95edc",
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
+                                                    x1: nowX,
+                                                    y1: 30,
+                                                    x2: nowX,
+                                                    y2: 30 + Math.max(20, svgHeight - 40),
+                                                    stroke: "#8b5cf6",
+                                                    strokeWidth: 2,
+                                                    strokeDasharray: "6,4",
+                                                    className: "jsx-98a0eb5974c95edc"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                                    lineNumber: 607,
+                                                    columnNumber: 21
+                                                }, this)
+                                            }, void 0, false, {
+                                                fileName: "[project]/web/components/GanttChart.tsx",
+                                                lineNumber: 606,
+                                                columnNumber: 19
+                                            }, this),
+                                            validItems.map((w, idx)=>{
+                                                const sMsRaw = isoToMs(w.start_date);
+                                                const eMsRaw = isoToMs(w.end_date);
+                                                const realStartMsRaw = isoToMs(w.realisasi?.actualStart);
+                                                const realEndMsRaw = isoToMs(w.realisasi?.actualEnd);
+                                                if (sMsRaw == null || eMsRaw == null) return null;
+                                                const sMs = Math.max(sMsRaw, dayStartMs);
+                                                const eMs = Math.min(eMsRaw, dayEndMs);
+                                                if (eMs <= sMs) return null;
+                                                const x1 = msToX(sMs);
+                                                const x2 = msToX(eMs);
+                                                const width = clampBarWidth(x1, x2);
+                                                const y = idx * rowHeight + 40 + 6;
+                                                const rx = 6;
+                                                // bar color reflects status or work-type (original behavior)
+                                                const color = pickColorForWork(w);
+                                                // determine status normalized
+                                                const statusNorm = (w.status || w.raw && (w.raw.status || w.raw.doc_status) || '').toString().toUpperCase().replace(/[-\s]/g, '_');
+                                                // progress value: prefer top-level `progress` (0..1) then raw.progress; accept 0..1 or 0..100
+                                                let progressVal = null;
+                                                const pRaw = w.progress ?? w.raw?.progress ?? null;
+                                                if (typeof pRaw === 'number') {
+                                                    if (pRaw > 1) progressVal = Math.max(0, Math.min(1, pRaw / 100));
+                                                    else progressVal = Math.max(0, Math.min(1, pRaw));
+                                                }
+                                                // helper: determine readable text color for a background hex color
+                                                function hexToRgb(hex) {
+                                                    if (!hex) return null;
+                                                    const h = hex.replace('#', '').trim();
+                                                    if (h.length === 3) {
+                                                        const r = parseInt(h[0] + h[0], 16);
+                                                        const g = parseInt(h[1] + h[1], 16);
+                                                        const b = parseInt(h[2] + h[2], 16);
+                                                        return {
+                                                            r,
+                                                            g,
+                                                            b
+                                                        };
+                                                    }
+                                                    if (h.length === 6) {
+                                                        const r = parseInt(h.substring(0, 2), 16);
+                                                        const g = parseInt(h.substring(2, 4), 16);
+                                                        const b = parseInt(h.substring(4, 6), 16);
+                                                        return {
+                                                            r,
+                                                            g,
+                                                            b
+                                                        };
+                                                    }
+                                                    return null;
+                                                }
+                                                function isDark(hex) {
+                                                    const rgb = hexToRgb(hex) || {
+                                                        r: 0,
+                                                        g: 0,
+                                                        b: 0
+                                                    };
+                                                    // luminance approximation
+                                                    const lum = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+                                                    return lum < 140;
+                                                }
+                                                // helper: darken a hex color by a fraction (0..1)
+                                                function darkenHex(hex, frac = 0.22) {
+                                                    try {
+                                                        const rgb = hexToRgb(hex);
+                                                        if (!rgb) return hex;
+                                                        const r = Math.max(0, Math.min(255, Math.round(rgb.r * (1 - frac))));
+                                                        const g = Math.max(0, Math.min(255, Math.round(rgb.g * (1 - frac))));
+                                                        const b = Math.max(0, Math.min(255, Math.round(rgb.b * (1 - frac))));
+                                                        const toHex = (n)=>n.toString(16).padStart(2, '0');
+                                                        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+                                                    } catch (e) {
+                                                        return hex;
+                                                    }
+                                                }
+                                                // use a darker variant of the bar color for the progress overlay
+                                                const progressColor = darkenHex(color, 0.22);
+                                                const progressTextColorInside = isDark(progressColor) ? '#ffffff' : '#000000';
+                                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("g", {
+                                                    style: {
+                                                        cursor: 'pointer'
+                                                    },
+                                                    onClick: ()=>setSelected(w),
+                                                    className: "jsx-98a0eb5974c95edc",
+                                                    children: [
+                                                        displayMode !== 'actual' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                                            x: x1,
+                                                            y: y,
+                                                            rx: rx,
+                                                            ry: rx,
+                                                            width: width,
+                                                            height: rowHeight - 12,
+                                                            fill: color,
+                                                            opacity: 0.98,
+                                                            className: "jsx-98a0eb5974c95edc"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                                            lineNumber: 687,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        realStartMsRaw != null && realEndMsRaw != null && displayMode !== 'planned' && (()=>{
+                                                            const rs = Math.max(realStartMsRaw, dayStartMs);
+                                                            const re = Math.min(realEndMsRaw, dayEndMs);
+                                                            if (re <= rs) return null;
+                                                            const rx1 = msToX(rs);
+                                                            const rx2 = msToX(re);
+                                                            const rwidth = clampBarWidth(rx1, rx2);
+                                                            const ry = y + 6; // inset slightly
+                                                            const rheight = Math.max(6, rowHeight - 24);
+                                                            return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                                                        x: rx1,
+                                                                        y: ry,
+                                                                        rx: 3,
+                                                                        ry: 3,
+                                                                        width: rwidth,
+                                                                        height: rheight,
+                                                                        fill: "#0f172a",
+                                                                        opacity: 0.12,
+                                                                        className: "jsx-98a0eb5974c95edc"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                                                        lineNumber: 702,
+                                                                        columnNumber: 29
+                                                                    }, this),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                                                        x: rx1,
+                                                                        y: ry,
+                                                                        rx: 3,
+                                                                        ry: 3,
+                                                                        width: rwidth,
+                                                                        height: rheight,
+                                                                        fill: "none",
+                                                                        stroke: "#0f172a",
+                                                                        strokeWidth: 1,
+                                                                        opacity: 0.22,
+                                                                        className: "jsx-98a0eb5974c95edc"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                                                        lineNumber: 703,
+                                                                        columnNumber: 29
+                                                                    }, this)
+                                                                ]
+                                                            }, void 0, true);
+                                                        })(),
+                                                        statusNorm === 'IN_PROGRESS' && progressVal !== null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
+                                                            children: [
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("rect", {
+                                                                    x: x1,
+                                                                    y: y,
+                                                                    rx: rx,
+                                                                    ry: rx,
+                                                                    width: Math.max(minBarWidthPx, width * progressVal),
+                                                                    height: rowHeight - 12,
+                                                                    fill: progressColor,
+                                                                    opacity: 0.72,
+                                                                    className: "jsx-98a0eb5974c95edc"
+                                                                }, void 0, false, {
+                                                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                                                    lineNumber: 711,
+                                                                    columnNumber: 27
+                                                                }, this),
+                                                                (()=>{
+                                                                    const progWidth = Math.max(minBarWidthPx, width * progressVal);
+                                                                    const pctText = Math.round(progressVal * 100) + '%';
+                                                                    if (progWidth > 28) {
+                                                                        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
+                                                                            x: x1 + 6,
+                                                                            y: y + (rowHeight - 12) / 2 + 4,
+                                                                            fontSize: 12,
+                                                                            fill: progressTextColorInside,
+                                                                            fontWeight: 700,
+                                                                            className: "jsx-98a0eb5974c95edc",
+                                                                            children: pctText
+                                                                        }, void 0, false, {
+                                                                            fileName: "[project]/web/components/GanttChart.tsx",
+                                                                            lineNumber: 717,
+                                                                            columnNumber: 38
+                                                                        }, this);
+                                                                    }
+                                                                    // outside label
+                                                                    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("text", {
+                                                                        x: x2 + 6,
+                                                                        y: y + (rowHeight - 12) / 2 + 4,
+                                                                        fontSize: 12,
+                                                                        fill: color,
+                                                                        fontWeight: 700,
+                                                                        className: "jsx-98a0eb5974c95edc",
+                                                                        children: pctText
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                                                        lineNumber: 720,
+                                                                        columnNumber: 36
+                                                                    }, this);
+                                                                })()
+                                                            ]
+                                                        }, void 0, true)
+                                                    ]
+                                                }, 'bar' + w.id, true, {
+                                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                                    lineNumber: 684,
+                                                    columnNumber: 21
+                                                }, this);
+                                            })
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/web/components/GanttChart.tsx",
+                                        lineNumber: 579,
+                                        columnNumber: 15
+                                    }, this)
+                                }, void 0, false, {
+                                    fileName: "[project]/web/components/GanttChart.tsx",
+                                    lineNumber: 578,
+                                    columnNumber: 13
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/web/components/GanttChart.tsx",
+                            lineNumber: 554,
+                            columnNumber: 11
+                        }, this)
+                    }, void 0, false, {
+                        fileName: "[project]/web/components/GanttChart.tsx",
+                        lineNumber: 553,
+                        columnNumber: 9
                     }, this)
-                }, void 0, false, {
-                    fileName: "[project]/web/components/GanttChart.tsx",
-                    lineNumber: 517,
-                    columnNumber: 9
-                }, this)
-            }, void 0, false, {
+                ]
+            }, void 0, true, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 496,
+                lineNumber: 504,
                 columnNumber: 7
             }, this),
             selected && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1374,7 +1530,7 @@ function GanttChart({ pageSize = 2000 }) {
                             children: selected.doc_no
                         }, void 0, false, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 704,
+                            lineNumber: 740,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1385,7 +1541,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Asset:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 705,
+                                    lineNumber: 741,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1393,7 +1549,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 705,
+                            lineNumber: 741,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1404,7 +1560,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Type:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 706,
+                                    lineNumber: 742,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1412,7 +1568,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 706,
+                            lineNumber: 742,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1423,7 +1579,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Start:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 707,
+                                    lineNumber: 743,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1431,7 +1587,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 707,
+                            lineNumber: 743,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1442,7 +1598,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "End:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 708,
+                                    lineNumber: 744,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1450,7 +1606,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 708,
+                            lineNumber: 744,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1461,7 +1617,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Actual Start:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 709,
+                                    lineNumber: 745,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1469,7 +1625,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 709,
+                            lineNumber: 745,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1480,7 +1636,7 @@ function GanttChart({ pageSize = 2000 }) {
                                     children: "Actual End:"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 710,
+                                    lineNumber: 746,
                                     columnNumber: 18
                                 }, this),
                                 " ",
@@ -1488,7 +1644,7 @@ function GanttChart({ pageSize = 2000 }) {
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 710,
+                            lineNumber: 746,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1507,12 +1663,12 @@ function GanttChart({ pageSize = 2000 }) {
                                 children: selected.description ?? JSON.stringify(selected.raw ?? selected, null, 2)
                             }, void 0, false, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 712,
+                                lineNumber: 748,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 711,
+                            lineNumber: 747,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1526,30 +1682,30 @@ function GanttChart({ pageSize = 2000 }) {
                                 size: "small",
                                 startIcon: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$icons$2d$material$2f$Close$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                                     fileName: "[project]/web/components/GanttChart.tsx",
-                                    lineNumber: 715,
+                                    lineNumber: 751,
                                     columnNumber: 67
                                 }, void 0),
                                 onClick: ()=>setSelected(null),
                                 children: "Close"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/GanttChart.tsx",
-                                lineNumber: 715,
+                                lineNumber: 751,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/web/components/GanttChart.tsx",
-                            lineNumber: 714,
+                            lineNumber: 750,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/web/components/GanttChart.tsx",
-                    lineNumber: 703,
+                    lineNumber: 739,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 699,
+                lineNumber: 735,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$styled$2d$jsx$2f$style$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1559,11 +1715,11 @@ function GanttChart({ pageSize = 2000 }) {
         ]
     }, void 0, true, {
         fileName: "[project]/web/components/GanttChart.tsx",
-        lineNumber: 397,
+        lineNumber: 405,
         columnNumber: 5
     }, this);
 }
-_s(GanttChart, "UtnuXYNMixN9enaxyqZH34IqYqg=");
+_s(GanttChart, "DdkUve6ZiGU7v9ySjTJtA2gaVMc=");
 _c = GanttChart;
 function LegendItem({ color, label, showBox = true }) {
     const textColor = isDarkColor(color) ? '#ffffff' : '#000000';
@@ -1587,7 +1743,7 @@ function LegendItem({ color, label, showBox = true }) {
                 }
             }, void 0, false, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 740,
+                lineNumber: 776,
                 columnNumber: 19
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1598,13 +1754,13 @@ function LegendItem({ color, label, showBox = true }) {
                 children: label
             }, void 0, false, {
                 fileName: "[project]/web/components/GanttChart.tsx",
-                lineNumber: 741,
+                lineNumber: 777,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/web/components/GanttChart.tsx",
-        lineNumber: 739,
+        lineNumber: 775,
         columnNumber: 5
     }, this);
 }

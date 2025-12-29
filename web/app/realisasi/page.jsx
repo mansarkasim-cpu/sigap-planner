@@ -87,7 +87,7 @@ export default function Page() {
         total = res.length
       }
 
-      const completed = (rows || []).filter(r => ((r.status || r.raw?.status || 'NEW').toString().toUpperCase()) === 'COMPLETED')
+      const completed = (rows || []).filter(r => ((r.status || r.raw?.status || 'PREPARATION').toString().toUpperCase()) === 'COMPLETED')
       setList(completed)
       const computedTotalPages = Math.max(1, Math.ceil((total || completed.length) / pageSize))
       setTotalPages(computedTotalPages)

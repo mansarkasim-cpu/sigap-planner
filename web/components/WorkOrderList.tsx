@@ -76,6 +76,12 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     if (isNaN(parsed.getTime())) return '-';
     return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
   }
+  function normalizeStatusRaw(s?: any) {
+    if (s == null) return ''
+    const str = String(s).toString()
+    if (str.toUpperCase().trim() === 'NEW') return 'PREPARATION'
+    return str
+  }
   const [list, setList] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +125,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
       // derive available locations from returned (unfiltered) data
       const allListData = listData;
       const locs = Array.from(new Set(allListData.map((w: WorkOrder) => (w.vendor_cabang ?? w.raw?.vendor_cabang ?? '').toString().trim()).filter(Boolean)));
-      const sts = Array.from(new Set(allListData.map((w: WorkOrder) => ((w as any).status ?? w.raw?.status ?? 'NEW').toString().trim()).filter(Boolean)));
+      const sts = Array.from(new Set(allListData.map((w: WorkOrder) => normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString().trim()).filter(Boolean)));
       setStatuses(sts);
       setLocations(locs);
       // apply client-side filtering by location (case-insensitive) so filter works
@@ -136,9 +142,18 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
       if (selectedStatuses && selectedStatuses.length > 0) {
         const normSet = new Set(selectedStatuses.map(s => s.toString().toUpperCase().replace(/[-\s]/g, '_')));
         displayed = displayed.filter((w: WorkOrder) => {
-          const sRaw = ((w as any).status ?? w.raw?.status ?? 'NEW').toString();
+          const sRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
           const sNorm = sRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
           return normSet.has(sNorm);
+        });
+      }
+
+      // Default behavior: when no status selected, hide COMPLETED items
+      if (!selectedStatuses || selectedStatuses.length === 0) {
+        displayed = displayed.filter((w: WorkOrder) => {
+          const sRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
+          const sNorm = sRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
+          return sNorm !== 'COMPLETED';
         });
       }
       setList(displayed);
@@ -410,15 +425,15 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   }
 
   function getColorForStatus(s: string) {
-    const k = (s || '').toString().toUpperCase();
+    const k = normalizeStatusRaw(s).toString().toUpperCase();
     switch (k) {
-      case 'ASSIGNED': return '#0ea5e9'; // blue
-      case 'DEPLOYED': return '#06b6d4'; // teal
-      case 'READY_TO_DEPLOY': return '#7c3aed'; // purple
-      case 'IN_PROGRESS': return '#f97316'; // orange
+      case 'ASSIGNED': return '#1e40af';
+      case 'DEPLOYED': return '#db2777';
+      case 'READY_TO_DEPLOY': return '#7c3aed';
+      case 'IN_PROGRESS': return '#f97316';
       case 'IN-PROGRESS': return '#f97316';
-      case 'COMPLETED': return '#10b981'; // green
-      case 'NEW': return '#64748b'; // gray
+      case 'COMPLETED': return '#10b981';
+      case 'PREPARATION': return '#64748b';
       case 'OPEN': return '#64748b';
       case 'CANCELLED': return '#ef4444';
       case 'CLOSED': return '#334155';
@@ -427,7 +442,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   }
 
   const STATUS_OPTIONS = [
-    'NEW',
+    'PREPARATION',
     'ASSIGNED',
     'READY TO DEPLOY',
     'DEPLOYED',
@@ -441,10 +456,11 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   }
 
   function renderStatusBadge(s: string) {
-    const color = getColorForStatus(s);
+    const n = normalizeStatusRaw(s);
+    const color = getColorForStatus(n);
     return (
       <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 12, fontWeight: 600 }}>
-        {String(s).replace('_', ' ')}
+        {String(n).replace(/_/g, ' ')}
       </span>
     );
   }
@@ -549,7 +565,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
                 <TableCell>Jenis Work Order</TableCell>
                 <TableCell>Start</TableCell>
                 <TableCell>End</TableCell>
-                <TableCell>Asset</TableCell>
+                <TableCell>Equipment</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Location</TableCell>
                 <TableCell>Description</TableCell>
@@ -560,7 +576,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
             <TableBody>
               {list.map(w => {
                 const activities = (w.raw?.activities ?? []) as Activity[];
-                const statusRaw = ((w as any).status ?? w.raw?.status ?? 'NEW').toString();
+                const statusRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
                 const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
                 return (
                   <TableRow key={w.id} hover>
@@ -569,7 +585,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
                     <TableCell>{formatUtcDisplay(w.start_date)}</TableCell>
                     <TableCell>{formatUtcDisplay(w.end_date)}</TableCell>
                     <TableCell>{w.asset_name ?? '-'}</TableCell>
-                    <TableCell>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'NEW')}</TableCell>
+                    <TableCell>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</TableCell>
                     <TableCell>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
                     <TableCell sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.description ?? '-'}</TableCell>
                     <TableCell sx={{ width: 180 }}>

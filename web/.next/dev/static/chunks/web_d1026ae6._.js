@@ -229,6 +229,12 @@ function WorkOrderList({ onRefreshRequested }) {
         if (isNaN(parsed.getTime())) return '-';
         return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
     }
+    function normalizeStatusRaw(s) {
+        if (s == null) return '';
+        const str = String(s).toString();
+        if (str.toUpperCase().trim() === 'NEW') return 'PREPARATION';
+        return str;
+    }
     const [list, setList] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [loading, setLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [error, setError] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
@@ -278,7 +284,7 @@ function WorkOrderList({ onRefreshRequested }) {
             // derive available locations from returned (unfiltered) data
             const allListData = listData;
             const locs = Array.from(new Set(allListData.map((w)=>(w.vendor_cabang ?? w.raw?.vendor_cabang ?? '').toString().trim()).filter(Boolean)));
-            const sts = Array.from(new Set(allListData.map((w)=>(w.status ?? w.raw?.status ?? 'NEW').toString().trim()).filter(Boolean)));
+            const sts = Array.from(new Set(allListData.map((w)=>normalizeStatusRaw(w.status ?? w.raw?.status ?? 'PREPARATION').toString().trim()).filter(Boolean)));
             setStatuses(sts);
             setLocations(locs);
             // apply client-side filtering by location (case-insensitive) so filter works
@@ -295,9 +301,17 @@ function WorkOrderList({ onRefreshRequested }) {
             if (selectedStatuses && selectedStatuses.length > 0) {
                 const normSet = new Set(selectedStatuses.map((s)=>s.toString().toUpperCase().replace(/[-\s]/g, '_')));
                 displayed = displayed.filter((w)=>{
-                    const sRaw = (w.status ?? w.raw?.status ?? 'NEW').toString();
+                    const sRaw = normalizeStatusRaw(w.status ?? w.raw?.status ?? 'PREPARATION').toString();
                     const sNorm = sRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
                     return normSet.has(sNorm);
+                });
+            }
+            // Default behavior: when no status selected, hide COMPLETED items
+            if (!selectedStatuses || selectedStatuses.length === 0) {
+                displayed = displayed.filter((w)=>{
+                    const sRaw = normalizeStatusRaw(w.status ?? w.raw?.status ?? 'PREPARATION').toString();
+                    const sNorm = sRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
+                    return sNorm !== 'COMPLETED';
                 });
             }
             setList(displayed);
@@ -621,22 +635,22 @@ function WorkOrderList({ onRefreshRequested }) {
         return dt.toISOString();
     }
     function getColorForStatus(s) {
-        const k = (s || '').toString().toUpperCase();
+        const k = normalizeStatusRaw(s).toString().toUpperCase();
         switch(k){
             case 'ASSIGNED':
-                return '#0ea5e9'; // blue
+                return '#1e40af';
             case 'DEPLOYED':
-                return '#06b6d4'; // teal
+                return '#db2777';
             case 'READY_TO_DEPLOY':
-                return '#7c3aed'; // purple
+                return '#7c3aed';
             case 'IN_PROGRESS':
-                return '#f97316'; // orange
+                return '#f97316';
             case 'IN-PROGRESS':
                 return '#f97316';
             case 'COMPLETED':
-                return '#10b981'; // green
-            case 'NEW':
-                return '#64748b'; // gray
+                return '#10b981';
+            case 'PREPARATION':
+                return '#64748b';
             case 'OPEN':
                 return '#64748b';
             case 'CANCELLED':
@@ -648,7 +662,7 @@ function WorkOrderList({ onRefreshRequested }) {
         }
     }
     const STATUS_OPTIONS = [
-        'NEW',
+        'PREPARATION',
         'ASSIGNED',
         'READY TO DEPLOY',
         'DEPLOYED',
@@ -660,7 +674,8 @@ function WorkOrderList({ onRefreshRequested }) {
         return !(s === 'IN_PROGRESS' || s === 'COMPLETED');
     }
     function renderStatusBadge(s) {
-        const color = getColorForStatus(s);
+        const n = normalizeStatusRaw(s);
+        const color = getColorForStatus(n);
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
             style: {
                 display: 'inline-block',
@@ -671,10 +686,10 @@ function WorkOrderList({ onRefreshRequested }) {
                 fontSize: 12,
                 fontWeight: 600
             },
-            children: String(s).replace('_', ' ')
+            children: String(n).replace(/_/g, ' ')
         }, void 0, false, {
             fileName: "[project]/web/components/WorkOrderList.tsx",
-            lineNumber: 446,
+            lineNumber: 462,
             columnNumber: 7
         }, this);
     }
@@ -757,7 +772,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                         children: "Semua Lokasi"
                                     }, void 0, false, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 494,
+                                        lineNumber: 510,
                                         columnNumber: 15
                                     }, this),
                                     locations.map((s)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$MenuItem$2f$MenuItem$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -765,13 +780,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                             children: s
                                         }, s, false, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 496,
+                                            lineNumber: 512,
                                             columnNumber: 17
                                         }, this))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 487,
+                                lineNumber: 503,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Select$2f$Select$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -791,12 +806,12 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 size: "small"
                                             }, val, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 510,
+                                                lineNumber: 526,
                                                 columnNumber: 23
                                             }, void 0))
                                     }, void 0, false, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 508,
+                                        lineNumber: 524,
                                         columnNumber: 19
                                     }, void 0) : 'Semua Status',
                                 sx: {
@@ -809,19 +824,19 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 checked: selectedStatuses.indexOf(opt) > -1
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 519,
+                                                lineNumber: 535,
                                                 columnNumber: 19
                                             }, this),
                                             opt
                                         ]
                                     }, opt, true, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 518,
+                                        lineNumber: 534,
                                         columnNumber: 17
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 500,
+                                lineNumber: 516,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TextField$2f$TextField$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -835,7 +850,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 525,
+                                lineNumber: 541,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -847,7 +862,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: "Search"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 533,
+                                lineNumber: 549,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -858,7 +873,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: "Refresh"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 534,
+                                lineNumber: 550,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -873,13 +888,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 536,
+                                lineNumber: 552,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 486,
+                        lineNumber: 502,
                         columnNumber: 11
                     }, this),
                     loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -887,7 +902,7 @@ function WorkOrderList({ onRefreshRequested }) {
                         children: "Loading..."
                     }, void 0, false, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 539,
+                        lineNumber: 555,
                         columnNumber: 22
                     }, this) : null,
                     error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -896,13 +911,13 @@ function WorkOrderList({ onRefreshRequested }) {
                         children: error
                     }, void 0, false, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 540,
+                        lineNumber: 556,
                         columnNumber: 20
                     }, this) : null
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                lineNumber: 485,
+                lineNumber: 501,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -925,87 +940,87 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 children: "Doc No"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 548,
+                                                lineNumber: 564,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Jenis Work Order"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 549,
+                                                lineNumber: 565,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Start"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 550,
+                                                lineNumber: 566,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "End"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 551,
+                                                lineNumber: 567,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                                                children: "Asset"
+                                                children: "Equipment"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 552,
+                                                lineNumber: 568,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Status"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 553,
+                                                lineNumber: 569,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Location"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 554,
+                                                lineNumber: 570,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Description"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 555,
+                                                lineNumber: 571,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Progress"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 556,
+                                                lineNumber: 572,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                 children: "Action"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 557,
+                                                lineNumber: 573,
                                                 columnNumber: 17
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 547,
+                                        lineNumber: 563,
                                         columnNumber: 15
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 546,
+                                    lineNumber: 562,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableBody$2f$TableBody$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                     children: list.map((w)=>{
                                         const activities = w.raw?.activities ?? [];
-                                        const statusRaw = (w.status ?? w.raw?.status ?? 'NEW').toString();
+                                        const statusRaw = normalizeStatusRaw(w.status ?? w.raw?.status ?? 'PREPARATION').toString();
                                         const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
                                         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableRow$2f$TableRow$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                             hover: true,
@@ -1014,49 +1029,49 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: w.doc_no ?? w.id
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 567,
+                                                    lineNumber: 583,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                     children: w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '-'
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 568,
+                                                    lineNumber: 584,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                     children: formatUtcDisplay(w.start_date)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 569,
+                                                    lineNumber: 585,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                     children: formatUtcDisplay(w.end_date)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 570,
+                                                    lineNumber: 586,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                     children: w.asset_name ?? '-'
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 571,
+                                                    lineNumber: 587,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                                                    children: renderStatusBadge(w.status ?? w.raw?.status ?? 'NEW')
+                                                    children: renderStatusBadge(w.status ?? w.raw?.status ?? 'PREPARATION')
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 572,
+                                                    lineNumber: 588,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
                                                     children: w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 573,
+                                                    lineNumber: 589,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1069,7 +1084,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: w.description ?? '-'
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 574,
+                                                    lineNumber: 590,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1097,7 +1112,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 582,
+                                                                    lineNumber: 598,
                                                                     columnNumber: 31
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$LinearProgress$2f$LinearProgress$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1113,13 +1128,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     }
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 583,
+                                                                    lineNumber: 599,
                                                                     columnNumber: 31
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                            lineNumber: 581,
+                                                            lineNumber: 597,
                                                             columnNumber: 29
                                                         }, this);
                                                     })() : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1128,12 +1143,12 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         children: "-"
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 588,
+                                                        lineNumber: 604,
                                                         columnNumber: 25
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 575,
+                                                    lineNumber: 591,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TableCell$2f$TableCell$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1154,7 +1169,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                lineNumber: 594,
+                                                                lineNumber: 610,
                                                                 columnNumber: 27
                                                             }, this),
                                                             !(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1165,41 +1180,41 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                 children: "Edit Dates"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                lineNumber: 597,
+                                                                lineNumber: 613,
                                                                 columnNumber: 27
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 592,
+                                                        lineNumber: 608,
                                                         columnNumber: 23
                                                     }, this)
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 591,
+                                                    lineNumber: 607,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, w.id, true, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 566,
+                                            lineNumber: 582,
                                             columnNumber: 19
                                         }, this);
                                     })
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 560,
+                                    lineNumber: 576,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                            lineNumber: 545,
+                            lineNumber: 561,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 544,
+                        lineNumber: 560,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Box$2f$Box$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1216,7 +1231,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: "Prev"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 609,
+                                lineNumber: 625,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Typography$2f$Typography$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1229,7 +1244,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 610,
+                                lineNumber: 626,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1239,19 +1254,19 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: "Next"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 611,
+                                lineNumber: 627,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 608,
+                        lineNumber: 624,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                lineNumber: 543,
+                lineNumber: 559,
                 columnNumber: 7
             }, this),
             taskModal.open && taskModal.wo && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1306,7 +1321,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 624,
+                                            lineNumber: 640,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1317,13 +1332,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                             children: taskModal.wo.description
                                         }, void 0, false, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 625,
+                                            lineNumber: 641,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 623,
+                                    lineNumber: 639,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1344,7 +1359,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 children: "Checking auth..."
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 630,
+                                                lineNumber: 646,
                                                 columnNumber: 21
                                             }, this) : currentUser === null ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                                 style: {
@@ -1353,7 +1368,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 children: "Not authenticated"
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 632,
+                                                lineNumber: 648,
                                                 columnNumber: 21
                                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                 children: [
@@ -1364,7 +1379,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         children: currentUser.name || currentUser.username || currentUser.email
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 635,
+                                                        lineNumber: 651,
                                                         columnNumber: 23
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1379,18 +1394,18 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 636,
+                                                        lineNumber: 652,
                                                         columnNumber: 23
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 634,
+                                                lineNumber: 650,
                                                 columnNumber: 21
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 628,
+                                            lineNumber: 644,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1411,7 +1426,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Deploy"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 642,
+                                                    lineNumber: 658,
                                                     columnNumber: 21
                                                 }, this),
                                                 taskModal.wo?.status === 'DEPLOYED' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1425,7 +1440,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Undeploy"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 645,
+                                                    lineNumber: 661,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -1436,25 +1451,25 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Close"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 647,
+                                                    lineNumber: 663,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 640,
+                                            lineNumber: 656,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 627,
+                                    lineNumber: 643,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                            lineNumber: 622,
+                            lineNumber: 638,
                             columnNumber: 13
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1476,12 +1491,12 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 }
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 655,
+                                                lineNumber: 671,
                                                 columnNumber: 19
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {}, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 656,
+                                                lineNumber: 672,
                                                 columnNumber: 19
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
@@ -1490,7 +1505,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 }
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 657,
+                                                lineNumber: 673,
                                                 columnNumber: 19
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
@@ -1499,13 +1514,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                                 }
                                             }, void 0, false, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 658,
+                                                lineNumber: 674,
                                                 columnNumber: 19
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 654,
+                                        lineNumber: 670,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
@@ -1523,7 +1538,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "No"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 662,
+                                                    lineNumber: 678,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1535,7 +1550,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Task Name"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 663,
+                                                    lineNumber: 679,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1548,7 +1563,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Duration (min)"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 664,
+                                                    lineNumber: 680,
                                                     columnNumber: 21
                                                 }, this),
                                                 shouldShowAssignColumn(taskModal.wo) && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -1560,18 +1575,18 @@ function WorkOrderList({ onRefreshRequested }) {
                                                     children: "Assign technicians"
                                                 }, void 0, false, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 666,
+                                                    lineNumber: 682,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 661,
+                                            lineNumber: 677,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 660,
+                                        lineNumber: 676,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -1650,7 +1665,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         children: act.task_number ?? idx + 1
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 730,
+                                                        lineNumber: 746,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1673,7 +1688,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                         children: act.name ?? act.task_name ?? '-'
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                        lineNumber: 733,
+                                                                        lineNumber: 749,
                                                                         columnNumber: 29
                                                                     }, this),
                                                                     hasRealisasi ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1688,7 +1703,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                         children: "Realisasi ✓"
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                        lineNumber: 735,
+                                                                        lineNumber: 751,
                                                                         columnNumber: 31
                                                                     }, this) : (()=>{
                                                                         const pendingCount = Number(act.pending_realisasi_count || act.pendingCount || 0);
@@ -1709,7 +1724,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 ]
                                                                             }, void 0, true, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 741,
+                                                                                lineNumber: 757,
                                                                                 columnNumber: 42
                                                                             }, this);
                                                                         }
@@ -1726,14 +1741,14 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                             children: "Belum Realisasi"
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                            lineNumber: 744,
+                                                                            lineNumber: 760,
                                                                             columnNumber: 40
                                                                         }, this);
                                                                     })()
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                lineNumber: 732,
+                                                                lineNumber: 748,
                                                                 columnNumber: 27
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1748,7 +1763,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                lineNumber: 748,
+                                                                lineNumber: 764,
                                                                 columnNumber: 27
                                                             }, this),
                                                             Array.isArray(act.assignments) && act.assignments.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1776,7 +1791,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: asgn.user?.name ?? asgn.user?.nipp ?? asgn.user?.email ?? asgn.assigned_to ?? 'Unknown'
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 757,
+                                                                                lineNumber: 773,
                                                                                 columnNumber: 37
                                                                             }, this),
                                                                             currentUser && ![
@@ -1825,24 +1840,24 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: "Unassign"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 759,
+                                                                                lineNumber: 775,
                                                                                 columnNumber: 39
                                                                             }, this)
                                                                         ]
                                                                     }, asgn.id, true, {
                                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                        lineNumber: 753,
+                                                                        lineNumber: 769,
                                                                         columnNumber: 35
                                                                     }, this))
                                                             }, void 0, false, {
                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                lineNumber: 751,
+                                                                lineNumber: 767,
                                                                 columnNumber: 31
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 731,
+                                                        lineNumber: 747,
                                                         columnNumber: 25
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1854,7 +1869,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         children: act.duration_min ?? act.task_duration ?? '-'
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 781,
+                                                        lineNumber: 797,
                                                         columnNumber: 25
                                                     }, this),
                                                     shouldShowAssignColumn(taskModal.wo) ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -1885,12 +1900,12 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                             size: "small"
                                                                         }, void 0, false, {
                                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                            lineNumber: 792,
+                                                                            lineNumber: 808,
                                                                             columnNumber: 58
                                                                         }, void 0)
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 785,
+                                                                    lineNumber: 801,
                                                                     columnNumber: 31
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1924,13 +1939,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                             }
                                                                         }, t.id, false, {
                                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                            lineNumber: 799,
+                                                                            lineNumber: 815,
                                                                             columnNumber: 39
                                                                         }, this);
                                                                     })
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 795,
+                                                                    lineNumber: 811,
                                                                     columnNumber: 33
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1946,7 +1961,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                         children: "Checking..."
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                        lineNumber: 821,
+                                                                        lineNumber: 837,
                                                                         columnNumber: 35
                                                                     }, this) : currentUser === null ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
                                                                         children: [
@@ -1960,7 +1975,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: "Login to assign"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 824,
+                                                                                lineNumber: 840,
                                                                                 columnNumber: 37
                                                                             }, this),
                                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -1974,7 +1989,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: "Clear"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 825,
+                                                                                lineNumber: 841,
                                                                                 columnNumber: 37
                                                                             }, this)
                                                                         ]
@@ -2029,7 +2044,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: "Assign"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 829,
+                                                                                lineNumber: 845,
                                                                                 columnNumber: 37
                                                                             }, this),
                                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2043,7 +2058,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                                 children: "Clear"
                                                                             }, void 0, false, {
                                                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                                lineNumber: 851,
+                                                                                lineNumber: 867,
                                                                                 columnNumber: 37
                                                                             }, this)
                                                                         ]
@@ -2053,23 +2068,23 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                         children: "Deployed"
                                                                     }, void 0, false, {
                                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                        lineNumber: 854,
+                                                                        lineNumber: 870,
                                                                         columnNumber: 35
                                                                     }, this)
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 819,
+                                                                    lineNumber: 835,
                                                                     columnNumber: 33
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                            lineNumber: 784,
+                                                            lineNumber: 800,
                                                             columnNumber: 29
                                                         }, this)
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 783,
+                                                        lineNumber: 799,
                                                         columnNumber: 27
                                                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                                         style: {
@@ -2078,41 +2093,41 @@ function WorkOrderList({ onRefreshRequested }) {
                                                         }
                                                     }, void 0, false, {
                                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                        lineNumber: 860,
+                                                        lineNumber: 876,
                                                         columnNumber: 27
                                                     }, this)
                                                 ]
                                             }, idx, true, {
                                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                lineNumber: 729,
+                                                lineNumber: 745,
                                                 columnNumber: 23
                                             }, this);
                                         })
                                     }, void 0, false, {
                                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                                        lineNumber: 670,
+                                        lineNumber: 686,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 653,
+                                lineNumber: 669,
                                 columnNumber: 15
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                            lineNumber: 652,
+                            lineNumber: 668,
                             columnNumber: 13
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                    lineNumber: 621,
+                    lineNumber: 637,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                lineNumber: 617,
+                lineNumber: 633,
                 columnNumber: 9
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Dialog$2f$Dialog$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2128,7 +2143,7 @@ function WorkOrderList({ onRefreshRequested }) {
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 874,
+                        lineNumber: 890,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$DialogContent$2f$DialogContent$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2151,7 +2166,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                     fullWidth: true
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 877,
+                                    lineNumber: 893,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2165,7 +2180,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 886,
+                                    lineNumber: 902,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TextField$2f$TextField$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2180,7 +2195,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                     fullWidth: true
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 888,
+                                    lineNumber: 904,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2194,7 +2209,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 897,
+                                    lineNumber: 913,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$TextField$2f$TextField$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2208,7 +2223,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                     size: "small"
                                 }, void 0, false, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 899,
+                                    lineNumber: 915,
                                     columnNumber: 13
                                 }, this),
                                 Array.isArray(dateHistory) && dateHistory.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2221,7 +2236,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                             children: "History perubahan tanggal"
                                         }, void 0, false, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 912,
+                                            lineNumber: 928,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2251,7 +2266,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     children: h.changed_at ? new Date(h.changed_at).toLocaleString() : '-'
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 917,
+                                                                    lineNumber: 933,
                                                                     columnNumber: 25
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2262,13 +2277,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     children: h.changed_by ? `${h.changed_by.nipp ?? h.changed_by.id ?? '-'} • ${h.changed_by.name ?? h.changed_by.email ?? '-'}` : '-'
                                                                 }, void 0, false, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 918,
+                                                                    lineNumber: 934,
                                                                     columnNumber: 25
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                            lineNumber: 916,
+                                                            lineNumber: 932,
                                                             columnNumber: 23
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2286,7 +2301,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 921,
+                                                                    lineNumber: 937,
                                                                     columnNumber: 25
                                                                 }, this),
                                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2298,13 +2313,13 @@ function WorkOrderList({ onRefreshRequested }) {
                                                                     ]
                                                                 }, void 0, true, {
                                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                                    lineNumber: 922,
+                                                                    lineNumber: 938,
                                                                     columnNumber: 25
                                                                 }, this)
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                            lineNumber: 920,
+                                                            lineNumber: 936,
                                                             columnNumber: 23
                                                         }, this),
                                                         h.note && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2319,35 +2334,35 @@ function WorkOrderList({ onRefreshRequested }) {
                                                             ]
                                                         }, void 0, true, {
                                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                            lineNumber: 924,
+                                                            lineNumber: 940,
                                                             columnNumber: 34
                                                         }, this)
                                                     ]
                                                 }, h.id || idx, true, {
                                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                                    lineNumber: 915,
+                                                    lineNumber: 931,
                                                     columnNumber: 21
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                                            lineNumber: 913,
+                                            lineNumber: 929,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/web/components/WorkOrderList.tsx",
-                                    lineNumber: 911,
+                                    lineNumber: 927,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/web/components/WorkOrderList.tsx",
-                            lineNumber: 876,
+                            lineNumber: 892,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 875,
+                        lineNumber: 891,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$DialogActions$2f$DialogActions$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2361,7 +2376,7 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: "Batal"
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 933,
+                                lineNumber: 949,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f40$mui$2f$material$2f$Button$2f$Button$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -2394,25 +2409,25 @@ function WorkOrderList({ onRefreshRequested }) {
                                 children: editLoading ? 'Menyimpan...' : 'Simpan Perubahan'
                             }, void 0, false, {
                                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                                lineNumber: 934,
+                                lineNumber: 950,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/web/components/WorkOrderList.tsx",
-                        lineNumber: 932,
+                        lineNumber: 948,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/web/components/WorkOrderList.tsx",
-                lineNumber: 873,
+                lineNumber: 889,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/web/components/WorkOrderList.tsx",
-        lineNumber: 484,
+        lineNumber: 500,
         columnNumber: 5
     }, this);
 }
