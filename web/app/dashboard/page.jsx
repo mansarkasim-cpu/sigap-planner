@@ -32,7 +32,7 @@ export default function Dashboard(){
     if (!auth){ router.push('/login'); return }
     setUser(localStorage.getItem('sigap_user') || 'Pengguna')
     loadDashboard()
-    const id = setInterval(() => loadDashboard(), 60*1000)
+    const id = setInterval(() => loadDashboard(), 5*60*1000)
     return () => clearInterval(id)
   }, [router])
 
