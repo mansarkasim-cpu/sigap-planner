@@ -28,17 +28,17 @@ const SHIFT_DEFS = [
     {
         id: 1,
         label: 'Shift 1',
-        time: '08:00 - 16:00'
+        time: '07:00 - 15:00'
     },
     {
         id: 2,
         label: 'Shift 2',
-        time: '16:00 - 24:00'
+        time: '15:00 - 23:00'
     },
     {
         id: 3,
         label: 'Shift 3',
-        time: '00:00 - 08:00'
+        time: '23:00 - 07:00'
     }
 ];
 function Badge({ children, color = '#2563eb' }) {
