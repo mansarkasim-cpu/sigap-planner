@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 13, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":""}},
+    {"offset": {"line": 17, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/gantt/page.tsx"],"sourcesContent":["// app/gantt/page.tsx\r\nimport React from 'react';\r\nimport FrappeGanttFull from '../../components/FrappeGanttFull';\r\n\r\nexport default function Page() {\r\n  return (\r\n    <main style={{ padding: 20 }}>\r\n      <FrappeGanttFull />\r\n    </main>\r\n  );\r\n}\r\n"],"names":[],"mappings":"AAAA,qBAAqB;;;;;;AAErB;;;AAEe,SAAS;IACtB,qBACE,qPAAC;QAAK,OAAO;YAAE,SAAS;QAAG;kBACzB,cAAA,qPAAC,gJAAe;;;;;;;;;;AAGtB"}}]
+}
