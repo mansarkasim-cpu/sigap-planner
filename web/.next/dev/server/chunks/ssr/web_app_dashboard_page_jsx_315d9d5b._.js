@@ -111,7 +111,7 @@ function Dashboard() {
             for (const r of rows || []){
                 const status = normalizeStatus(r.status || r.raw?.status || r.raw?.doc_status || '');
                 cnt.total++;
-                if (status === 'NEW' || status === 'OPEN') cnt.new++;
+                if (status === 'PREPARATION' || status === 'OPEN') cnt.new++;
                 if (status === 'ASSIGNED') cnt.assigned++;
                 if (status === 'READY_TO_DEPLOY') cnt.ready_to_deploy++;
                 if (status === 'DEPLOYED') cnt.deployed++;

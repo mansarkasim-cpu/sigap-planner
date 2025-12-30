@@ -52,7 +52,7 @@ function formatDateDisplay(s) {
 function resolveMediaUrl(u) {
     if (!u) return u;
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
-    const envBase = typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL : '';
+    const envBase = typeof process !== 'undefined' && process.env && ("TURBOPACK compile-time value", "http://localhost:4000/api") ? ("TURBOPACK compile-time value", "http://localhost:4000/api") : '';
     const origin = ("TURBOPACK compile-time falsy", 0) ? "TURBOPACK unreachable" : '';
     let base = envBase || origin || '';
     if (!base) return u;
@@ -108,7 +108,7 @@ function Page() {
                 rows = res;
                 total = res.length;
             }
-            const completed = (rows || []).filter((r)=>(r.status || r.raw?.status || 'NEW').toString().toUpperCase() === 'COMPLETED');
+            const completed = (rows || []).filter((r)=>(r.status || r.raw?.status || 'PREPARATION').toString().toUpperCase() === 'COMPLETED');
             setList(completed);
             const computedTotalPages = Math.max(1, Math.ceil((total || completed.length) / pageSize));
             setTotalPages(computedTotalPages);

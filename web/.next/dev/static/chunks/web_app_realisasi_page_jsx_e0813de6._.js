@@ -54,7 +54,7 @@ function formatDateDisplay(s) {
 function resolveMediaUrl(u) {
     if (!u) return u;
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
-    const envBase = typeof __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"] !== 'undefined' && __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env && __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_API_URL ? __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_API_URL : '';
+    const envBase = typeof __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"] !== 'undefined' && __TURBOPACK__imported__module__$5b$project$5d2f$web$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env && ("TURBOPACK compile-time value", "http://localhost:4000/api") ? ("TURBOPACK compile-time value", "http://localhost:4000/api") : '';
     const origin = ("TURBOPACK compile-time value", "object") !== 'undefined' && window.location && window.location.origin ? window.location.origin : '';
     let base = envBase || origin || '';
     if (!base) return u;
@@ -114,7 +114,7 @@ function Page() {
                 rows = res;
                 total = res.length;
             }
-            const completed = (rows || []).filter((r)=>(r.status || r.raw?.status || 'NEW').toString().toUpperCase() === 'COMPLETED');
+            const completed = (rows || []).filter((r)=>(r.status || r.raw?.status || 'PREPARATION').toString().toUpperCase() === 'COMPLETED');
             setList(completed);
             const computedTotalPages = Math.max(1, Math.ceil((total || completed.length) / pageSize));
             setTotalPages(computedTotalPages);

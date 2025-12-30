@@ -71,7 +71,7 @@ function Dashboard() {
             loadDashboard();
             const id = setInterval({
                 "Dashboard.useEffect.id": ()=>loadDashboard()
-            }["Dashboard.useEffect.id"], 60 * 1000);
+            }["Dashboard.useEffect.id"], 5 * 60 * 1000);
             return ({
                 "Dashboard.useEffect": ()=>clearInterval(id)
             })["Dashboard.useEffect"];
@@ -125,7 +125,7 @@ function Dashboard() {
             for (const r of rows || []){
                 const status = normalizeStatus(r.status || r.raw?.status || r.raw?.doc_status || '');
                 cnt.total++;
-                if (status === 'NEW' || status === 'OPEN') cnt.new++;
+                if (status === 'PREPARATION' || status === 'OPEN') cnt.new++;
                 if (status === 'ASSIGNED') cnt.assigned++;
                 if (status === 'READY_TO_DEPLOY') cnt.ready_to_deploy++;
                 if (status === 'DEPLOYED') cnt.deployed++;

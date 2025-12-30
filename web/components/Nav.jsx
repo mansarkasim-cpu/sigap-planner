@@ -86,6 +86,7 @@ export default function Nav(){
           <ul className="sub-menu">
             <li><Link href="/work-orders" className="nav-link">List</Link></li>
             <li><Link href="/gantt" className="nav-link">Gantt Chart</Link></li>
+            <li><Link href="/monitor" className="nav-link">Monitoring</Link></li>
             <li><Link href="/realisasi" className="nav-link">Realisasi</Link></li>
           </ul>
         </li>

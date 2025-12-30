@@ -25,12 +25,14 @@ class WODetailScreen extends StatefulWidget {
   State<WODetailScreen> createState() => _WODetailScreenState();
 }
 
-class _WODetailScreenState extends State<WODetailScreen> {
+class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProviderStateMixin {
   Map<String, dynamic>? woDetail;
   List<dynamic> tasks = [];
   String? assignmentStatus;
   String? _techId;
   bool _isLead = false;
+  late AnimationController _swipeController;
+  late Animation<Offset> _swipeOffset;
   // set of task ids checked in the checklist
   final Set<String> checkedTasks = <String>{};
   String? _selectedTaskId;
@@ -44,6 +46,19 @@ class _WODetailScreenState extends State<WODetailScreen> {
   void initState() {
     super.initState();
     _loadPrefs().then((_) => _loadAll());
+    // swipe hint animation: slight left slide to indicate swipe direction
+    _swipeController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _swipeOffset = Tween<Offset>(begin: Offset.zero, end: const Offset(-0.06, 0))
+        .chain(CurveTween(curve: Curves.easeInOut))
+        .animate(_swipeController);
+    _swipeController.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _swipeController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPrefs() async {
@@ -928,6 +943,8 @@ class _WODetailScreenState extends State<WODetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool _canStart = (assignmentStatus == 'ASSIGNED' ||
+        assignmentStatus == 'DEPLOYED');
     return Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -939,11 +956,13 @@ class _WODetailScreenState extends State<WODetailScreen> {
         drawer: const AppDrawer(),
         body: loading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            : Stack(
+                children: [
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     Card(
                       margin: EdgeInsets.zero,
                       child: Padding(
@@ -1577,71 +1596,87 @@ class _WODetailScreenState extends State<WODetailScreen> {
                               ),
                           ]);
                     }),
-                    const SizedBox(height: 20),
-                    const SizedBox(height: 6),
-                    if (assignmentStatus == 'ASSIGNED' ||
-                        assignmentStatus == 'DEPLOYED')
-                      Dismissible(
-                        key: Key('start-${widget.assignmentId}'),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                            color: Colors.green,
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 20),
-                            child: const Icon(Icons.play_arrow,
-                                color: Colors.white)),
-                        confirmDismiss: (dir) async {
-                          final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (c) => AlertDialog(
-                                      title: const Text('Start work?'),
-                                      content: const Text(
-                                          'Swipe to confirm starting work'),
-                                      actions: [
-                                        TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(c, false),
-                                            child: const Text('Cancel')),
-                                        TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(c, true),
-                                            child: const Text('Start'))
-                                      ]));
-                          return ok == true;
-                        },
-                        onDismissed: (dir) async {
-                          await _startWork();
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 18, horizontal: 12),
-                          decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: Colors.green.shade50),
-                          child: const Text('Swipe left to START',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14, horizontal: 12),
-                        decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            color: Colors.grey.shade100),
-                        child: Text(
-                          assignmentStatus == null
-                              ? 'Assignment status unknown'
-                              : 'Start available when assignment is DEPLOYED or ASSIGNED (current: ${assignmentStatus})',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                      ),
+                    const SizedBox(height: 8),
+                    // removed inline swipe control (floating one is positioned)
                   ],
                 ),
-              ));
+              ),
+                  // Floating swipe control (always visible)
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(8),
+                      child: _canStart
+                          ? Dismissible(
+                              key: Key('start-${widget.assignmentId}'),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                  decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(8)),
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  child: const Icon(Icons.play_arrow,
+                                      color: Colors.white)),
+                              confirmDismiss: (dir) async {
+                                final ok = await showDialog<bool>(
+                                    context: context,
+                                    builder: (c) => AlertDialog(
+                                            title: const Text('Start work?'),
+                                            content: const Text(
+                                                'Swipe to confirm starting work'),
+                                            actions: [
+                                              TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(c, false),
+                                                  child: const Text('Cancel')),
+                                              TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(c, true),
+                                                  child: const Text('Start'))
+                                            ]));
+                                return ok == true;
+                              },
+                              onDismissed: (dir) async {
+                                await _startWork();
+                              },
+                              child: SlideTransition(
+                                position: _swipeOffset,
+                                child: Container(
+                                  height: 72,
+                                  alignment: Alignment.center,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade600,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text('Swipe left to START',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16)),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              height: 72,
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8)),
+                              child: const Text('Start unavailable',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+        );
   }
 }

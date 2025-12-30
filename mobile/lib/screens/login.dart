@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _nippController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool loading = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -94,8 +95,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock)),
-                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                        obscureText: _obscurePassword,
                       ),
                       const SizedBox(height: 18),
                       SizedBox(
