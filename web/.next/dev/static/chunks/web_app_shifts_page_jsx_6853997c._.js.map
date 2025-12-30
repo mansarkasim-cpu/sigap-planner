@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/shifts/page.jsx"],"sourcesContent":["'use client';\r\nimport React from 'react';\r\nimport ShiftManager from '../../../components/ShiftManager';\r\n\r\nexport default function Page() {\r\n  return (\r\n    <div style={{ padding: 20, fontFamily: 'Inter, system-ui, -apple-system, Roboto, \"Helvetica Neue\", Arial' }}>\r\n      <h1 style={{ marginTop: 0 }}>Shift Management</h1>\r\n      <p style={{ color: '#555' }}>Create technician groups and assign them to daily shifts per site.</p>\r\n      <ShiftManager />\r\n    </div>\r\n  );\r\n}\r\n"],"names":[],"mappings":";;;;;AACA;;;;;;AADA;;;;AAIe,SAAS;IACtB,qBACE,oMAAC;QAAI,OAAO;YAAE,SAAS;YAAI,YAAY;QAAmE;;0BACxG,oMAAC;gBAAG,OAAO;oBAAE,WAAW;gBAAE;0BAAG;;;;;;0BAC7B,oMAAC;gBAAE,OAAO;oBAAE,OAAO;gBAAO;0BAAG;;;;;;0BAC7B,oMAAC;;;;;;;;;;;AAGP;KARwB"}}]
-}
