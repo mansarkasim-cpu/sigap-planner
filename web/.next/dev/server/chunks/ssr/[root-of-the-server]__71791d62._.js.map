@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/gantt/page.tsx"],"sourcesContent":["// app/gantt/page.tsx\r\nimport React from 'react';\r\nimport dynamic from 'next/dynamic';\r\n\r\n// load client-only Gantt component dynamically (disable SSR)\r\nconst GanttCombined = dynamic(() => import('../../components/GanttCombined'), { ssr: false });\r\n\r\nexport default function Page() {\r\n  return (\r\n    <main style={{ padding: 20, background: '#f3f4f6', minHeight: '100vh' }}>\r\n      <GanttCombined />\r\n    </main>\r\n  );\r\n}\r\n"],"names":[],"mappings":"AAAA,qBAAqB;;;;;;AAErB;;;;AAEA,6DAA6D;AAC7D,MAAM,gBAAgB,IAAA,iLAAO,EAAC;;;;;;IAAkD,KAAK;;AAEtE,SAAS;IACtB,qBACE,qPAAC;QAAK,OAAO;YAAE,SAAS;YAAI,YAAY;YAAW,WAAW;QAAQ;kBACpE,cAAA,qPAAC;;;;;;;;;;AAGP"}}]
-}
