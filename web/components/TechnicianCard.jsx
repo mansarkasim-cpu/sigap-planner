@@ -1,5 +1,29 @@
 "use client"
 import React from 'react'
+import Box from '@mui/material/Box'
+import Paper from '@mui/material/Paper'
+import Typography from '@mui/material/Typography'
+import Chip from '@mui/material/Chip'
+
+export default function TechnicianCard({ technician = {}, tasks = [] }){
+  const name = technician.name || technician.displayName || technician.email || technician.id || '—'
+  const id = technician.nip || technician.nipp || technician.id || ''
+  return (
+    <Paper sx={{p:2}}>
+      <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <Box>
+          <Typography variant="subtitle1">{name}</Typography>
+          {id && <Typography variant="caption" sx={{color:'#666'}}>{id}</Typography>}
+        </Box>
+        <Box sx={{display:'flex',alignItems:'center',gap:1}}>
+          <Chip label={`${Array.isArray(tasks) ? tasks.length : 0} tugas`} size="small" />
+        </Box>
+      </Box>
+    </Paper>
+  )
+}
+"use client"
+import React from 'react'
 
 function StatusBadge({ status }){
   const color = (status||'').toLowerCase()

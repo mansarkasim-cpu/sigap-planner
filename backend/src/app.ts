@@ -33,6 +33,25 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept']
 }));
 
+// Handle Private Network Access preflight (Chrome PNA). When the browser
+// requests access to a more-private address space (e.g. loopback), it will
+// include the `Access-Control-Request-Private-Network` header on the OPTIONS
+// preflight. Respond with `Access-Control-Allow-Private-Network: true` to
+// permit the request. Also expose header for actual responses.
+app.use((req, res, next) => {
+  try {
+    const acrpn = req.headers['access-control-request-private-network'];
+    if (req.method === 'OPTIONS' && acrpn) {
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    }
+    // include on all responses as a fallback
+    res.setHeader('Access-Control-Expose-Headers', (res.getHeader('Access-Control-Expose-Headers') || '') + ', Access-Control-Allow-Private-Network');
+  } catch (e) {
+    // ignore header-setting errors
+  }
+  next();
+});
+
 // Basic root for /api to avoid "Cannot GET /api"
 app.get("/api", (req, res) => {
   return res.json({

@@ -1,4 +1,27 @@
 "use client"
+import React from 'react'
+import Grid from '@mui/material/Grid'
+import Typography from '@mui/material/Typography'
+import TechnicianCard from './TechnicianCard'
+
+export default function TechnicianList({ groups = {} }){
+  const entries = Object.entries(groups || {})
+  if (entries.length === 0) return <Typography>No assignments for selected date.</Typography>
+
+  return (
+    <Grid container spacing={2}>
+      {entries.map(([aid, arr])=>{
+        const tech = (arr && arr[0] && arr[0].user) ? arr[0].user : { id: aid }
+        return (
+          <Grid item xs={12} md={6} lg={4} key={aid}>
+            <TechnicianCard technician={tech} tasks={arr} />
+          </Grid>
+        )
+      })}
+    </Grid>
+  )
+}
+"use client"
 import React, { useEffect, useState } from 'react'
 import TechnicianCard from './TechnicianCard'
 import { apiFetch } from '../lib/api-client'
