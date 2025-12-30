@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/page.jsx"],"sourcesContent":["// app/page.jsx\r\nexport default function Page() {\r\n  return <h1>Sigap Planner — Home</h1>;\r\n}\r\n"],"names":[],"mappings":"AAAA,eAAe;;;;;;;AACA,SAAS;IACtB,qBAAO,qPAAC;kBAAG;;;;;;AACb"}}]
+}
