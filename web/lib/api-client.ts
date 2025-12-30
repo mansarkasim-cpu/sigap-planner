@@ -49,7 +49,7 @@ async function handleResp(res: Response) {
 export default async function apiClient(path: string, opts?: RequestInit) {
   // resolve base URL with robust fallbacks to avoid "Failed to fetch" in prod
   const resolvedBase = API_BASE
-    || (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:4000/api');
+    || (typeof window !== 'undefined' ? `${window.location.origin}/api` : '/api');
   const url = path.startsWith('http') ? path : `${resolvedBase}${path.startsWith('/') ? '' : '/'}${path}`;
 
   function getAuthHeader(): Record<string,string> {
