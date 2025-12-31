@@ -407,7 +407,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         <Paper elevation={1} style={{ background: '#f7fafc', padding: 12, borderBottom: '1px solid #eee' }}>
           <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
             <Box sx={{ minWidth: 0, pr: 2 }}>
-              <Typography variant="h6" component="h2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Gantt Chart — Work Orders (per-hari)</Typography>
+              <Typography variant="h6" component="h2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Work Orders (per-hari)</Typography>
             </Box>
 
             <Box display="flex" alignItems="center" gap={1} sx={{ flexWrap: 'wrap' }}>
@@ -705,22 +705,23 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                         );
                       })()}
 
-                      {/* show realisasi/progress overlay when item is IN_PROGRESS and progress available */}
-                      {statusNorm === 'IN_PROGRESS' && progressVal !== null && (
-                        <>
-                          <rect x={x1} y={y} rx={rx} ry={rx} width={Math.max(minBarWidthPx, width * progressVal)} height={rowHeight - 12} fill={progressColor} opacity={0.72} />
-                          {/* percentage label: inside if space, otherwise outside to the right */}
-                          {(() => {
-                            const progWidth = Math.max(minBarWidthPx, width * progressVal);
-                            const pctText = Math.round(progressVal * 100) + '%';
-                            if (progWidth > 28) {
-                              return <text x={x1 + 6} y={y + (rowHeight - 12) / 2 + 4} fontSize={12} fill={progressTextColorInside} fontWeight={700}>{pctText}</text>;
-                            }
-                            // outside label
-                            return <text x={x2 + 6} y={y + (rowHeight - 12) / 2 + 4} fontSize={12} fill={color} fontWeight={700}>{pctText}</text>;
+                      {/* show realisasi/progress overlay when item is IN_PROGRESS and progress available, or COMPLETED (show 100%) */}
+                          {((statusNorm === 'IN_PROGRESS' && progressVal !== null) || statusNorm === 'COMPLETED') && (() => {
+                            const isCompleted = statusNorm === 'COMPLETED';
+                            const showVal = isCompleted ? 1 : (progressVal ?? 0);
+                            const progWidth = Math.max(minBarWidthPx, width * showVal);
+                            const pctText = Math.round(showVal * 100) + '%';
+                            return (
+                              <>
+                                <rect x={x1} y={y} rx={rx} ry={rx} width={progWidth} height={rowHeight - 12} fill={progressColor} opacity={0.72} />
+                                {progWidth > 28 ? (
+                                  <text x={x1 + 6} y={y + (rowHeight - 12) / 2 + 4} fontSize={12} fill={progressTextColorInside} fontWeight={700}>{pctText}</text>
+                                ) : (
+                                  <text x={x2 + 6} y={y + (rowHeight - 12) / 2 + 4} fontSize={12} fill={color} fontWeight={700}>{pctText}</text>
+                                )}
+                              </>
+                            );
                           })()}
-                        </>
-                      )}
                     </g>
                   );
                 })}
