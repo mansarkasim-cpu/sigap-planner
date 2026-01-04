@@ -24,6 +24,10 @@ import Checkbox from '@mui/material/Checkbox';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 export type Activity = {
   id?: string;
@@ -179,6 +183,26 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     // we intentionally omit onRefreshRequested from deps to only register once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Responsive: show stacked card view on small screens
+  const [isSmallScreen, setIsSmallScreen] = useState<boolean>(false);
+  useEffect(() => {
+    function check() { setIsSmallScreen(typeof window !== 'undefined' ? window.innerWidth < 800 : false); }
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // per-row expand/collapse state (used to show/hide long descriptions)
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  function toggleRow(id: string) {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  // modal for showing full details when Expand is clicked in table view
+  const [modalRow, setModalRow] = useState<WorkOrder | null>(null);
+  function openRowModal(w: WorkOrder) { setModalRow(w); }
+  function closeRowModal() { setModalRow(null); }
 
   function onPrev() { if (page > 1) { setPage(p => { const np = p - 1; load(np); return np; }); } }
   function onNext() { const maxPage = Math.ceil(total / pageSize); if (page < maxPage) { setPage(p => { const np = p + 1; load(np); return np; }); } }
@@ -459,7 +483,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     const n = normalizeStatusRaw(s);
     const color = getColorForStatus(n);
     return (
-      <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 12, fontWeight: 600 }}>
+      <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 10, fontWeight: 600 }}>
         {String(n).replace(/_/g, ' ')}
       </span>
     );
@@ -556,70 +580,134 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
           {error ? <Typography variant="body2" color="error">{error}</Typography> : null}
         </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <TableContainer component={Paper} sx={{ mb: 2 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Doc No</TableCell>
-                <TableCell>Jenis Work Order</TableCell>
-                <TableCell>Start</TableCell>
-                <TableCell>End</TableCell>
-                <TableCell>Equipment</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Progress</TableCell>
-                <TableCell>Action</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {list.map(w => {
-                const activities = (w.raw?.activities ?? []) as Activity[];
-                const statusRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
-                const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
-                return (
-                  <TableRow key={w.id} hover>
-                    <TableCell>{w.doc_no ?? w.id}</TableCell>
-                    <TableCell>{w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '-'}</TableCell>
-                    <TableCell>{formatUtcDisplay(w.start_date)}</TableCell>
-                    <TableCell>{formatUtcDisplay(w.end_date)}</TableCell>
-                    <TableCell>{w.asset_name ?? '-'}</TableCell>
-                    <TableCell>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</TableCell>
-                    <TableCell>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
-                    <TableCell sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.description ?? '-'}</TableCell>
-                    <TableCell sx={{ width: 180 }}>
-                      {statusNorm === 'IN_PROGRESS' && typeof (w as any).progress === 'number' ? (
-                        (() => {
-                          const prog = Math.max(0, Math.min(1, (w as any).progress || 0));
-                          const statusColor = getColorForStatus(statusRaw);
-                          return (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                              <Typography variant="caption" sx={{ fontWeight: 700 }}>{Math.round(prog * 100)}%</Typography>
-                              <LinearProgress variant="determinate" value={Math.round(prog * 100)} sx={{ height: 8, borderRadius: 2, backgroundColor: '#f1f5f9', '& .MuiLinearProgress-bar': { background: statusColor } }} />
-                            </Box>
-                          );
-                        })()
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">-</Typography>
+      <div>
+        {isSmallScreen ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {list.map(w => {
+              const activities = (w.raw?.activities ?? []) as Activity[];
+              const statusRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
+              const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
+              return (
+                <Paper key={w.id} sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <Box sx={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>{w.doc_no ?? w.id} — {w.asset_name ?? '-'}</div>
+                      <div style={{ color: '#666', marginTop: 6 }}>{w.description ?? '-'}</div>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                        <div style={{ fontSize: 12, color: '#666' }}>Start: {formatUtcDisplay(w.start_date)}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>End: {formatUtcDisplay(w.end_date)}</div>
+                        <div>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</div>
+                      </Box>
+                      <div style={{ marginTop: 8 }}>
+                        <div style={expandedRows[w.id] ? {} : { maxHeight: '3em', overflow: 'hidden' }}>{w.description ?? '-'}</div>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-start', mt: 1 }}>
+                          <Button size="small" onClick={() => toggleRow(w.id)}>{expandedRows[w.id] ? 'Collapse' : 'Expand'}</Button>
+                        </Box>
+                      </div>
+                      {statusNorm === 'IN_PROGRESS' && typeof (w as any).progress === 'number' && (
+                        <Box sx={{ mt: 1 }}>
+                          {(() => {
+                            const prog = Math.max(0, Math.min(1, (w as any).progress || 0));
+                            const statusColor = getColorForStatus(statusRaw);
+                            return (
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                <Typography variant="caption" sx={{ fontWeight: 700 }}>{Math.round(prog * 100)}%</Typography>
+                                <LinearProgress variant="determinate" value={Math.round(prog * 100)} sx={{ height: 8, borderRadius: 2, backgroundColor: '#f1f5f9', '& .MuiLinearProgress-bar': { background: statusColor } }} />
+                              </Box>
+                            );
+                          })()}
+                        </Box>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Button size="small" onClick={() => toggleRow(w.id)}>{expandedRows[w.id] ? 'Collapse' : 'Expand'}</Button>
                         {Array.isArray(activities) && activities.length > 0 && (
-                          <Button size="small" variant="outlined" onClick={() => openTaskModal(w)}>Lihat Task ({activities.length})</Button>
+                          <Tooltip title={`Lihat Task (${activities.length})`}>
+                            <IconButton size="small" onClick={() => openTaskModal(w)} aria-label={`Lihat Task ${activities.length}`}>
+                              <ListAltOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         )}
                         {!(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
-                          <Button size="small" variant="contained" color="secondary" onClick={() => openEdit(w)}>Edit Dates</Button>
+                          <Tooltip title="Edit Tanggal">
+                            <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         )}
                       </Box>
-                    </TableCell>
+                      <div style={{ color: '#666', fontSize: 12 }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</div>
+                    </Box>
+                  </Box>
+                </Paper>
+              );
+            })}
+          </Box>
+        ) : (
+          <div style={{ overflowX: 'hidden' }}>
+            <TableContainer component={Paper} sx={{ mb: 2 }}>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: '12%' }}>Doc No</TableCell>
+                    <TableCell sx={{ width: '12%' }}>Jenis Work Order</TableCell>
+                    <TableCell sx={{ width: '9%' }}>Start</TableCell>
+                    <TableCell sx={{ width: '9%' }}>End</TableCell>
+                    <TableCell sx={{ width: '10%' }}>Equipment</TableCell>
+                    <TableCell sx={{ width: '8%' }}>Status</TableCell>
+                    <TableCell sx={{ width: '10%' }}>Location</TableCell>
+                    <TableCell sx={{ width: '24%', whiteSpace: 'normal' }}>Description</TableCell>
+                    <TableCell sx={{ width: '8%' }}>Action</TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {list.map(w => {
+                    const activities = (w.raw?.activities ?? []) as Activity[];
+                    const statusRaw = normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString();
+                    const statusNorm = statusRaw.toUpperCase().replace(/[-\s]/g, '_');
+                    return (
+                      <TableRow key={w.id} hover>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.doc_no ?? w.id}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(w.start_date)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(w.end_date)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.asset_name ?? '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.description ?? '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal' }}>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <Tooltip title="Details">
+                                <IconButton size="small" onClick={() => openRowModal(w)} aria-label="Details">
+                                  <InfoOutlinedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              {Array.isArray(activities) && activities.length > 0 && (
+                                <Tooltip title={`Lihat Task (${activities.length})`}>
+                                  <IconButton size="small" onClick={() => openTaskModal(w)} aria-label="Lihat Task">
+                                    <ListAltOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {!(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                                <Tooltip title="Edit Tanggal">
+                                  <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
+                                    <EditOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </div>
+        )}
 
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <Button onClick={onPrev} disabled={page <= 1} size="small">Prev</Button>
@@ -884,6 +972,44 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
           </div>
         </div>
       )}
+
+      {/* Row Details Dialog for table view */}
+      <Dialog open={Boolean(modalRow)} onClose={closeRowModal} fullWidth maxWidth="sm">
+        <DialogTitle>Details — {modalRow?.doc_no ?? modalRow?.id}</DialogTitle>
+        <DialogContent dividers>
+          {modalRow ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ fontWeight: 700 }}>{modalRow.asset_name ?? '-'}</div>
+              <div style={{ color: '#666' }}>{modalRow.description ?? '-'}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Location: {modalRow.vendor_cabang ?? modalRow.raw?.vendor_cabang ?? '-'}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(modalRow.start_date)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(modalRow.end_date)}</div>
+              <div style={{ marginTop: 8 }}>{renderStatusBadge((modalRow as any).status ?? modalRow?.raw?.status ?? 'PREPARATION')}</div>
+              {typeof (modalRow as any).progress === 'number' && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700 }}>{Math.round(Math.max(0, Math.min(1, (modalRow as any).progress || 0)) * 100)}%</Typography>
+                  <LinearProgress variant="determinate" value={Math.round(Math.max(0, Math.min(1, (modalRow as any).progress || 0)) * 100)} sx={{ height: 8, borderRadius: 2, backgroundColor: '#f1f5f9', '& .MuiLinearProgress-bar': { background: getColorForStatus((modalRow as any).status ?? modalRow?.raw?.status ?? 'PREPARATION') } }} />
+                </Box>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRowModal}>Close</Button>
+          <Tooltip title="Edit Tanggal">
+            <IconButton onClick={() => { if (!modalRow) return; openEdit(modalRow); closeRowModal(); }} aria-label="Edit Dates">
+              <EditOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+          {modalRow && Array.isArray(modalRow.raw?.activities) && modalRow.raw.activities.length > 0 && (
+            <Tooltip title={`Lihat Task (${(modalRow.raw?.activities || []).length})`}>
+              <IconButton onClick={() => { if (modalRow) { openTaskModal(modalRow); closeRowModal(); } }} aria-label="Lihat Task">
+                <ListAltOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Edit Dates Dialog (styled) */}
       <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
