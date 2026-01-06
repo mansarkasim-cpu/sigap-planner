@@ -57,26 +57,44 @@ export async function createRealisasi(req: Request, res: Response) {
 
   // simple base64 save to disk or upload to S3 (here write local file for example)
   if (dto.photoBase64) {
+    console.log('[REALISASI] Processing photoBase64...');
     const buf = Buffer.from(dto.photoBase64, "base64");
     const filename = `photo_${uuidv4()}.jpg`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
+    console.log('[REALISASI] Creating uploads dir:', path.dirname(filepath));
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
+    console.log('[REALISASI] Writing file:', filepath, '(', buf.length, 'bytes )');
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
-    try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
+    console.log('[REALISASI] Attempting chmod 0644 on:', filepath);
+    try {
+      fs.chmodSync(filepath, 0o644);
+      const stat = fs.statSync(filepath);
+      console.log('[REALISASI] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
+    } catch (e) {
+      console.error('[REALISASI] ✗ chmod 0644 FAILED:', filepath, '->', e);
+    }
     // prefer S3 public base if configured, otherwise construct absolute URL from request
     const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     const uploadsPath = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`;
     realisasi.photoUrl = uploadsPath;
   }
   if (dto.signatureBase64) {
+    console.log('[REALISASI-SIG] Processing signatureBase64...');
     const buf = Buffer.from(dto.signatureBase64, "base64");
     const filename = `sig_${uuidv4()}.png`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
+    console.log('[REALISASI-SIG] Creating uploads dir:', path.dirname(filepath));
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
+    console.log('[REALISASI-SIG] Writing file:', filepath, '(', buf.length, 'bytes )');
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
-    try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
+    console.log('[REALISASI-SIG] Attempting chmod 0644 on:', filepath);
+    try {
+      fs.chmodSync(filepath, 0o644);
+      const stat = fs.statSync(filepath);
+      console.log('[REALISASI-SIG] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
+    } catch (e) {
+      console.error('[REALISASI-SIG] ✗ chmod 0644 FAILED:', filepath, '->', e);
+    }
     const baseForUploadsSig = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     const sigPath = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;
     realisasi.signatureUrl = sigPath;
@@ -126,24 +144,42 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   let photoUrl: string | undefined;
   let signatureUrl: string | undefined;
   if (dto.photoBase64) {
+    console.log('[PENDING-PHOTO] Processing photoBase64...');
     const buf = Buffer.from(dto.photoBase64, "base64");
     const filename = `pending_photo_${uuidv4()}.jpg`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
+    console.log('[PENDING-PHOTO] Creating uploads dir:', path.dirname(filepath));
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
+    console.log('[PENDING-PHOTO] Writing file:', filepath, '(', buf.length, 'bytes )');
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
-    try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
+    console.log('[PENDING-PHOTO] Attempting chmod 0644 on:', filepath);
+    try {
+      fs.chmodSync(filepath, 0o644);
+      const stat = fs.statSync(filepath);
+      console.log('[PENDING-PHOTO] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
+    } catch (e) {
+      console.error('[PENDING-PHOTO] ✗ chmod 0644 FAILED:', filepath, '->', e);
+    }
     const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     photoUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`;
   }
   if (dto.signatureBase64) {
+    console.log('[PENDING-SIG] Processing signatureBase64...');
     const buf = Buffer.from(dto.signatureBase64, "base64");
     const filename = `pending_sig_${uuidv4()}.png`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
+    console.log('[PENDING-SIG] Creating uploads dir:', path.dirname(filepath));
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
+    console.log('[PENDING-SIG] Writing file:', filepath, '(', buf.length, 'bytes )');
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
-    try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
+    console.log('[PENDING-SIG] Attempting chmod 0644 on:', filepath);
+    try {
+      fs.chmodSync(filepath, 0o644);
+      const stat = fs.statSync(filepath);
+      console.log('[PENDING-SIG] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
+    } catch (e) {
+      console.error('[PENDING-SIG] ✗ chmod 0644 FAILED:', filepath, '->', e);
+    }
     const baseForUploadsSig = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     signatureUrl = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;
   }
