@@ -254,7 +254,10 @@ export default function ShiftManager() {
   }, [viewMode]);
 
   return (
-    <Box sx={{ display: 'flex', gap: 3, p: 1 }}>
+    <Box sx={{ position: 'relative', display: 'flex', gap: 3, p: 1 }}>
+      <Box sx={{ position: 'absolute', top: 16, right: 16, width: 440, zIndex: 20 }}>
+        
+      </Box>
       <Box sx={{ width: 420 }}>
         <Box sx={{ mb: 1 }}>
           <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Site</Typography>

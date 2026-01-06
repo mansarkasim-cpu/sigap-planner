@@ -26,9 +26,29 @@ function isAdminRole(raw) {
   return false
 }
 
+function hasRole(raw, roleName) {
+  if (!raw) return false
+  try {
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed.map(String).some(r => r.toLowerCase() === roleName)
+        if (typeof parsed === 'string') return parsed.toLowerCase() === roleName
+        if (parsed && parsed.role) return String(parsed.role).toLowerCase() === roleName
+      }
+      return raw.toLowerCase() === roleName
+    }
+    if (Array.isArray(raw)) return raw.map(String).some(r => r.toLowerCase() === roleName)
+    if (typeof raw === 'object') {
+      if (raw.role) return String(raw.role).toLowerCase() === roleName
+    }
+  } catch (e) {}
+  return false
+}
+
 export default function Nav(){
   const pathname = usePathname()
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [showMaster, setShowMaster] = useState(false)
 
   useEffect(()=>{
     let mounted = true
@@ -50,7 +70,8 @@ export default function Nav(){
             }catch(e){/* ignore */}
           }
         }
-        if (mounted) setIsAdmin(isAdminRole(raw))
+        // show master menu for admin or planner
+        if (mounted) setShowMaster(isAdminRole(raw) || hasRole(raw, 'planner'))
       }catch(e){ if (mounted) setIsAdmin(false) }
     }
     loadRole()
@@ -59,17 +80,27 @@ export default function Nav(){
 
   // hide nav on login page
   if (typeof pathname === 'string' && pathname === '/login') return null
-
   return (
     <nav className="nav">
       <ul className="nav-menu">
         <li className="nav-item"><Link href="/dashboard" className="nav-link">Dashboard</Link></li>
+        <li className="nav-item has-sub">
+          <span className="nav-link">Daily Checklist</span>
+          <ul className="sub-menu">
+            <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+          </ul>
+        </li>
 
-        {isAdmin && (
+        {showMaster && (
           <li className="nav-item has-sub">
             <span className="nav-link">Master</span>
             <ul className="sub-menu">
               <li><Link href="/users" className="nav-link">Users</Link></li>
+              <li><Link href="/master/hubs" className="nav-link">Hubs</Link></li>
+              <li><Link href="/master/sites" className="nav-link">Sites</Link></li>
+              <li><Link href="/master/jenis-alat" className="nav-link">Jenis Alat</Link></li>
+              <li><Link href="/master/questions" className="nav-link">Questions</Link></li>
+              <li><Link href="/master/alats" className="nav-link">Alat</Link></li>
             </ul>
           </li>
         )}
@@ -83,12 +114,12 @@ export default function Nav(){
 
         <li className="nav-item has-sub">
           <span className="nav-link">Work Order</span>
-          <ul className="sub-menu">
-            <li><Link href="/work-orders" className="nav-link">List</Link></li>
-            <li><Link href="/gantt" className="nav-link">Gantt Chart</Link></li>
+            <ul className="sub-menu">
+              <li><Link href="/work-orders" className="nav-link">List</Link></li>
+              <li><Link href="/gantt" className="nav-link">Gantt Chart</Link></li>
             <li><Link href="/monitor" className="nav-link">Monitoring</Link></li>
             <li><Link href="/realisasi" className="nav-link">Realisasi</Link></li>
-          </ul>
+           </ul>
         </li>
 
         <li className="nav-item auth-item"><AuthButton /></li>

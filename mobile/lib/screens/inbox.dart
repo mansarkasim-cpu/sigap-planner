@@ -3,6 +3,7 @@ import '../services/api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import '../config.dart';
 import 'wo_detail.dart';
 import '../services/retry_uploader.dart';
@@ -205,6 +206,47 @@ class _InboxScreenState extends State<InboxScreen> {
       }
       setState(() { assignments = filtered; tasksById = nextTasksMap; });
 
+      // Ensure task-level assignment lists match WO Detail by fetching /work-orders/{woId}/tasks
+      try {
+        final fetchedWo = <String>{};
+        final woIds = <String>{};
+        for (final a in filtered) {
+          try {
+            final awo = (a is Map) ? (a['wo'] ?? a['workorder'] ?? a['wo_id'] ?? {}) : {};
+            String wid = '';
+            if (awo is Map) wid = (awo['id'] ?? awo['doc_no'] ?? '').toString(); else wid = (a['wo_id'] ?? a['wo'] ?? '').toString();
+            if (wid.isNotEmpty) woIds.add(wid);
+          } catch (_) {}
+        }
+        bool anyUpdated = false;
+        for (final wid in woIds) {
+          if (fetchedWo.contains(wid)) continue;
+          try {
+            final tres = await api.get('/work-orders/${Uri.encodeComponent(wid)}/tasks');
+            final tlist = (tres is List) ? tres : (tres is Map && tres['data'] != null ? tres['data'] : tres);
+            if (tlist is List && tlist.isNotEmpty) {
+              for (final t in tlist) {
+                try {
+                  final tid = (t is Map) ? ((t['id'] ?? t['external_id'] ?? '')?.toString() ?? '') : '';
+                  if (tid.isNotEmpty) {
+                    tasksById[tid] = t;
+                    anyUpdated = true;
+                  }
+                } catch (_) {}
+              }
+            }
+            fetchedWo.add(wid);
+          } catch (e) {
+            debugPrint('failed to fetch tasks for WO $wid: $e');
+          }
+        }
+        if (anyUpdated) {
+          try { setState(() { tasksById = Map<String, dynamic>.from(tasksById); }); } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('failed to enrich tasksById from work-order endpoints: $e');
+      }
+
       // build assignee name map for display: prefer embedded names, then batch-fetch users, fallback to per-user fetch
       try {
         final missing = <String>{};
@@ -220,12 +262,10 @@ class _InboxScreenState extends State<InboxScreen> {
                 } else if (id.isNotEmpty && !assigneeNames.containsKey(id)) {
                   missing.add(id);
                 } else if (name.isNotEmpty) {
-                  // anonymous/no id but has name, cache under the name itself
                   assigneeNames[name] = name;
                 }
               } else if (candidate != null) {
                 final s = candidate.toString();
-                // if the candidate looks like an id and not yet cached, add to missing
                 if (s.isNotEmpty && !assigneeNames.containsKey(s)) missing.add(s);
               }
             }
@@ -237,9 +277,26 @@ class _InboxScreenState extends State<InboxScreen> {
             // try a batch fetch first (some backends support `/users?ids=1,2`)
             final allIds = missing.toList().join(',');
             final batchRes = await api.get('/users?ids=${Uri.encodeComponent(allIds)}');
+
+            // Normalize batch response into a list of user objects regardless of shape
             List<dynamic> usersList = [];
-            if (batchRes is List) usersList = batchRes;
-            else if (batchRes is Map && batchRes['data'] is List) usersList = batchRes['data'];
+            if (batchRes is List) {
+              usersList = batchRes;
+            } else if (batchRes is Map) {
+              if (batchRes['data'] is List) {
+                usersList = batchRes['data'];
+              } else {
+                // Some APIs return a map of id->user object
+                try {
+                  for (final entry in batchRes.entries) {
+                    final k = entry.key?.toString() ?? '';
+                    final v = entry.value;
+                    if (k.isNotEmpty && (v is Map)) usersList.add(v..['id'] = (v['id'] ?? k));
+                  }
+                } catch (_) {}
+              }
+            }
+
             if (usersList.isNotEmpty) {
               for (final u in usersList) {
                 try {
@@ -248,7 +305,6 @@ class _InboxScreenState extends State<InboxScreen> {
                   if (id.isNotEmpty) assigneeNames[id] = name.isNotEmpty ? name : id;
                 } catch (e) {}
               }
-              // remove found ids from missing
               missing.removeWhere((id) => assigneeNames.containsKey(id));
             }
           } catch (e) {
@@ -275,11 +331,67 @@ class _InboxScreenState extends State<InboxScreen> {
       } catch (e) {
         debugPrint('failed to build assignee name map: $e');
       }
+
+      // Make sure UI updates after we've populated the assignee name cache
+      try { setState(() {}); } catch (_) {}
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load: $e')));
     } finally {
       setState(() { loading = false; });
     }
+  }
+
+  // Derive a simple display status for a task based on its assignment group or task object
+  String _deriveTaskStatusFromGroup(List<dynamic> group, dynamic task) {
+    try {
+      // Prefer authoritative task-level counters/flags when available
+      if (task is Map) {
+        final realCount = int.tryParse((task['realisasi_count'] ?? 0).toString()) ?? 0;
+        final pendingCount = int.tryParse((task['pending_realisasi_count'] ?? 0).toString()) ?? 0;
+        final hasRealisasiFlag = (task['has_realisasi'] == true) || (realCount > 0);
+        final hasPendingFlag = (task['has_pending'] == true) || (pendingCount > 0);
+
+        if (hasRealisasiFlag) return 'Realisasi';
+        if (hasPendingFlag) return 'Pending';
+
+        // If explicit counters/flags are absent, fall back to inspecting any realisasi list
+        final r = (task['realisasi'] ?? task['realisasis'] ?? task['realisasi_list'] ?? task['realisasi_items']);
+        if (r is List && r.isNotEmpty) {
+          for (final e in r) {
+            try {
+              final st = (e is Map) ? ((e['status'] ?? e['state'] ?? e['verification_status'] ?? '').toString().toUpperCase()) : '';
+              if (st.isNotEmpty && (st.contains('APPROV') || st.contains('VERIF') || st.contains('COMP') || st.contains('DONE') || st.contains('OK'))) return 'Realisasi';
+            } catch (_) {}
+          }
+          return 'Pending';
+        }
+      }
+
+      // Fallback: inspect assignment-level statuses; if any 'COMPLETED' or 'VERIFIED' treat as Realisasi
+      for (final a in group) {
+        try {
+          if (a is Map) {
+            final s = (a['status'] ?? a['state'] ?? '').toString().toUpperCase();
+            if (s.isNotEmpty && (s.contains('COMP') || s.contains('VERIF') || s.contains('DONE'))) return 'Realisasi';
+            if (s.isNotEmpty && (s.contains('PEND') || s.contains('SUBMIT') || s.contains('WAIT'))) return 'Pending';
+          }
+        } catch (_) {}
+      }
+
+      // Default when nothing done yet
+      return 'Belum Realisasi';
+    } catch (e) {
+      return 'Belum Realisasi';
+    }
+  }
+
+  Color _statusColorLocal(String s) {
+    final u = s.toUpperCase();
+    // ensure "Belum Realisasi" matches the grey branch before matching 'REALISASI'
+    if (u.contains('BELUM') || u.contains('BELUM REALISASI')) return Colors.grey.shade300;
+    if (u.contains('PENDING')) return Colors.orange.shade200;
+    if (u.contains('REALISASI')) return Colors.green.shade100;
+    return Colors.grey.shade300;
   }
 
   @override
@@ -341,8 +453,14 @@ class _InboxScreenState extends State<InboxScreen> {
           if (groups is List) {
             for (final g in groups) {
               try {
-                final lead = (g is Map) ? (g['leader'] ?? '') : '';
-                if (lead != null && lead.toString() == userId) {
+                  final leadRaw = (g is Map) ? (g['leader'] ?? '') : '';
+                  String leadId = '';
+                  if (leadRaw is Map) {
+                    leadId = (leadRaw['id'] ?? leadRaw['user_id'] ?? leadRaw['nipp'] ?? leadRaw['personil']?['id'] ?? leadRaw['personil']?['personil_id'] ?? '').toString();
+                  } else {
+                    leadId = leadRaw?.toString() ?? '';
+                  }
+                  if (leadId.isNotEmpty && (leadId == userId || ids.contains(leadId))) {
                   leaderFlag = true;
                   // record this group's id and gather members
                   try {
@@ -351,7 +469,15 @@ class _InboxScreenState extends State<InboxScreen> {
                   } catch (_) {}
                   final mem = (g is Map && g['members'] is List) ? List.from(g['members']) : [];
                   for (final m in mem) {
-                    try { final sid = m?.toString() ?? ''; if (sid.isNotEmpty) members.add(sid); } catch(_) {}
+                    try {
+                      String sid = '';
+                      if (m is Map) {
+                        sid = (m['id'] ?? m['user_id'] ?? m['nipp'] ?? m['personil']?['id'] ?? '').toString() ?? '';
+                      } else {
+                        sid = m?.toString() ?? '';
+                      }
+                      if (sid.isNotEmpty) members.add(sid);
+                    } catch (_) {}
                   }
                 }
               } catch (e) {}
@@ -798,65 +924,91 @@ class _InboxScreenState extends State<InboxScreen> {
   // Resolve a human-friendly assignee display name from an assignment or raw assignee value.
   // Uses the `assigneeNames` cache when possible and tolerates multiple API shapes.
   String _getAssigneeDisplay(dynamic ra) {
-    try {
-      // Accept multiple possible keys for assignees: single `assignee`, plural `assignees`, or legacy names
-      dynamic candidate;
-      if (ra is Map) {
-        candidate = ra['assignees'] ?? ra['assignee_list'] ?? ra['assignee'] ?? ra['assigneeName'] ?? ra['assignee_name'] ?? ra['assignee_id'] ?? ra['assigneeId'] ?? '';
-      } else {
-        candidate = ra;
-      }
-      if (candidate == null) return '';
+      try {
+        // Quick checks for explicit name fields on the root assignment object
+        if (ra is Map) {
+          final explicit = (ra['assigneeName'] ?? ra['assignee_name'] ?? ra['assignee_display'] ?? ra['assigneeLabel'] ?? ra['label'])?.toString() ?? '';
+          if (explicit.isNotEmpty) return explicit;
 
-      // If candidate is a list/array, map each element to a display name and join with commas
-      if (candidate is List) {
-        final parts = <String>[];
-        for (final c in candidate) {
-          if (c == null) continue;
-          if (c is Map) {
-            final id = (c['id'] ?? c['user_id'] ?? c['nipp'] ?? c['nipp_id'] ?? '')?.toString() ?? '';
-            final name = (c['name'] ?? c['full_name'] ?? c['displayName'] ?? c['personil']?['name'] ?? c['label'] ?? '')?.toString() ?? '';
-            if (name.isNotEmpty) parts.add(name);
-            else if (id.isNotEmpty) parts.add(assigneeNames.containsKey(id) ? assigneeNames[id]! : id);
-            else parts.add(c.toString());
-          } else {
-            final s = c.toString();
-            if (s.isEmpty) continue;
-            parts.add(assigneeNames.containsKey(s) ? assigneeNames[s]! : s);
+          // If there is a direct assignee id field, prefer resolving it from cache
+          final directId = (ra['assigneeId'] ?? ra['assignee_id'] ?? ra['assignee_uuid'] ?? ra['assignee'])?.toString() ?? '';
+          if (directId.isNotEmpty && !(directId.startsWith('{') || directId.startsWith('['))) {
+            if (assigneeNames.containsKey(directId)) return assigneeNames[directId]!;
+            return directId;
           }
         }
-        return parts.join(', ');
-      }
 
-      // If candidate is an object with id and name, prefer the name and cache it.
-      if (candidate is Map) {
-        final id = (candidate['id'] ?? candidate['user_id'] ?? candidate['nipp'] ?? candidate['nipp_id'] ?? '')?.toString() ?? '';
-        final name = (candidate['name'] ?? candidate['full_name'] ?? candidate['displayName'] ?? candidate['personil']?['name'] ?? candidate['label'] ?? '')?.toString() ?? '';
-        if (id.isNotEmpty && name.isNotEmpty) {
-          assigneeNames[id] = name;
-          return name;
+        
+
+        // Fallback: accept multiple possible keys for assignees
+        dynamic candidate;
+        if (ra is Map) {
+          candidate = ra['assignees'] ?? ra['assignee_list'] ?? ra['assignee'] ?? ra['assigneeName'] ?? ra['assignee_name'] ?? ra['assignee_id'] ?? ra['assigneeId'] ?? '';
+        } else {
+          candidate = ra;
         }
-        if (name.isNotEmpty) return name;
-        if (id.isNotEmpty && assigneeNames.containsKey(id)) return assigneeNames[id]!;
-        if (id.isNotEmpty) return id;
-        return candidate.toString();
-      }
+        if (candidate == null) return '';
 
-      // candidate is a primitive (id or name string)
-      var s = candidate.toString();
-      if (s.isEmpty) return '';
-      // If the string contains multiple names/ids separated by comma or semicolon, split and resolve each
-      if (s.contains(',') || s.contains(';')) {
-        final parts = s.split(RegExp(r'[;,]')).map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
-        final resolved = parts.map((p) => assigneeNames.containsKey(p) ? assigneeNames[p]! : p).toList();
-        return resolved.join(', ');
+        // If candidate is a JSON-encoded string, try to decode and re-process
+        if (candidate is String) {
+          final sraw = candidate.trim();
+          if (sraw.isEmpty) return '';
+          if (sraw.startsWith('{') || sraw.startsWith('[')) {
+            try {
+              final dec = jsonDecode(sraw);
+              return _getAssigneeDisplay(dec);
+            } catch (_) {}
+          }
+        }
+
+        // List handling: map each element to name
+        if (candidate is List) {
+          final parts = <String>[];
+          for (final c in candidate) {
+            if (c == null) continue;
+            if (c is Map) {
+              final id = (c['id'] ?? c['user_id'] ?? c['nipp'] ?? c['nipp_id'] ?? '')?.toString() ?? '';
+              final name = (c['name'] ?? c['full_name'] ?? c['displayName'] ?? c['personil']?['name'] ?? c['label'] ?? '')?.toString() ?? '';
+              if (name.isNotEmpty) parts.add(name);
+              else if (id.isNotEmpty) parts.add(assigneeNames.containsKey(id) ? assigneeNames[id]! : id);
+              else parts.add(c.toString());
+            } else {
+              final s = c.toString();
+              if (s.isEmpty) continue;
+              parts.add(assigneeNames.containsKey(s) ? assigneeNames[s]! : s);
+            }
+          }
+          return parts.join(', ');
+        }
+
+        // Map object candidate
+        if (candidate is Map) {
+          final id = (candidate['id'] ?? candidate['user_id'] ?? candidate['nipp'] ?? candidate['nipp_id'] ?? '')?.toString() ?? '';
+          final name = (candidate['name'] ?? candidate['full_name'] ?? candidate['displayName'] ?? candidate['personil']?['name'] ?? candidate['label'] ?? '')?.toString() ?? '';
+          if (id.isNotEmpty && name.isNotEmpty) {
+            assigneeNames[id] = name;
+            return name;
+          }
+          if (name.isNotEmpty) return name;
+          if (id.isNotEmpty && assigneeNames.containsKey(id)) return assigneeNames[id]!;
+          if (id.isNotEmpty) return id;
+          return candidate.toString();
+        }
+
+        // Primitive string candidate (single id or name)
+        var s = candidate.toString();
+        if (s.isEmpty) return '';
+        if (s.contains(',') || s.contains(';')) {
+          final parts = s.split(RegExp(r'[;,]')).map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+          final resolved = parts.map((p) => assigneeNames.containsKey(p) ? assigneeNames[p]! : p).toList();
+          return resolved.join(', ');
+        }
+        if (assigneeNames.containsKey(s)) return assigneeNames[s]!;
+        return s;
+      } catch (e) {
+        return '';
       }
-      if (assigneeNames.containsKey(s)) return assigneeNames[s]!;
-      return s;
-    } catch (e) {
-      return '';
     }
-  }
 
   Widget _buildAssignmentsGrouped() {
     if (loading) return const Center(child: CircularProgressIndicator());
@@ -950,57 +1102,110 @@ class _InboxScreenState extends State<InboxScreen> {
                   if (desc.isNotEmpty) return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black87)));
                   return const SizedBox.shrink();
                 }),
-              Column(children: items.asMap().entries.map<Widget>((entry) {
-                final idx = entry.key;
-                final a = entry.value;
-                final assignmentId = a['id'] ?? '';
-                final taskId = (a['task_id'] ?? a['task'] ?? '')?.toString() ?? '';
-                final task = taskId.isNotEmpty ? (tasksById[taskId] ?? {}) : (a['task'] ?? {});
-                final taskName = (task is Map) ? (task['name'] ?? task['task_name'] ?? '') : '';
-                final duration = (task is Map) ? (task['duration_min'] ?? task['task_duration'] ?? '') : '';
-                final assigneeDisplay = _getAssigneeDisplay(a);
-                final aStatus = (a['status'] ?? '').toString();
-                final scheduled = a['scheduledAt'] ?? a['scheduled_at'] ?? a['scheduled'] ?? '';
-
-                Color statusColor() {
-                  final s = aStatus.toString().toUpperCase();
-                  if (s.contains('COMP')) return Colors.green.shade200;
-                  if (s.contains('IN_PROGRESS') || s.contains('INPROGRESS')) return Colors.orange.shade200;
-                  if (s.contains('DEPLOY') || s.contains('ASSIGN')) return Colors.blue.shade100;
-                  return Colors.grey.shade200;
+              // Group assignments by task within this work order so mobile mirrors web view
+              Builder(builder: (_) {
+                final Map<String, List<dynamic>> taskGroups = {};
+                for (final a in items) {
+                  try {
+                    final tId = (a['task_id'] ?? a['task'] ?? '')?.toString() ?? '';
+                    final key = tId.isNotEmpty ? tId : ('__no_task__' + (a['id']?.toString() ?? ''));
+                    taskGroups.putIfAbsent(key, () => []).add(a);
+                  } catch (_) {
+                    taskGroups.putIfAbsent('__no_task__', () => []).add(a);
+                  }
                 }
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  color: Colors.grey.shade50,
-                  child: ListTile(
-                    leading: CircleAvatar(radius: 18, backgroundColor: Theme.of(context).colorScheme.primary, child: Text('${idx+1}', style: const TextStyle(color: Colors.white))),
-                    title: Text(
-                      taskName.isNotEmpty ? taskName : 'Assignment',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                final tgEntries = taskGroups.entries.toList();
+                return Column(children: tgEntries.asMap().entries.map<Widget>((entry) {
+                  final idx = entry.key;
+                  final group = entry.value.value;
+                  final firstAssign = group.isNotEmpty ? group.first : null;
+                  final taskId = (firstAssign != null) ? ((firstAssign['task_id'] ?? firstAssign['task'] ?? '')?.toString() ?? '') : '';
+                  final task = taskId.isNotEmpty ? (tasksById[taskId] ?? {}) : (firstAssign != null ? (firstAssign['task'] ?? {}) : {});
+                  final taskName = (task is Map) ? (task['name'] ?? task['task_name'] ?? '') : '';
+                  final duration = (task is Map) ? (task['duration_min'] ?? task['task_duration'] ?? '') : '';
+
+                  // collect distinct assignee displays for this task
+                  final seenAssignees = <String>{};
+                  final assignees = <String>[];
+                  // Prefer task-level assignment list (richer user objects) when available
+                  try {
+                    dynamic taskAssigns = (task is Map) ? (task['assignments'] ?? task['assigns'] ?? task['assigned'] ?? task['assigned_to'] ?? null) : null;
+                    if (taskAssigns is List && taskAssigns.isNotEmpty) {
+                      for (final as in taskAssigns) {
+                        try {
+                          String name = '';
+                          if (as is Map) {
+                            final u = as['user'] ?? as['assigned_to'] ?? as['assignee'] ?? as;
+                            if (u is Map) {
+                              name = (u['name'] ?? u['full_name'] ?? u['displayName'] ?? u['personil']?['name'] ?? u['label'] ?? '').toString();
+                              if (name.isEmpty) {
+                                final id = (u['id'] ?? u['user_id'] ?? u['nipp'] ?? '').toString();
+                                if (id.isNotEmpty && assigneeNames.containsKey(id)) name = assigneeNames[id]!;
+                              }
+                                } else {
+                              name = (as['name'] ?? as['label'] ?? as.toString() ?? '').toString();
+                            }
+                          } else {
+                            name = as.toString();
+                            if (assigneeNames.containsKey(name)) name = assigneeNames[name]!;
+                          }
+                          if (name.isNotEmpty && !seenAssignees.contains(name)) { seenAssignees.add(name); assignees.add(name); }
+                        } catch (_) {}
+                      }
+                    } else {
+                      // fallback to assignment objects from group
+                      for (final a in group) {
+                        final ad = _getAssigneeDisplay(a);
+                        if (ad.isNotEmpty && !seenAssignees.contains(ad)) { seenAssignees.add(ad); assignees.add(ad); }
+                      }
+                    }
+                  } catch (_) {
+                    for (final a in group) {
+                      final ad = _getAssigneeDisplay(a);
+                      if (ad.isNotEmpty && !seenAssignees.contains(ad)) { seenAssignees.add(ad); assignees.add(ad); }
+                    }
+                  }
+
+                  final firstAssignmentId = firstAssign != null ? (firstAssign['id'] ?? '') : '';
+                  final statusLabel = _deriveTaskStatusFromGroup(group, task);
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    color: Colors.grey.shade50,
+                    child: ListTile(
+                      leading: CircleAvatar(radius: 18, backgroundColor: Theme.of(context).colorScheme.primary, child: Text('${idx+1}', style: const TextStyle(color: Colors.white))),
+                      title: Text(
+                        taskName.isNotEmpty ? taskName : 'Assignment',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            // first line: duration (status badge moved to trailing)
+                            Row(children: [
+                              if (duration != null && duration.toString().isNotEmpty)
+                                Padding(padding: const EdgeInsets.only(right: 8.0), child: Text('${duration.toString()} min', style: const TextStyle(color: Colors.grey))),
+                            ]),
+                            const SizedBox(height: 6),
+                            // second line: assignee chips
+                            if (assignees.isNotEmpty)
+                              Wrap(spacing: 6, children: assignees.map((n) => Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)), child: Text(n, style: const TextStyle(fontSize: 12)))).toList()),
+                          ]),
+                      trailing: Chip(label: Text(statusLabel, style: const TextStyle(fontSize: 12)), backgroundColor: _statusColorLocal(statusLabel)),
+                      onTap: () { if ((wo is Map ? (wo['id'] ?? wo['doc_no']) : woKey) != null) Navigator.push(context, MaterialPageRoute(builder: (_) => WODetailScreen(woId: (wo is Map ? (wo['id'] ?? wo['doc_no']).toString() : woKey), assignmentId: firstAssignmentId.toString(), baseUrl: API_BASE, token: _token ?? ''))); },
                     ),
-                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        if (duration != null && duration.toString().isNotEmpty)
-                          Padding(padding: const EdgeInsets.only(right: 8.0), child: Text('${duration.toString()} min', style: const TextStyle(color: Colors.grey))),
-                        if (assigneeDisplay.isNotEmpty)
-                          Expanded(child: Text(assigneeDisplay, style: const TextStyle(color: Colors.grey), overflow: TextOverflow.ellipsis)),
-                      ]),
-                      if (scheduled != null && scheduled.toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top:4.0), child: Text(_formatUtcDisplay(scheduled), style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis)),
-                    ]),
-                    trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), decoration: BoxDecoration(color: statusColor(), borderRadius: BorderRadius.circular(8)), child: Text(aStatus.toString(), style: const TextStyle(fontSize: 12))),
-                    onTap: () { if ((wo is Map ? (wo['id'] ?? wo['doc_no']) : woKey) != null) Navigator.push(context, MaterialPageRoute(builder: (_) => WODetailScreen(woId: (wo is Map ? (wo['id'] ?? wo['doc_no']).toString() : woKey), assignmentId: assignmentId.toString(), baseUrl: API_BASE, token: _token ?? ''))); },
-                  ),
-                );
-              }).toList()),
+                  );
+                }).toList());
+              }),
             ]),
           ),
         );
       },
     );
   }
+
+  
 
   @override
   Widget build(BuildContext context) {
@@ -1048,8 +1253,8 @@ class _InboxScreenState extends State<InboxScreen> {
                           child: TabBarView(children: [
                             // Tasks tab: leader should see assignments (their own + group)
                             loading
-                                ? const Center(child: CircularProgressIndicator())
-                                : Padding(padding: const EdgeInsets.only(bottom: 24), child: _buildAssignmentsGrouped()),
+                              ? const Center(child: CircularProgressIndicator())
+                              : Padding(padding: const EdgeInsets.only(bottom: 24), child: _buildAssignmentsGrouped()),
                             // Monitoring tab: monitoring WOs + pending approvals
                             SingleChildScrollView(
                               padding: const EdgeInsets.only(bottom: 24),

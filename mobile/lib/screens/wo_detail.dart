@@ -28,6 +28,7 @@ class WODetailScreen extends StatefulWidget {
 class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProviderStateMixin {
   Map<String, dynamic>? woDetail;
   List<dynamic> tasks = [];
+  Map<String, dynamic>? assignmentDetail;
   String? assignmentStatus;
   String? _techId;
   bool _isLead = false;
@@ -144,6 +145,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           if (tid.isNotEmpty) {
             setState(() {
               _selectedTaskId = tid;
+              assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
             });
             return;
           }
@@ -151,11 +153,13 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       }
       setState(() {
         _selectedTaskId = null;
+        assignmentDetail = null;
       });
     } catch (e) {
       debugPrint('load assignment detail failed: $e');
       setState(() {
         _selectedTaskId = null;
+        assignmentDetail = null;
       });
     }
   }
@@ -416,35 +420,56 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   Future<void> _loadAssignmentStatus() async {
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      // prefer dedicated for-tech endpoint but fallback to /assignments
+      // Try dedicated for-tech endpoint with explicit user id (handles leaders who fetch group assignments elsewhere)
       try {
-        final res = await api.get('/assignments/for-tech');
-        final list = (res is Map && res['assignments'] != null)
-            ? res['assignments']
-            : ((res is List) ? res : (res['data'] ?? res));
-        if (list is List) {
-          final found = list.firstWhere(
+        if (_techId != null && _techId!.isNotEmpty) {
+          try {
+            final res = await api.get('/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
+            final list = (res is Map && res['assignments'] != null)
+                ? res['assignments']
+                : ((res is List) ? res : (res['data'] ?? res));
+            if (list is List) {
+              final found = list.firstWhere(
+                  (e) => (e['id'] ?? '').toString() == widget.assignmentId,
+                  orElse: () => <String, dynamic>{});
+              setState(() {
+                assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
+              });
+              if (assignmentStatus != null) return;
+            }
+          } catch (_) {}
+        }
+
+        // prefer dedicated for-tech endpoint without user param but fallback to /assignments
+        try {
+          final res = await api.get('/assignments/for-tech');
+          final list = (res is Map && res['assignments'] != null)
+              ? res['assignments']
+              : ((res is List) ? res : (res['data'] ?? res));
+          if (list is List) {
+            final found = list.firstWhere(
+                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
+                orElse: () => <String, dynamic>{});
+            setState(() {
+              assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
+            });
+            if (assignmentStatus != null) return;
+          }
+        } catch (_) {}
+
+        final res2 = await api.get('/assignments');
+        final list2 = (res2 is List) ? res2 : (res2['data'] ?? res2);
+        if (list2 is List) {
+          final found = list2.firstWhere(
               (e) => (e['id'] ?? '').toString() == widget.assignmentId,
               orElse: () => <String, dynamic>{});
           setState(() {
-            assignmentStatus =
-                found.isNotEmpty ? (found['status'] ?? '') : null;
+            assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
           });
-          return;
         }
-      } catch (_) {
-        // fallback
-      }
-
-      final res2 = await api.get('/assignments');
-      final list2 = (res2 is List) ? res2 : (res2['data'] ?? res2);
-      if (list2 is List) {
-        final found = list2.firstWhere(
-            (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-            orElse: () => <String, dynamic>{});
-        setState(() {
-          assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
-        });
+        
+      } catch (e) {
+        debugPrint('failed to load assignment status: $e');
       }
     } catch (e) {
       debugPrint('failed to load assignment status: $e');
@@ -632,33 +657,31 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
     try {
       final picker = ImagePicker();
       XFile? photo;
-      // On desktop platforms image_picker camera may not be supported
-      if (!kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.windows ||
-              defaultTargetPlatform == TargetPlatform.linux ||
-              defaultTargetPlatform == TargetPlatform.macOS)) {
-        final proceed = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-                  title: const Text('Camera not available'),
-                  content: const Text(
-                      'Camera capture is not supported on this platform. Pick an existing photo from files instead?'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(c, false),
-                        child: const Text('Cancel')),
-                    TextButton(
-                        onPressed: () => Navigator.pop(c, true),
-                        child: const Text('Pick file')),
-                  ],
-                ));
-        if (proceed != true) return;
-        photo = await picker.pickImage(
-            source: ImageSource.gallery, imageQuality: 75, maxWidth: 1600);
-      } else {
-        photo = await picker.pickImage(
-            source: ImageSource.camera, imageQuality: 75, maxWidth: 1600);
-      }
+      
+      // Show dialog to choose between camera and gallery
+      final imageSource = await showDialog<ImageSource>(
+          context: context,
+          builder: (c) => AlertDialog(
+                title: const Text('Pilih Sumber Foto'),
+                content: const Text('Ambil foto dari kamera atau pilih dari galeri?'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(c, null),
+                      child: const Text('Batal')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(c, ImageSource.gallery),
+                      child: const Text('Galeri')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(c, ImageSource.camera),
+                      child: const Text('Kamera')),
+                ],
+              ));
+      
+      if (imageSource == null) return;
+      
+      // Pick image from the selected source
+      photo = await picker.pickImage(
+          source: imageSource, imageQuality: 75, maxWidth: 1600);
 
       if (photo != null) {
         final bytes = await photo.readAsBytes();
@@ -712,6 +735,43 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       final norm =
           s.toString().toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
       return norm == 'IN_PROGRESS' || norm == 'INPROGRESS';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _assignedToCurrent() {
+    try {
+      if (_techId == null || _techId!.isEmpty) return false;
+      final cur = _techId!.toString();
+      if (assignmentDetail == null) return false;
+      final a = assignmentDetail!;
+      // check common single-assignee fields
+      final candidate = (a['assignee'] ?? a['assigneeId'] ?? a['assignee_id'] ?? a['assigned_to'] ?? a['user'] ?? a['assignedTo']);
+      if (candidate != null) {
+        if (candidate is String) {
+          if (candidate == cur) return true;
+        } else if (candidate is Map) {
+          final id = (candidate['id'] ?? candidate['user_id'] ?? candidate['nipp'] ?? candidate['external_id'])?.toString() ?? '';
+          if (id.isNotEmpty && id == cur) return true;
+        }
+      }
+      // check multi-assignee lists
+      final listCand = (a['assignees'] ?? a['assigned'] ?? a['assigned_to_list'] ?? a['assignment_users']);
+      if (listCand is List) {
+        for (final it in listCand) {
+          try {
+            if (it == null) continue;
+            if (it is String) {
+              if (it == cur) return true;
+            } else if (it is Map) {
+              final id = (it['id'] ?? it['user_id'] ?? it['nipp'] ?? it['external_id'])?.toString() ?? '';
+              if (id.isNotEmpty && id == cur) return true;
+            }
+          } catch (_) {}
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -1601,80 +1661,70 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                   ],
                 ),
               ),
-                  // Floating swipe control (always visible)
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    right: 16,
-                    child: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(8),
-                      child: _canStart
-                          ? Dismissible(
-                              key: Key('start-${widget.assignmentId}'),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                  decoration: BoxDecoration(
-                                      color: Colors.green,
-                                      borderRadius: BorderRadius.circular(8)),
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  child: const Icon(Icons.play_arrow,
-                                      color: Colors.white)),
-                              confirmDismiss: (dir) async {
-                                final ok = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                            title: const Text('Start work?'),
-                                            content: const Text(
-                                                'Swipe to confirm starting work'),
-                                            actions: [
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(c, false),
-                                                  child: const Text('Cancel')),
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(c, true),
-                                                  child: const Text('Start'))
-                                            ]));
-                                return ok == true;
-                              },
-                              onDismissed: (dir) async {
-                                await _startWork();
-                              },
-                              child: SlideTransition(
-                                position: _swipeOffset,
-                                child: Container(
-                                  height: 72,
-                                  alignment: Alignment.center,
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade600,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Text('Swipe left to START',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16)),
-                                ),
-                              ),
-                            )
-                          : Container(
+                  // Floating swipe control (only visible when available)
+                  if (_canStart)
+                    Positioned(
+                      bottom: 16,
+                      left: 16,
+                      right: 16,
+                      child: Material(
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Dismissible(
+                          key: Key('start-${widget.assignmentId}'),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                              decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(8)),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(Icons.play_arrow,
+                                  color: Colors.white)),
+                          confirmDismiss: (dir) async {
+                            final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                        title: const Text('Start work?'),
+                                        content: const Text(
+                                            'Swipe to confirm starting work'),
+                                        actions: [
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c, false),
+                                              child: const Text('Cancel')),
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c, true),
+                                              child: const Text('Start'))
+                                        ]));
+                            return ok == true;
+                          },
+                          onDismissed: (dir) async {
+                            await _startWork();
+                          },
+                          child: SlideTransition(
+                            position: _swipeOffset,
+                            child: Container(
                               height: 72,
                               alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
                               decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(8)),
-                              child: const Text('Start unavailable',
-                                  style: TextStyle(color: Colors.grey)),
+                                color: Colors.green.shade600,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('Swipe left to START',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
                             ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
         );

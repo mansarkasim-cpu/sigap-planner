@@ -9,6 +9,9 @@ import workOrderRoutes from './routes/workorder.routes';
 import userRoutes from './routes/user.routes';
 import shiftRoutes from './routes/shift.routes';
 import taskRoutes from './routes/task.routes';
+import checklistRoutes from './routes/checklist.routes';
+import masterRoutes from './routes/master.routes';
+import monitoringRoutes from './routes/monitoring.routes';
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -70,6 +73,9 @@ app.use('/api/work-orders', workOrderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', shiftRoutes);
 app.use('/api', taskRoutes);
+app.use('/api', checklistRoutes);
+app.use('/api', masterRoutes);
+app.use('/api', monitoringRoutes);
 
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swaggerRoutes);
@@ -86,16 +92,20 @@ import fs from "fs";
 const UPLOADS_DIR_ENV = process.env.UPLOADS_DIR || '';
 const uploadsCandidates = [
   UPLOADS_DIR_ENV,
+  path.join(process.cwd(), 'backend', 'uploads'),
   path.join(process.cwd(), 'uploads'),
   path.join(__dirname, '..', 'uploads'),
   path.join(process.cwd(), 'upload'),
   path.join(__dirname, '..', 'upload'),
 ].map(p => (p || '').toString());
 
+
 const uploadsDirFound = uploadsCandidates.find((p) => p && fs.existsSync(p));
 
-// Fallback if none exists
-const finalUploadsDir = uploadsDirFound || (UPLOADS_DIR_ENV || path.join(process.cwd(), 'uploads'));
+// Fallback to backend/uploads when nothing exists yet; create the folder so static serving works
+const defaultUploads = path.join(process.cwd(), 'backend', 'uploads');
+const finalUploadsDir = uploadsDirFound || (UPLOADS_DIR_ENV || defaultUploads);
+try { fs.mkdirSync(finalUploadsDir, { recursive: true }); } catch (e) { /* ignore */ }
 
 app.use('/uploads', express.static(finalUploadsDir));
 app.use('/upload', express.static(finalUploadsDir));
