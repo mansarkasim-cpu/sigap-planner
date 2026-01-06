@@ -1,0 +1,167 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/realisasi/[id]",
+      "regex": "^/realisasi/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/realisasi/(?<nxtPid>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/account/change-password",
+      "regex": "^/account/change\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/account/change\\-password(?:/)?$"
+    },
+    {
+      "page": "/asignments",
+      "regex": "^/asignments(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/asignments(?:/)?$"
+    },
+    {
+      "page": "/dashboard",
+      "regex": "^/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/dashboard(?:/)?$"
+    },
+    {
+      "page": "/gantt",
+      "regex": "^/gantt(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/gantt(?:/)?$"
+    },
+    {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/master/alats",
+      "regex": "^/master/alats(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/master/alats(?:/)?$"
+    },
+    {
+      "page": "/master/hubs",
+      "regex": "^/master/hubs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/master/hubs(?:/)?$"
+    },
+    {
+      "page": "/master/jenis-alat",
+      "regex": "^/master/jenis\\-alat(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/master/jenis\\-alat(?:/)?$"
+    },
+    {
+      "page": "/master/questions",
+      "regex": "^/master/questions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/master/questions(?:/)?$"
+    },
+    {
+      "page": "/master/sites",
+      "regex": "^/master/sites(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/master/sites(?:/)?$"
+    },
+    {
+      "page": "/monitor",
+      "regex": "^/monitor(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/monitor(?:/)?$"
+    },
+    {
+      "page": "/monitor/daily-weekly",
+      "regex": "^/monitor/daily\\-weekly(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/monitor/daily\\-weekly(?:/)?$"
+    },
+    {
+      "page": "/realisasi",
+      "regex": "^/realisasi(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/realisasi(?:/)?$"
+    },
+    {
+      "page": "/shifts",
+      "regex": "^/shifts(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/shifts(?:/)?$"
+    },
+    {
+      "page": "/users",
+      "regex": "^/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/users(?:/)?$"
+    },
+    {
+      "page": "/work-orders",
+      "regex": "^/work\\-orders(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/work\\-orders(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}

@@ -27,3 +27,16 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     return res.status(401).json({ code: "UNAUTHORIZED", message: "Invalid token" });
   }
 }
+
+// middleware factory to require one of allowed roles
+export function requireRole(allowedRoles: string[] = []) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = (req as any).user as JwtPayload | undefined;
+    if (!user) return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' });
+    const role = (user.role || '').toString();
+    if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Insufficient role/permission' });
+    }
+    next();
+  };
+}

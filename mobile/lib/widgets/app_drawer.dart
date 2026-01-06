@@ -4,6 +4,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../services/api.dart';
 import '../config.dart';
 import '../screens/profile.dart';
+import '../screens/checklist.dart';
+import '../screens/checklist_history.dart';
 import '../screens/login.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -110,6 +112,22 @@ class _AppDrawerState extends State<AppDrawer> {
                 Navigator.pop(context);
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
                 await _loadProfile();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.checklist),
+              title: const Text('Checklist'),
+              onTap: () async {
+                Navigator.pop(context);
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ChecklistScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Checklist History'),
+              onTap: () async {
+                Navigator.pop(context);
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ChecklistHistoryScreen()));
               },
             ),
             ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: () async { Navigator.pop(context); await _logout(); }),

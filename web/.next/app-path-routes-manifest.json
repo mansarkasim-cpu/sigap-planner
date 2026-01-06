@@ -1,0 +1,22 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/account/change-password/page": "/account/change-password",
+  "/asignments/page": "/asignments",
+  "/dashboard/page": "/dashboard",
+  "/gantt/page": "/gantt",
+  "/login/page": "/login",
+  "/master/alats/page": "/master/alats",
+  "/master/hubs/page": "/master/hubs",
+  "/master/jenis-alat/page": "/master/jenis-alat",
+  "/master/questions/page": "/master/questions",
+  "/master/sites/page": "/master/sites",
+  "/monitor/daily-weekly/page": "/monitor/daily-weekly",
+  "/monitor/page": "/monitor",
+  "/page": "/",
+  "/realisasi/[id]/page": "/realisasi/[id]",
+  "/realisasi/page": "/realisasi",
+  "/shifts/page": "/shifts",
+  "/users/page": "/users",
+  "/work-orders/page": "/work-orders"
+}

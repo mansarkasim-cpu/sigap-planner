@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/master/layout,_N_T_/master/alats/layout,_N_T_/master/alats/page,_N_T_/master/alats"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/master/alats/__PAGE__",
+    "/master/alats",
+    "/master",
+    "/_index",
+    "/_head"
+  ]
+}
