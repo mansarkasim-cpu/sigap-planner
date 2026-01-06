@@ -95,23 +95,13 @@ export async function submitChecklist(req: Request, res: Response) {
         if (cleanedClientPath) evidencePhotoPath = cleanedClientPath
         try {
           if (it.evidence_photo_base64) {
-            console.log('[CHECKLIST-VALIDATE] Processing evidence_photo_base64...')
             const buf = Buffer.from(it.evidence_photo_base64, 'base64')
             const filename = `checklist_${Date.now()}_${uuidv4()}.jpg`
             // Save under backend/uploads as requested
             const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename)
-            console.log('[CHECKLIST-VALIDATE] Creating dir:', path.dirname(filepath))
             fs.mkdirSync(path.dirname(filepath), { recursive: true })
-            console.log('[CHECKLIST-VALIDATE] Writing file:', filepath, '(', buf.length, 'bytes )')
             fs.writeFileSync(filepath, buf)
-            console.log('[CHECKLIST-VALIDATE] Attempting chmod 0644 on:', filepath)
-            try {
-              fs.chmodSync(filepath, 0o644);
-              const stat = fs.statSync(filepath);
-              console.log('[CHECKLIST-VALIDATE] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
-            } catch (e) {
-              console.error('[CHECKLIST-VALIDATE] ✗ chmod 0644 FAILED:', filepath, '->', e);
-            }
+            try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
             const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`
             // public URL remains /uploads/<filename> — app.ts serves backend/uploads as one candidate
             const publicUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`
@@ -190,22 +180,12 @@ export async function submitChecklist(req: Request, res: Response) {
           // but we must persist again for the actual saved item so DB gets the path/url).
           if (it.evidence_photo_base64) {
             try {
-              console.log('[CHECKLIST-CREATE] Processing evidence_photo_base64...')
               const buf = Buffer.from(it.evidence_photo_base64, 'base64')
               const filename = `checklist_${Date.now()}_${uuidv4()}.jpg`
               const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename)
-              console.log('[CHECKLIST-CREATE] Creating dir:', path.dirname(filepath))
               fs.mkdirSync(path.dirname(filepath), { recursive: true })
-              console.log('[CHECKLIST-CREATE] Writing file:', filepath, '(', buf.length, 'bytes )')
               fs.writeFileSync(filepath, buf)
-              console.log('[CHECKLIST-CREATE] Attempting chmod 0644 on:', filepath)
-              try {
-                fs.chmodSync(filepath, 0o644);
-                const stat = fs.statSync(filepath);
-                console.log('[CHECKLIST-CREATE] ✓ chmod 0644 success, mode:', (stat.mode & parseInt('777', 8)).toString(8));
-              } catch (e) {
-                console.error('[CHECKLIST-CREATE] ✗ chmod 0644 FAILED:', filepath, '->', e);
-              }
+              try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
               const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`
               const publicUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`
               evidencePhotoUrl = publicUrl
