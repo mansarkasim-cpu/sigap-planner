@@ -59,10 +59,9 @@ export async function createRealisasi(req: Request, res: Response) {
   if (dto.photoBase64) {
     const buf = Buffer.from(dto.photoBase64, "base64");
     const filename = `photo_${uuidv4()}.jpg`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
     try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
     // prefer S3 public base if configured, otherwise construct absolute URL from request
     const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
@@ -72,10 +71,9 @@ export async function createRealisasi(req: Request, res: Response) {
   if (dto.signatureBase64) {
     const buf = Buffer.from(dto.signatureBase64, "base64");
     const filename = `sig_${uuidv4()}.png`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
     try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
     const baseForUploadsSig = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     const sigPath = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;
@@ -128,10 +126,9 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   if (dto.photoBase64) {
     const buf = Buffer.from(dto.photoBase64, "base64");
     const filename = `pending_photo_${uuidv4()}.jpg`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
     try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
     const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     photoUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`;
@@ -139,10 +136,9 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   if (dto.signatureBase64) {
     const buf = Buffer.from(dto.signatureBase64, "base64");
     const filename = `pending_sig_${uuidv4()}.png`;
-    const filepath = path.join(process.cwd(), "uploads", filename);
+    const filepath = path.resolve(process.cwd(), "uploads", filename);
     fs.mkdirSync(path.dirname(filepath), { recursive: true });
     fs.writeFileSync(filepath, buf);
-    // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
     try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
     const baseForUploadsSig = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     signatureUrl = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;

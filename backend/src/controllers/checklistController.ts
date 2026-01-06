@@ -98,10 +98,9 @@ export async function submitChecklist(req: Request, res: Response) {
             const buf = Buffer.from(it.evidence_photo_base64, 'base64')
             const filename = `checklist_${Date.now()}_${uuidv4()}.jpg`
             // Save under backend/uploads as requested
-            const filepath = path.join(process.cwd(), 'backend', 'uploads', filename)
+            const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename)
             fs.mkdirSync(path.dirname(filepath), { recursive: true })
             fs.writeFileSync(filepath, buf)
-            // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
             try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
             const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`
             // public URL remains /uploads/<filename> — app.ts serves backend/uploads as one candidate
@@ -183,10 +182,9 @@ export async function submitChecklist(req: Request, res: Response) {
             try {
               const buf = Buffer.from(it.evidence_photo_base64, 'base64')
               const filename = `checklist_${Date.now()}_${uuidv4()}.jpg`
-              const filepath = path.join(process.cwd(), 'backend', 'uploads', filename)
+              const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename)
               fs.mkdirSync(path.dirname(filepath), { recursive: true })
               fs.writeFileSync(filepath, buf)
-              // Set file permissions to 0644 (readable by all, writable by owner) to avoid 403 errors
               try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
               const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`
               const publicUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`
