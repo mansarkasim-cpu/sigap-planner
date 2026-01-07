@@ -40,7 +40,9 @@ export default function LoginPage(){
     setError('')
     setLoading(true)
     try{
-      const res = await apiClient('/auth/login', { method: 'POST', body: { nipp, password } })
+      // POST to same-origin login endpoint. Nginx can proxy `/login` to
+      // the backend `/api/auth/login` if desired in production.
+      const res = await apiClient('/login', { method: 'POST', body: { nipp, password } })
       const token = res?.accessToken || res?.token || res?.access_token
       if (!token) throw new Error('No token returned')
       try { localStorage.setItem('token', token) } catch (e) {}
@@ -126,6 +128,7 @@ export default function LoginPage(){
             onChange={e=>setPassword(e.target.value)}
             fullWidth
             sx={{mb:2}}
+            inputProps={{ autoComplete: 'current-password' }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
