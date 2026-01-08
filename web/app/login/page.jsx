@@ -40,9 +40,8 @@ export default function LoginPage(){
     setError('')
     setLoading(true)
     try{
-      // POST to same-origin login endpoint. Nginx can proxy `/login` to
-      // the backend `/api/auth/login` if desired in production.
-      const res = await apiClient('/login', { method: 'POST', body: { nipp, password } })
+      // POST to auth login endpoint (resolves to /api/auth/login via API_BASE)
+      const res = await apiClient('/auth/login', { method: 'POST', body: { nipp, password } })
       const token = res?.accessToken || res?.token || res?.access_token
       if (!token) throw new Error('No token returned')
       try { localStorage.setItem('token', token) } catch (e) {}
