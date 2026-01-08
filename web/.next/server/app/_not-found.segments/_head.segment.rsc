@@ -1,7 +1,0 @@
-1:"$Sreact.fragment"
-2:I[51858,["/_next/static/chunks/062ae79751df2759.js","/_next/static/chunks/f33f80405d1b7df7.js","/_next/static/chunks/481839016574a6f6.js"],"ViewportBoundary"]
-4:I[51858,["/_next/static/chunks/062ae79751df2759.js","/_next/static/chunks/f33f80405d1b7df7.js","/_next/static/chunks/481839016574a6f6.js"],"MetadataBoundary"]
-5:"$Sreact.suspense"
-0:{"buildId":"N5VeLmMJQNjon6vUPV8E9","rsc":["$","$1","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],null]}],"loading":null,"isPartial":false}
-3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
-6:[["$","title","0",{"children":"SigapPlanner"}],["$","meta","1",{"name":"description","content":"Planner sederhana dengan tema ungu"}]]
