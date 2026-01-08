@@ -7,4 +7,5 @@ const router = (0, express_1.Router)();
 router.post("/auth/register", authController_1.registerHandler);
 router.post("/auth/login", authController_1.loginHandler);
 router.get("/auth/me", auth_1.authMiddleware, authController_1.meHandler);
+router.patch('/auth/me/password', auth_1.authMiddleware, authController_1.changePasswordHandler);
 exports.default = router;

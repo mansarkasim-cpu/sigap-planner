@@ -31,14 +31,29 @@ require("reflect-metadata");
 const typeorm_1 = require("typeorm");
 const dotenv = __importStar(require("dotenv"));
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 dotenv.config();
-const isProd = process.env.NODE_ENV === "production";
-const entitiesPath = isProd
-    ? path_1.default.join(__dirname, "entities", "*.js")
-    : path_1.default.join(__dirname, "src", "entities", "*.ts");
-const migrationsPath = isProd
-    ? path_1.default.join(__dirname, "migration", "*.js")
-    : path_1.default.join(__dirname, "migration", "*.ts");
+// Determine whether compiled JS entity files exist in the runtime directory.
+// This handles cases where NODE_ENV may not be set when running the compiled
+// code under systemd. If compiled JS entities are present (dist run), use
+// the .js globs; otherwise fall back to .ts for dev.
+const hasCompiledEntities = (() => {
+    try {
+        const entitiesDir = path_1.default.join(__dirname, 'entities');
+        if (!fs_1.default.existsSync(entitiesDir))
+            return false;
+        return fs_1.default.readdirSync(entitiesDir).some((f) => f.endsWith('.js'));
+    }
+    catch (e) {
+        return false;
+    }
+})();
+const entitiesGlob = hasCompiledEntities
+    ? path_1.default.join(__dirname, './entities/*.js')
+    : path_1.default.join(__dirname, './entities/*.ts');
+const migrationsGlob = hasCompiledEntities
+    ? path_1.default.join(__dirname, './migrations/*.js')
+    : path_1.default.join(__dirname, './migrations/*.ts');
 exports.AppDataSource = new typeorm_1.DataSource({
     // type: "postgres",
     // url: process.env.DATABASE_URL,
@@ -54,11 +69,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     database: process.env.DB_NAME || 'sigap',
     synchronize: false,
     logging: false,
-    // Entities: gunakan .ts saat dev (ts-node) dan .js saat production (dist)
-    entities: isProd
-        ? [path_1.default.join(__dirname, './entities/*.js')]
-        : [path_1.default.join(__dirname, './entities/*.ts')],
-    migrations: isProd
-        ? [path_1.default.join(__dirname, './migrations/*.js')]
-        : [path_1.default.join(__dirname, './migrations/*.ts')],
+    // Use detected globs so the runtime loads the correct entity files.
+    entities: [entitiesGlob],
+    migrations: [migrationsGlob],
 });

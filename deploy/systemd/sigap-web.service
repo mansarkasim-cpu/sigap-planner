@@ -11,7 +11,8 @@ Environment=NODE_ENV=production
 Environment=NEXT_PUBLIC_API_URL=https://sigap.jasamaritim.co.id/api
 Environment=PORT=3000
 Environment=NEXT_TELEMETRY_DISABLED=1
-ExecStart=/bin/npm start -- --hostname 0.0.0.0
+Environment="PATH=/home/deploy/.nvm/versions/node/v20.19.6/bin:/usr/bin:/bin"
+ExecStart=/home/deploy/.nvm/versions/node/v20.19.6/bin/node /home/deploy/.nvm/versions/node/v20.19.6/lib/node_modules/npm/bin/npm-cli.js start -- --hostname 0.0.0.0
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=10000

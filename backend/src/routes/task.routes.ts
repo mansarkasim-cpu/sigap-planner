@@ -30,11 +30,13 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
         [workOrderId]
       );
 
+      console.debug('[tasks] realisasi counts rows:', counts);
+
       // create quick lookup by task_id and by lower(task_name)
       const byId: Record<string, number> = {};
       const byName: Record<string, number> = {};
       for (const c of counts || []) {
-        const tid = c.task_id ? String(c.task_id) : '';
+        const tid = c.task_id ? String(c.task_id).toString().trim().toLowerCase() : '';
         const tname = c.task_name ? String(c.task_name).trim().toLowerCase() : '';
         const n = Number(c.realisasi_count || 0);
         if (tid) byId[tid] = (byId[tid] || 0) + n;
@@ -50,10 +52,12 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
          GROUP BY a.task_id, a.task_name`,
         [workOrderId]
       );
+
+      console.debug('[tasks] pending counts rows:', pendingRows);
       const byIdPending: Record<string, number> = {};
       const byNamePending: Record<string, number> = {};
       for (const c of pendingRows || []) {
-        const tid = c.task_id ? String(c.task_id) : '';
+        const tid = c.task_id ? String(c.task_id).toString().trim().toLowerCase() : '';
         const tname = c.task_name ? String(c.task_name).trim().toLowerCase() : '';
         const n = Number(c.pending_count || 0);
         if (tid) byIdPending[tid] = (byIdPending[tid] || 0) + n;
@@ -61,19 +65,26 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       }
 
       for (const t of rows) {
-        const tid = (t.id ?? t.external_id) ? String(t.id ?? t.external_id) : '';
+        // consider both external_id (legacy SIGAP id) and UUID `id` when matching assignment.task_id
+        const extId = t.external_id ? String(t.external_id).toString().trim().toLowerCase() : '';
+        const uuid = t.id ? String(t.id).toString().trim().toLowerCase() : '';
         const tname = (t.name ?? '').toString().trim().toLowerCase();
-        const cntById = tid && byId[tid] ? byId[tid] : 0;
-        const cntByName = tname && byName[tname] ? byName[tname] : 0;
-        const total = Math.max(cntById, cntByName);
-        (t as any).realisasi_count = total;
-        (t as any).has_realisasi = total > 0;
 
-        const pendById = tid && byIdPending[tid] ? byIdPending[tid] : 0;
-        const pendByName = tname && byNamePending[tname] ? byNamePending[tname] : 0;
-        const pendTotal = Math.max(pendById, pendByName);
-        (t as any).pending_realisasi_count = pendTotal;
-        (t as any).has_pending = pendTotal > 0;
+        const keys = Array.from(new Set([extId, uuid].filter(Boolean)));
+        let cntById = 0;
+        for (const k of keys) {
+          if (k && byId[k]) cntById += byId[k];
+        }
+        console.debug('[tasks] task keys:', keys, 'name:', tname, 'cntById:', cntById);
+        (t as any).realisasi_count = cntById;
+        (t as any).has_realisasi = cntById > 0;
+
+        let pendById = 0;
+        for (const k of keys) {
+          if (k && byIdPending[k]) pendById += byIdPending[k];
+        }
+        (t as any).pending_realisasi_count = pendById;
+        (t as any).has_pending = pendById > 0;
       }
     } catch (e) {
       console.warn('failed to compute per-task realisasi counts', e);

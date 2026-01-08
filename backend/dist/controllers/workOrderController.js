@@ -26,13 +26,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.updateWorkOrderDates = exports.fetchAndCreateFromSigap = exports.listWorkOrders = exports.listWorkOrdersPaginated = void 0;
+exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.fetchAndCreateFromSigap = exports.listWorkOrders = exports.listWorkOrdersPaginated = void 0;
 const axios_1 = __importDefault(require("axios"));
 const service = __importStar(require("../services/workOrderService"));
 const ormconfig_1 = require("../ormconfig");
 const Task_1 = require("../entities/Task");
 const Assignment_1 = require("../entities/Assignment");
 const WorkOrder_1 = require("../entities/WorkOrder");
+const User_1 = require("../entities/User");
 const console_1 = require("console");
 const SIGAP_BASE = process.env.SIGAP_API_BASE || 'https://sigap-api.pelindo.co.id';
 const SIGAP_BEARER_TOKEN = process.env.SIGAP_BEARER_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJKV1RTZXJ2aWNlQWNjZXNzVG9rZW4iLCJqdGkiOiIwMTQ2MzY3NS01NDA0LTQyMzQtOTQwYy0xNzA0NmI0M2VlNWUiLCJpYXQiOiIxNzY1MjY4MjExIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZWlkZW50aWZpZXIiOiI2MzQ0IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6IjEwNDM1NTEiLCJpZCI6IjYzNDQiLCJ1c2VybmFtZSI6IjEwNDM1NTEiLCJlbWFpbCI6ImFAdGVzdC5jb20iLCJjb21wYW55X2lkIjoiMSIsInN1cGVyYWRtaW4iOiIwIiwic3RhdHVzIjoiMSIsIm1hbmR0IjoiMzAwIiwicGVyc29uaWxfaWQiOiIxMzc5MiIsImV4cCI6NTU1MjA5MzgxMSwiaXNzIjoiQklNQSIsImF1ZCI6IkJJTUEifQ.ug1pTEw6JQc8--ZadUUCwKHh-iq5lFHgGldeRroazQw';
@@ -116,7 +117,11 @@ async function fetchAndCreateFromSigap(req, res) {
         (0, console_1.debug)('[SIGAP] formatted endSql:', endSql);
         const startIso = parseSigapDateToIso(rawStart ?? null);
         const endIso = parseSigapDateToIso(rawEnd ?? null);
-        // prefer ISO-parsed Date, fallback to SQL-like string converted to a Date by replacing space with 'T'
+        // NOTE: we intentionally store SQL-formatted datetime strings ("YYYY-MM-DD HH:mm:ss")
+        // without converting timezones. Avoid constructing JS Date objects here to prevent
+        // implicit timezone interpretation by the runtime.
+        // Keep parsed ISO/date objects only for diagnostics if needed, but do not pass them
+        // to the service when persisting.
         const startDateObj = startIso ? new Date(startIso) : (startSql ? new Date(startSql.replace(' ', 'T')) : undefined);
         const endDateObj = endIso ? new Date(endIso) : (endSql ? new Date(endSql.replace(' ', 'T')) : undefined);
         const mapped = {
@@ -128,9 +133,9 @@ async function fetchAndCreateFromSigap(req, res) {
             type_work: payload.type_work ?? undefined,
             work_type: payload.work_type ?? undefined,
             description: payload.description ?? undefined,
-            // pass Date objects to the service (matches service signature)
-            start_date: startDateObj ?? undefined,
-            end_date: endDateObj ?? undefined,
+            // store SQL strings as-is (no timezone conversion): prefer formatted SQL if available
+            start_date: startSql ?? undefined,
+            end_date: endSql ?? undefined,
             raw: payload ?? undefined,
         };
         console.log('[SIGAP] mapped start_date:', mapped.start_date, ' (from rawStart=', rawStart, ')');
@@ -248,7 +253,7 @@ function formatSigapToSqlDatetime(raw) {
 async function updateWorkOrderDates(req, res) {
     try {
         const id = req.params.id;
-        const { start_date, end_date } = req.body || {};
+        const { start_date, end_date, keterangan, note } = req.body || {};
         if (!start_date && !end_date) {
             return res.status(400).json({ message: 'start_date or end_date required' });
         }
@@ -259,7 +264,61 @@ async function updateWorkOrderDates(req, res) {
             return res.status(400).json({ message: 'Invalid start_date format' });
         if (end_date && isNaN(e.getTime()))
             return res.status(400).json({ message: 'Invalid end_date format' });
-        const updated = await service.updateWorkOrderDates(id, { start_date: s, end_date: e });
+        // validate end must be greater than start when both provided
+        if (s && e && e.getTime() <= s.getTime()) {
+            return res.status(400).json({ message: 'end_date must be after start_date' });
+        }
+        // capture minimal user info if available (authMiddleware attaches req.user)
+        const user = req.user;
+        function pickFirst(u, paths) {
+            if (!u)
+                return null;
+            for (const p of paths) {
+                const parts = p.split('.');
+                let cur = u;
+                let ok = true;
+                for (const part of parts) {
+                    if (cur == null) {
+                        ok = false;
+                        break;
+                    }
+                    cur = cur[part];
+                }
+                if (ok && cur != null)
+                    return cur;
+            }
+            return null;
+        }
+        let changedBy = null;
+        if (user) {
+            // start with claims present in token
+            changedBy = {
+                id: pickFirst(user, ['id', 'sub', 'userId', 'user_id']) || null,
+                nipp: pickFirst(user, ['nipp', 'nip', 'personil.nipp', 'personil.nip']) || null,
+                email: pickFirst(user, ['email', 'mail', 'user_email']) || null,
+                name: pickFirst(user, ['name', 'username', 'fullName', 'fullname', 'displayName', 'personil.name']) || null,
+            };
+            // if nipp or name missing, try to load full user profile from DB by id
+            try {
+                const uid = changedBy.id;
+                if (uid && (!changedBy.nipp || !changedBy.name)) {
+                    const ur = await ormconfig_1.AppDataSource.getRepository(User_1.User).findOneBy({ id: String(uid) });
+                    if (ur) {
+                        if (!changedBy.nipp && ur.nipp)
+                            changedBy.nipp = ur.nipp;
+                        if (!changedBy.name && ur.name)
+                            changedBy.name = ur.name;
+                        if (!changedBy.email && ur.email)
+                            changedBy.email = ur.email;
+                    }
+                }
+            }
+            catch (e) {
+                // ignore DB lookup failures
+                console.debug('failed to lookup user profile for changed_by enrichment', e);
+            }
+        }
+        const updated = await service.updateWorkOrderDates(id, { start_date: s, end_date: e, note: (keterangan || note) ?? undefined, changedBy });
         return res.json({ message: 'updated', data: updated });
     }
     catch (err) {
@@ -268,6 +327,18 @@ async function updateWorkOrderDates(req, res) {
     }
 }
 exports.updateWorkOrderDates = updateWorkOrderDates;
+async function getWorkOrderDateHistory(req, res) {
+    try {
+        const id = req.params.id;
+        const rows = await service.getWorkOrderDateHistory(id);
+        return res.json({ data: rows });
+    }
+    catch (err) {
+        console.error('getWorkOrderDateHistory error', err);
+        return res.status(500).json({ message: 'Failed to load date history' });
+    }
+}
+exports.getWorkOrderDateHistory = getWorkOrderDateHistory;
 /**
  * Ensure entity object converts Date fields to ISO strings.
  */
@@ -318,32 +389,6 @@ exports.getWorkOrderById = getWorkOrderById;
 async function deployWorkOrder(req, res) {
     try {
         const id = req.params.id;
-        // planner can choose whether to split assignments across shifts
-        const splitFlag = req.body && typeof req.body.split !== 'undefined' ? Boolean(req.body.split) : true;
-        // define shift defs and helper functions here so they are available both
-        // inside the task loop and later when attaching candidate technicians.
-        const SHIFT_DEFS = [
-            { id: 1, start: '08:00', end: '16:00' },
-            { id: 2, start: '16:00', end: '24:00' },
-            { id: 3, start: '00:00', end: '08:00' },
-        ];
-        function timeToMinutes(t) { const parts = String(t || '').split(':'); const hh = Number(parts[0] || 0); const mm = Number(parts[1] || 0); return hh * 60 + mm; }
-        function findShiftIdForDate(d) {
-            const hh = d.getHours();
-            const mm = d.getMinutes();
-            const mins = hh * 60 + mm;
-            for (const s of SHIFT_DEFS) {
-                const startM = timeToMinutes(s.start);
-                const endM = timeToMinutes(s.end === '24:00' ? '24:00' : s.end);
-                if (startM <= mins && mins < endM)
-                    return s.id;
-                if (startM > endM) {
-                    if (mins >= startM || mins < endM)
-                        return s.id;
-                }
-            }
-            return null;
-        }
         const woRepo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
         const wo = await woRepo.findOneBy({ id });
         if (!wo)
@@ -364,58 +409,6 @@ async function deployWorkOrder(req, res) {
             try {
                 const taskId = t.id;
                 const taskName = t.name ?? '';
-                // attempt to determine task-level scheduled start/end from workorder
-                let taskStart = null;
-                let taskEnd = null;
-                try {
-                    const ws = wo.start_date ?? wo.raw?.start_date ?? wo.raw?.date_start ?? null;
-                    const we = wo.end_date ?? wo.raw?.end_date ?? wo.raw?.date_end ?? null;
-                    if (ws)
-                        taskStart = new Date(ws);
-                    if (we)
-                        taskEnd = new Date(we);
-                }
-                catch (e) { }
-                // helper: split a time range into shift-aligned segments using SHIFT_DEFS
-                function splitIntoShiftSegments(s, e) {
-                    const out = [];
-                    if (!s || !e || e.getTime() <= s.getTime())
-                        return out;
-                    // build boundary times between s..e: for each date in range produce shift start times
-                    const boundaries = [s.getTime(), e.getTime()];
-                    const startDay = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-                    const endDay = new Date(e.getFullYear(), e.getMonth(), e.getDate());
-                    for (let dt = new Date(startDay); dt.getTime() <= endDay.getTime() + 24 * 60 * 60 * 1000; dt.setDate(dt.getDate() + 1)) {
-                        const year = dt.getFullYear(), month = dt.getMonth(), day = dt.getDate();
-                        for (const def of SHIFT_DEFS) {
-                            const [sh, sm] = def.start.split(':').map(x => Number(x || 0));
-                            // treat '24:00' not used in start
-                            const bd = new Date(year, month, day, sh, sm, 0, 0);
-                            boundaries.push(bd.getTime());
-                            // if def.end == '24:00', add next day 00:00
-                            if (def.end === '24:00') {
-                                const bd2 = new Date(year, month, day + 1, 0, 0, 0, 0);
-                                boundaries.push(bd2.getTime());
-                            }
-                            else {
-                                const [eh, em] = def.end.split(':').map(x => Number(x || 0));
-                                const bd3 = new Date(year, month, day, eh, em, 0, 0);
-                                boundaries.push(bd3.getTime());
-                            }
-                        }
-                    }
-                    const uniq = Array.from(new Set(boundaries)).sort((a, b) => a - b);
-                    for (let i = 0; i < uniq.length - 1; i++) {
-                        const segS = Math.max(s.getTime(), uniq[i]);
-                        const segE = Math.min(e.getTime(), uniq[i + 1]);
-                        if (segE > segS) {
-                            const sd = new Date(segS);
-                            const ed = new Date(segE);
-                            out.push({ start: sd, end: ed, shiftId: findShiftIdForDate(sd) });
-                        }
-                    }
-                    return out;
-                }
                 // pick first assigned user for this task (if any)
                 const assigns = t.assignments || [];
                 // additionally, gather any personils from workorder raw.labours that may represent assigned technicians
@@ -456,56 +449,26 @@ async function deployWorkOrder(req, res) {
                     // process Task.assignments first
                     for (const ta of assigns) {
                         const assigneeId = ta?.user?.id ?? ta?.user_id ?? ta?.userId ?? undefined;
-                        // if we have taskStart/taskEnd and planner opted-in, split into segments
-                        const segments = (taskStart && taskEnd && splitFlag) ? splitIntoShiftSegments(taskStart, taskEnd) : [];
-                        if (segments.length > 0) {
-                            for (const seg of segments) {
-                                const exists = await assignmentRepo.createQueryBuilder('a')
-                                    .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL)) AND COALESCE(a.scheduled_at, to_timestamp(0)) = :s', { wo: id, task: taskId, assignee: assigneeId ?? null, s: seg.start.toISOString() })
-                                    .getOne();
-                                if (exists) {
-                                    exists.assigneeId = assigneeId ?? exists.assigneeId;
-                                    exists.task_name = taskName || exists.task_name;
-                                    exists.status = 'DEPLOYED';
-                                    exists.scheduledAt = seg.start;
-                                    exists.scheduledEnd = seg.end;
-                                    const saved = await assignmentRepo.save(exists);
-                                    created.push(saved);
-                                    continue;
-                                }
-                                const a = new Assignment_1.Assignment();
-                                a.wo = wo;
-                                a.assigneeId = assigneeId;
-                                a.task_id = String(taskId);
-                                a.task_name = taskName;
-                                a.status = 'DEPLOYED';
-                                a.scheduledAt = seg.start;
-                                a.scheduledEnd = seg.end;
-                                const saved = await assignmentRepo.save(a);
-                                created.push(saved);
-                            }
-                        }
-                        else {
-                            const exists = await assignmentRepo.createQueryBuilder('a')
-                                .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-                                .getOne();
-                            if (exists) {
-                                exists.assigneeId = assigneeId ?? exists.assigneeId;
-                                exists.task_name = taskName || exists.task_name;
-                                exists.status = 'DEPLOYED';
-                                const saved = await assignmentRepo.save(exists);
-                                created.push(saved);
-                                continue;
-                            }
-                            const a = new Assignment_1.Assignment();
-                            a.wo = wo;
-                            a.assigneeId = assigneeId;
-                            a.task_id = String(taskId);
-                            a.task_name = taskName;
-                            a.status = 'DEPLOYED';
-                            const saved = await assignmentRepo.save(a);
+                        // avoid creating duplicate assignment for same wo+task+assignee
+                        const exists = await assignmentRepo.createQueryBuilder('a')
+                            .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
+                            .getOne();
+                        if (exists) {
+                            exists.assigneeId = assigneeId ?? exists.assigneeId;
+                            exists.task_name = taskName || exists.task_name;
+                            exists.status = 'DEPLOYED';
+                            const saved = await assignmentRepo.save(exists);
                             created.push(saved);
+                            continue;
                         }
+                        const a = new Assignment_1.Assignment();
+                        a.wo = wo;
+                        a.assigneeId = assigneeId;
+                        a.task_id = String(taskId);
+                        a.task_name = taskName;
+                        a.status = 'DEPLOYED';
+                        const saved = await assignmentRepo.save(a);
+                        created.push(saved);
                     }
                     // now process extraAssignees (nipp values) attempting to resolve to User by nipp
                     if (extraAssignees.length > 0) {
@@ -517,42 +480,20 @@ async function deployWorkOrder(req, res) {
                                         continue;
                                     const u = await userRepo.findOneBy({ nipp: String(nip) });
                                     const assigneeId = u ? String(u.id) : String(nip);
-                                    // if we have taskStart/taskEnd, create per-segment
-                                    const segments = (taskStart && taskEnd && splitFlag) ? splitIntoShiftSegments(taskStart, taskEnd) : [];
-                                    if (segments.length > 0) {
-                                        for (const seg of segments) {
-                                            const exists = await assignmentRepo.createQueryBuilder('a')
-                                                .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL)) AND COALESCE(a.scheduled_at, to_timestamp(0)) = :s', { wo: id, task: taskId, assignee: assigneeId ?? null, s: seg.start.toISOString() })
-                                                .getOne();
-                                            if (exists)
-                                                continue;
-                                            const a = new Assignment_1.Assignment();
-                                            a.wo = wo;
-                                            a.assigneeId = u ? String(u.id) : undefined;
-                                            a.task_id = String(taskId);
-                                            a.task_name = taskName;
-                                            a.status = 'DEPLOYED';
-                                            a.scheduledAt = seg.start;
-                                            a.scheduledEnd = seg.end;
-                                            const saved = await assignmentRepo.save(a);
-                                            created.push(saved);
-                                        }
-                                    }
-                                    else {
-                                        const exists = await assignmentRepo.createQueryBuilder('a')
-                                            .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-                                            .getOne();
-                                        if (exists)
-                                            continue;
-                                        const a = new Assignment_1.Assignment();
-                                        a.wo = wo;
-                                        a.assigneeId = u ? String(u.id) : undefined;
-                                        a.task_id = String(taskId);
-                                        a.task_name = taskName;
-                                        a.status = 'DEPLOYED';
-                                        const saved = await assignmentRepo.save(a);
-                                        created.push(saved);
-                                    }
+                                    // avoid duplicate creation when same id already created
+                                    const exists = await assignmentRepo.createQueryBuilder('a')
+                                        .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
+                                        .getOne();
+                                    if (exists)
+                                        continue;
+                                    const a = new Assignment_1.Assignment();
+                                    a.wo = wo;
+                                    a.assigneeId = u ? String(u.id) : undefined;
+                                    a.task_id = String(taskId);
+                                    a.task_name = taskName;
+                                    a.status = 'DEPLOYED';
+                                    const saved = await assignmentRepo.save(a);
+                                    created.push(saved);
                                 }
                                 catch (e) { }
                             }
@@ -585,58 +526,6 @@ async function deployWorkOrder(req, res) {
             catch (e) {
                 console.warn('failed to create assignment for task', t.id, e);
             }
-        }
-        // after creating assignments: attach candidate technicians for any created segment lacking assignee
-        try {
-            const userCandidates = {};
-            for (const c of created) {
-                try {
-                    const sa = c.scheduledAt;
-                    const assigneeId = c.assigneeId;
-                    if (!sa || assigneeId)
-                        continue;
-                    const dt = new Date(sa);
-                    if (isNaN(dt.getTime()))
-                        continue;
-                    // build date and time strings
-                    const pad = (n) => String(n).padStart(2, '0');
-                    const dateStr = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-                    const timeStr = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-                    const site = wo.vendor_cabang ?? wo.raw?.site ?? null;
-                    // determine shiftId for this scheduledAt
-                    const shiftId = findShiftIdForDate(dt);
-                    if (shiftId === null)
-                        continue;
-                    const params = [dateStr, shiftId];
-                    let siteCond = '';
-                    if (site) {
-                        params.push(String(site));
-                        siteCond = ' AND LOWER(COALESCE(a.site,\'\')) = LOWER($3)';
-                    }
-                    const sql = `
-            SELECT DISTINCT u.* FROM "user" u
-            JOIN (
-              SELECT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
-              FROM shift_group g
-            ) gm ON gm.member_id_text = u.id::text
-            JOIN shift_assignment a ON a.group_id = gm.gid
-            WHERE a.date = $1 ${siteCond} AND a.shift = $2
-          `;
-                    try {
-                        const rows = await ormconfig_1.AppDataSource.manager.query(sql, params);
-                        c.candidateTechnicians = rows || [];
-                    }
-                    catch (e) {
-                        c.candidateTechnicians = [];
-                    }
-                }
-                catch (e) {
-                    // ignore candidate fetch errors per-segment
-                }
-            }
-        }
-        catch (e) {
-            console.warn('failed to attach candidateTechnicians', e);
         }
         // update work order status
         wo.status = 'DEPLOYED';

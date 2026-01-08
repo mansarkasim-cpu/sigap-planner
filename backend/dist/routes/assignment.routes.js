@@ -112,8 +112,6 @@ router.get("/assignments", auth_1.authMiddleware, async (req, res) => {
         const qb = repo.createQueryBuilder("a").leftJoinAndSelect("a.wo", "wo");
         if (req.query.user)
             qb.andWhere("a.assigneeId = :user", { user: String(req.query.user) });
-        if (req.query.wo || req.query.wo_id)
-            qb.andWhere("a.wo_id = :wo", { wo: String(req.query.wo ?? req.query.wo_id) });
         if (req.query.status)
             qb.andWhere("a.status = :status", { status: String(req.query.status) });
         // log the generated SQL and parameters for debugging
