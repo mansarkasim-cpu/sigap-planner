@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.meHandler = exports.loginHandler = exports.registerHandler = void 0;
+exports.changePasswordHandler = exports.meHandler = exports.loginHandler = exports.registerHandler = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const ormconfig_1 = require("../ormconfig");
@@ -112,3 +112,34 @@ async function meHandler(req, res) {
     }
 }
 exports.meHandler = meHandler;
+async function changePasswordHandler(req, res) {
+    try {
+        const reqUser = req.user;
+        if (!reqUser?.id)
+            return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Missing token' });
+        const { currentPassword, newPassword } = req.body || {};
+        if (!newPassword)
+            return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'newPassword is required' });
+        const repo = ormconfig_1.AppDataSource.getRepository(User_1.User);
+        const user = await repo.findOne({ where: { id: reqUser.id } });
+        if (!user)
+            return res.status(404).json({ code: 'NOT_FOUND', message: 'User not found' });
+        // if user has an existing password, require currentPassword
+        if (user.password) {
+            if (!currentPassword)
+                return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'currentPassword is required' });
+            const ok = await bcryptjs_1.default.compare(String(currentPassword), user.password);
+            if (!ok)
+                return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Invalid current password' });
+        }
+        const hashed = await bcryptjs_1.default.hash(String(newPassword), 10);
+        user.password = hashed;
+        await repo.save(user);
+        return res.json({ message: 'password updated' });
+    }
+    catch (err) {
+        console.error('changePassword error', err);
+        return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to change password' });
+    }
+}
+exports.changePasswordHandler = changePasswordHandler;

@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///D:/Project/SigapPlanner/web/app/MuiProviders.jsx"],"sourcesContent":["'use client'\r\nimport { ThemeProvider, createTheme } from '@mui/material/styles'\r\nimport CssBaseline from '@mui/material/CssBaseline'\r\n\r\nconst theme = createTheme({\r\n  palette: {\r\n    primary: { main: '#7c3aed' },\r\n    secondary: { main: '#6d28d9' },\r\n    background: { default: '#fafafa', paper: '#fff' },\r\n  },\r\n  typography: {\r\n    fontFamily: \"Inter, Roboto, 'Helvetica Neue', Arial\",\r\n  },\r\n  shape: { borderRadius: 12 },\r\n})\r\n\r\nexport default function MuiProviders({ children }){\r\n  return (\r\n    <ThemeProvider theme={theme}>\r\n      <CssBaseline />\r\n      {children}\r\n    </ThemeProvider>\r\n  )\r\n}\r\n"],"names":[],"mappings":";;;;;AACA;AAAA;AACA;AAFA;;;;AAIA,MAAM,QAAQ,IAAA,0NAAW,EAAC;IACxB,SAAS;QACP,SAAS;YAAE,MAAM;QAAU;QAC3B,WAAW;YAAE,MAAM;QAAU;QAC7B,YAAY;YAAE,SAAS;YAAW,OAAO;QAAO;IAClD;IACA,YAAY;QACV,YAAY;IACd;IACA,OAAO;QAAE,cAAc;IAAG;AAC5B;AAEe,SAAS,aAAa,EAAE,QAAQ,EAAE;IAC/C,qBACE,qPAAC,gOAAa;QAAC,OAAO;;0BACpB,qPAAC,iLAAW;;;;;YACX;;;;;;;AAGP"}}]
-}

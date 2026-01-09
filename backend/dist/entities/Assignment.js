@@ -45,10 +45,6 @@ __decorate([
     __metadata("design:type", Date)
 ], Assignment.prototype, "scheduledAt", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'scheduled_end', type: "timestamptz", nullable: true }),
-    __metadata("design:type", Date)
-], Assignment.prototype, "scheduledEnd", void 0);
-__decorate([
     (0, typeorm_1.Column)({ length: 50, default: "ASSIGNED" }),
     __metadata("design:type", String)
 ], Assignment.prototype, "status", void 0);

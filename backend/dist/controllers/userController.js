@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncUserSitesFromWorkOrders = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.listUsers = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const ormconfig_1 = require("../ormconfig");
 const User_1 = require("../entities/User");
 const repo = () => ormconfig_1.AppDataSource.getRepository(User_1.User);
@@ -75,7 +79,9 @@ async function createUser(req, res) {
             if (existsEmail)
                 return res.status(409).json({ message: 'Email already exists' });
         }
-        const u = repo().create({ name, email: email ?? undefined, password, role: role || 'technician', site, nipp });
+        // hash password if provided
+        const hashed = password ? await bcryptjs_1.default.hash(String(password), 10) : undefined;
+        const u = repo().create({ name, email: email ?? undefined, password: hashed, role: role || 'technician', site, nipp });
         const saved = await repo().save(u);
         return res.status(201).json({ message: 'created', data: saved });
     }
@@ -104,8 +110,10 @@ async function updateUser(req, res) {
         }
         u.name = name ?? u.name;
         u.email = email ?? u.email;
-        if (password !== undefined)
-            u.password = password;
+        if (password !== undefined) {
+            // hash provided password
+            u.password = password ? await bcryptjs_1.default.hash(String(password), 10) : undefined;
+        }
         u.role = role ?? u.role;
         u.site = site ?? u.site;
         u.nipp = nipp ?? u.nipp;

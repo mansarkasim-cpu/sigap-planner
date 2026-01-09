@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateWorkOrderDates = exports.computeWorkOrderProgress = exports.getWorkOrdersPaginated = exports.createOrUpdateFromSigap = exports.getWorkOrderById = exports.getAllWorkOrders = void 0;
+exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.computeWorkOrderProgress = exports.getWorkOrdersPaginated = exports.createOrUpdateFromSigap = exports.getWorkOrderById = exports.getAllWorkOrders = void 0;
 // src/services/workOrderService.ts
 const ormconfig_1 = require("../ormconfig");
 const WorkOrder_1 = require("../entities/WorkOrder");
 const Task_1 = require("../entities/Task");
+const WorkOrderDateHistory_1 = require("../entities/WorkOrderDateHistory");
 async function getAllWorkOrders() {
     const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
     return repo.find({ order: { created_at: 'DESC' } });
@@ -299,22 +300,30 @@ async function getWorkOrdersPaginated(opts) {
         .take(pageSize);
     // inside getWorkOrdersPaginated after fetching rows...  
     const [rows, total] = await qb.getManyAndCount();
-    // convert date fields to ISO strings to ensure frontend receives plain JSON strings
-    // Note: subtract backend timezone offset (assume UTC+8) so frontend sees timestamps
-    // aligned to UTC expected by the Gantt chart.
-    const BACKEND_TZ_OFFSET_HOURS = 8;
-    const shiftDateToUtc = (val) => {
-        if (!val)
+    // Return date fields as-stored in the database. If TypeORM returned a Date
+    // object, format it as SQL-like 'YYYY-MM-DD HH:mm:ss' using server-local
+    // components so the frontend sees the same wall-clock values as in DB.
+    function formatDateToSql(val) {
+        if (val == null)
             return null;
-        const t = new Date(val).getTime();
-        if (isNaN(t))
+        if (typeof val === 'string')
+            return val;
+        const d = new Date(val);
+        if (isNaN(d.getTime()))
             return null;
-        return new Date(t - BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000).toISOString();
-    };
+        const pad = (n) => String(n).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const mm = pad(d.getMonth() + 1);
+        const dd = pad(d.getDate());
+        const hh = pad(d.getHours());
+        const mi = pad(d.getMinutes());
+        const ss = pad(d.getSeconds());
+        return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+    }
     const serialized = rows.map(r => ({
         ...r,
-        start_date: shiftDateToUtc(r.start_date),
-        end_date: shiftDateToUtc(r.end_date),
+        start_date: formatDateToSql(r.start_date),
+        end_date: formatDateToSql(r.end_date),
     }));
     console.log('  data count:', rows.length);
     // compute progress for each workorder (sum of task durations completed via realisasi)
@@ -408,13 +417,68 @@ async function computeWorkOrderProgress(workOrderId) {
 exports.computeWorkOrderProgress = computeWorkOrderProgress;
 async function updateWorkOrderDates(id, payload) {
     const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
+    const histRepo = ormconfig_1.AppDataSource.getRepository(WorkOrderDateHistory_1.WorkOrderDateHistory);
     const existing = await repo.findOneBy({ id });
     if (!existing)
         throw new Error('WorkOrder not found');
-    if (payload.start_date !== undefined)
+    const oldStart = existing.start_date || null;
+    const oldEnd = existing.end_date || null;
+    let changed = false;
+    if (payload.start_date !== undefined) {
         existing.start_date = payload.start_date;
-    if (payload.end_date !== undefined)
+        changed = true;
+    }
+    if (payload.end_date !== undefined) {
         existing.end_date = payload.end_date;
-    return repo.save(existing);
+        changed = true;
+    }
+    const saved = await repo.save(existing);
+    // record history if any date changed
+    if (changed) {
+        try {
+            // normalize changedBy to always include nipp and name fields (may be null)
+            const cb = payload.changedBy || null;
+            const changedByNormalized = cb ? {
+                id: cb.id ?? null,
+                nipp: cb.nipp ?? cb.nip ?? null,
+                name: cb.name ?? cb.username ?? null,
+                email: cb.email ?? null,
+            } : null;
+            const h = histRepo.create({
+                work_order_id: saved.id,
+                old_start: oldStart || null,
+                old_end: oldEnd || null,
+                new_start: saved.start_date || null,
+                new_end: saved.end_date || null,
+                note: payload.note || null,
+                changed_by: changedByNormalized,
+            });
+            await histRepo.save(h);
+        }
+        catch (e) {
+            console.warn('Failed to save work order date history', e);
+        }
+    }
+    return saved;
 }
 exports.updateWorkOrderDates = updateWorkOrderDates;
+async function getWorkOrderDateHistory(workOrderId) {
+    const histRepo = ormconfig_1.AppDataSource.getRepository(WorkOrderDateHistory_1.WorkOrderDateHistory);
+    const rows = await histRepo.createQueryBuilder('h')
+        .where('h.work_order_id = :wo', { wo: workOrderId })
+        .orderBy('h.changed_at', 'DESC')
+        .getMany();
+    // serialize dates to ISO strings
+    return rows.map(r => ({
+        id: r.id,
+        work_order_id: r.work_order_id,
+        old_start: r.old_start ? (new Date(r.old_start)).toISOString() : null,
+        old_end: r.old_end ? (new Date(r.old_end)).toISOString() : null,
+        new_start: r.new_start ? (new Date(r.new_start)).toISOString() : null,
+        new_end: r.new_end ? (new Date(r.new_end)).toISOString() : null,
+        note: r.note ?? null,
+        changed_by: r.changed_by ?? null,
+        changed_at: r.changed_at ? (new Date(r.changed_at)).toISOString() : null,
+    }));
+}
+exports.getWorkOrderDateHistory = getWorkOrderDateHistory;

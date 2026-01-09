@@ -34,7 +34,10 @@ router.get('/', ctrl.listWorkOrdersPaginated);
 router.post('/add', ctrl.fetchAndCreateFromSigap);
 router.post('/fetch-and-create', ctrl.fetchAndCreateFromSigap);
 // update start/end date: PATCH /api/work-orders/:id
-router.patch('/:id', ctrl.updateWorkOrderDates);
+// protect date edits and record who changed them
+router.patch('/:id', auth_1.authMiddleware, ctrl.updateWorkOrderDates);
+// get date-change history
+router.get('/:id/date-history', auth_1.authMiddleware, ctrl.getWorkOrderDateHistory);
 router.get('/:id', ctrl.getWorkOrderById);
 router.post('/:id/deploy', auth_1.authMiddleware, ctrl.deployWorkOrder);
 router.post('/:id/undeploy', auth_1.authMiddleware, ctrl.undeployWorkOrder);

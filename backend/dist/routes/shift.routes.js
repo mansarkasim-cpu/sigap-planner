@@ -18,9 +18,9 @@ const class_validator_1 = require("class-validator");
 const router = (0, express_1.Router)();
 // Shift definitions (must match frontend ShiftManager)
 const SHIFT_DEFS = [
-    { id: 1, start: '08:00', end: '16:00' },
-    { id: 2, start: '16:00', end: '24:00' },
-    { id: 3, start: '00:00', end: '08:00' },
+    { id: 1, start: '07:00', end: '15:00' },
+    { id: 2, start: '15:00', end: '23:00' },
+    { id: 3, start: '23:00', end: '07:00' },
 ];
 function timeToMinutes(t) {
     const m = String(t || '').trim();
@@ -46,6 +46,21 @@ function findShiftIdForTime(timeStr) {
         }
     }
     return null;
+}
+function dateMinusOne(dateStr) {
+    try {
+        const d = new Date(dateStr + 'T00:00:00');
+        if (isNaN(d.getTime()))
+            return dateStr;
+        d.setDate(d.getDate() - 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    catch (e) {
+        return dateStr;
+    }
 }
 class CreateGroupDTO {
 }
@@ -257,11 +272,31 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
         // determine shift from time if provided
         const shiftId = findShiftIdForTime(time);
         let shiftCond = '';
+        // If shift crosses midnight and the provided time is in the early-morning
+        // portion (e.g., 06:25 for shift 23:00-07:00), the logical assignment
+        // belongs to the previous calendar date. Adjust the date parameter
+        // we pass to SQL accordingly.
+        let effectiveDate = date;
+        if (shiftId !== null && time) {
+            const sDef = SHIFT_DEFS.find(s => s.id === shiftId);
+            if (sDef) {
+                const startM = timeToMinutes(sDef.start);
+                const endM = timeToMinutes(sDef.end === '24:00' ? '24:00' : sDef.end);
+                const mins = timeToMinutes(time);
+                if (startM > endM && mins < endM) {
+                    effectiveDate = dateMinusOne(date);
+                }
+            }
+        }
+        // Build params using effectiveDate (may be date-1 for cross-midnight shifts)
+        const finalParams = [effectiveDate];
+        if (site)
+            finalParams.push(site);
         if (shiftId !== null) {
-            params.push(shiftId);
-            const idx = params.length; // parameter index for SQL ($idx)
+            finalParams.push(shiftId);
+            const idx = finalParams.length;
             shiftCond = ` AND a.shift = $${idx}`;
-            console.debug('[scheduled-technicians] filtering by shift', { date, time, shiftId });
+            console.debug('[scheduled-technicians] filtering by shift', { date, time, shiftId, effectiveDate });
         }
         const sql = `
       SELECT DISTINCT u.* FROM "user" u
@@ -272,7 +307,7 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
       JOIN shift_assignment a ON a.group_id = gm.gid
       WHERE a.date = $1 ${siteCond} ${shiftCond}
     `;
-        const rows = await ormconfig_1.AppDataSource.manager.query(sql, params);
+        const rows = await ormconfig_1.AppDataSource.manager.query(sql, finalParams);
         return res.json(rows);
     }
     catch (err) {

@@ -40,6 +40,7 @@ export default function LoginPage(){
     setError('')
     setLoading(true)
     try{
+      // POST to auth login endpoint (resolves to /api/auth/login via API_BASE)
       const res = await apiClient('/auth/login', { method: 'POST', body: { nipp, password } })
       const token = res?.accessToken || res?.token || res?.access_token
       if (!token) throw new Error('No token returned')
@@ -126,6 +127,7 @@ export default function LoginPage(){
             onChange={e=>setPassword(e.target.value)}
             fullWidth
             sx={{mb:2}}
+            inputProps={{ autoComplete: 'current-password' }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">

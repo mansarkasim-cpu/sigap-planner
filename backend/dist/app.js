@@ -37,6 +37,9 @@ const workorder_routes_1 = __importDefault(require("./routes/workorder.routes"))
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const shift_routes_1 = __importDefault(require("./routes/shift.routes"));
 const task_routes_1 = __importDefault(require("./routes/task.routes"));
+const checklist_routes_1 = __importDefault(require("./routes/checklist.routes"));
+const master_routes_1 = __importDefault(require("./routes/master.routes"));
+const monitoring_routes_1 = __importDefault(require("./routes/monitoring.routes"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const app = (0, express_1.default)();
@@ -56,6 +59,25 @@ app.use((0, cors_1.default)({
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
+// Handle Private Network Access preflight (Chrome PNA). When the browser
+// requests access to a more-private address space (e.g. loopback), it will
+// include the `Access-Control-Request-Private-Network` header on the OPTIONS
+// preflight. Respond with `Access-Control-Allow-Private-Network: true` to
+// permit the request. Also expose header for actual responses.
+app.use((req, res, next) => {
+    try {
+        const acrpn = req.headers['access-control-request-private-network'];
+        if (req.method === 'OPTIONS' && acrpn) {
+            res.setHeader('Access-Control-Allow-Private-Network', 'true');
+        }
+        // include on all responses as a fallback
+        res.setHeader('Access-Control-Expose-Headers', (res.getHeader('Access-Control-Expose-Headers') || '') + ', Access-Control-Allow-Private-Network');
+    }
+    catch (e) {
+        // ignore header-setting errors
+    }
+    next();
+});
 // Basic root for /api to avoid "Cannot GET /api"
 app.get("/api", (req, res) => {
     return res.json({
@@ -73,11 +95,46 @@ app.use('/api/work-orders', workorder_routes_1.default);
 app.use('/api/users', user_routes_1.default);
 app.use('/api', shift_routes_1.default);
 app.use('/api', task_routes_1.default);
+app.use('/api', checklist_routes_1.default);
+app.use('/api', master_routes_1.default);
+app.use('/api', monitoring_routes_1.default);
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swagger_routes_1.default);
 // static uploads (dev)
 const path_1 = __importDefault(require("path"));
-app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "uploads")));
+const fs_1 = __importDefault(require("fs"));
+// Serve uploads from a configurable directory. In production the process
+// cwd may differ from the source tree; prefer explicit `UPLOADS_DIR` env var
+// but fall back to several sensible locations (project-level `uploads` or
+// `upload`, or compiled `dist/../uploads`). This registers both `/uploads`
+// and `/upload` so existing links work.
+const UPLOADS_DIR_ENV = process.env.UPLOADS_DIR || '';
+// Prefer a top-level `uploads` under the current working directory. When the
+// server is started from the `backend` folder, `process.cwd()` already points
+// to `.../backend`, so using `path.join(process.cwd(),'backend','uploads')`
+// can incorrectly produce `backend/backend/uploads`. Try several sensible
+// locations with `cwd/uploads` first.
+const cwd = process.cwd();
+const uploadsCandidates = [
+    UPLOADS_DIR_ENV,
+    path_1.default.join(cwd, 'uploads'),
+    path_1.default.join(cwd, 'backend', 'uploads'),
+    path_1.default.join(__dirname, '..', 'uploads'),
+    path_1.default.join(cwd, 'upload'),
+    path_1.default.join(__dirname, '..', 'upload'),
+].map(p => (p || '').toString());
+const uploadsDirFound = uploadsCandidates.find((p) => p && fs_1.default.existsSync(p));
+// Fallback to `cwd/uploads` when nothing exists yet; create the folder so static serving works
+const defaultUploads = path_1.default.join(cwd, 'uploads');
+const finalUploadsDir = uploadsDirFound || (UPLOADS_DIR_ENV || defaultUploads);
+try {
+    fs_1.default.mkdirSync(finalUploadsDir, { recursive: true });
+}
+catch (e) { /* ignore */ }
+// Log final uploads dir for debugging static file serving
+console.log('finalUploadsDir=', finalUploadsDir);
+app.use('/uploads', express_1.default.static(finalUploadsDir));
+app.use('/upload', express_1.default.static(finalUploadsDir));
 // handle preflight for all routes (optional but safe)
 app.options('*', (0, cors_1.default)());
 app.use((err, req, res, next) => {

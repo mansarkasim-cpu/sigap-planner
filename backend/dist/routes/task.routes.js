@@ -34,11 +34,12 @@ router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => 
          JOIN realisasi r ON r.assignment_id = a.id
          WHERE a.wo_id = $1
          GROUP BY a.task_id, a.task_name`, [workOrderId]);
+            console.debug('[tasks] realisasi counts rows:', counts);
             // create quick lookup by task_id and by lower(task_name)
             const byId = {};
             const byName = {};
             for (const c of counts || []) {
-                const tid = c.task_id ? String(c.task_id) : '';
+                const tid = c.task_id ? String(c.task_id).toString().trim().toLowerCase() : '';
                 const tname = c.task_name ? String(c.task_name).trim().toLowerCase() : '';
                 const n = Number(c.realisasi_count || 0);
                 if (tid)
@@ -52,10 +53,11 @@ router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => 
          JOIN pending_realisasi p ON p.assignment_id = a.id
          WHERE a.wo_id = $1 AND p.status = 'PENDING'
          GROUP BY a.task_id, a.task_name`, [workOrderId]);
+            console.debug('[tasks] pending counts rows:', pendingRows);
             const byIdPending = {};
             const byNamePending = {};
             for (const c of pendingRows || []) {
-                const tid = c.task_id ? String(c.task_id) : '';
+                const tid = c.task_id ? String(c.task_id).toString().trim().toLowerCase() : '';
                 const tname = c.task_name ? String(c.task_name).trim().toLowerCase() : '';
                 const n = Number(c.pending_count || 0);
                 if (tid)
@@ -64,18 +66,26 @@ router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => 
                     byNamePending[tname] = (byNamePending[tname] || 0) + n;
             }
             for (const t of rows) {
-                const tid = (t.id ?? t.external_id) ? String(t.id ?? t.external_id) : '';
+                // consider both external_id (legacy SIGAP id) and UUID `id` when matching assignment.task_id
+                const extId = t.external_id ? String(t.external_id).toString().trim().toLowerCase() : '';
+                const uuid = t.id ? String(t.id).toString().trim().toLowerCase() : '';
                 const tname = (t.name ?? '').toString().trim().toLowerCase();
-                const cntById = tid && byId[tid] ? byId[tid] : 0;
-                const cntByName = tname && byName[tname] ? byName[tname] : 0;
-                const total = Math.max(cntById, cntByName);
-                t.realisasi_count = total;
-                t.has_realisasi = total > 0;
-                const pendById = tid && byIdPending[tid] ? byIdPending[tid] : 0;
-                const pendByName = tname && byNamePending[tname] ? byNamePending[tname] : 0;
-                const pendTotal = Math.max(pendById, pendByName);
-                t.pending_realisasi_count = pendTotal;
-                t.has_pending = pendTotal > 0;
+                const keys = Array.from(new Set([extId, uuid].filter(Boolean)));
+                let cntById = 0;
+                for (const k of keys) {
+                    if (k && byId[k])
+                        cntById += byId[k];
+                }
+                console.debug('[tasks] task keys:', keys, 'name:', tname, 'cntById:', cntById);
+                t.realisasi_count = cntById;
+                t.has_realisasi = cntById > 0;
+                let pendById = 0;
+                for (const k of keys) {
+                    if (k && byIdPending[k])
+                        pendById += byIdPending[k];
+                }
+                t.pending_realisasi_count = pendById;
+                t.has_pending = pendById > 0;
             }
         }
         catch (e) {
@@ -114,6 +124,35 @@ router.get('/work-orders/:id/realisasi', auth_1.authMiddleware, async (req, res)
     catch (e) {
         console.error('failed to fetch realisasi summary for workorder', e);
         return res.status(500).json({ message: 'Failed to fetch realisasi summary' });
+    }
+});
+// GET /api/work-orders/:id/realisasi/full - detailed realisasi entries with notes and photo
+router.get('/work-orders/:id/realisasi/full', auth_1.authMiddleware, async (req, res) => {
+    try {
+        const workOrderId = req.params.id;
+        const rows = await ormconfig_1.AppDataSource.query(`SELECT r.id, r.start_time, r.end_time, r.notes, r.photo_url, r.signature_url, a.id AS assignment_id, a.task_id, a.task_name, u.id AS user_id, u.name AS user_name, u.nipp AS user_nipp
+         FROM realisasi r
+         JOIN assignment a ON r.assignment_id = a.id
+         LEFT JOIN "user" u ON (a.assignee_id = u.id)
+         WHERE a.wo_id = $1
+         ORDER BY r.start_time ASC`, [workOrderId]);
+        const items = (rows || []).map((r) => ({
+            id: r.id,
+            start: r.start_time || null,
+            end: r.end_time || null,
+            notes: r.notes || null,
+            photoUrl: r.photo_url || r.photoUrl || null,
+            signatureUrl: r.signature_url || r.signatureUrl || null,
+            assignmentId: r.assignment_id,
+            taskId: r.task_id,
+            taskName: r.task_name,
+            user: { id: r.user_id, name: r.user_name, nipp: r.user_nipp }
+        }));
+        return res.json({ items });
+    }
+    catch (e) {
+        console.error('failed to fetch full realisasi entries for workorder', e);
+        return res.status(500).json({ message: 'Failed to fetch realisasi entries' });
     }
 });
 class CreateTaskDTO {

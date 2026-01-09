@@ -1,0 +1,11 @@
+﻿{
+  "alat_id": 1,
+  "items": [
+    {
+      "question_id": 1,
+      "answer_text": "false",
+      "evidence_note": "test evidence",
+      "evidence_photo_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQotAAAAAElFTkSuQmCC"
+    }
+  ]
+}
