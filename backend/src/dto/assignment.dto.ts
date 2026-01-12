@@ -3,7 +3,7 @@ import { IsUUID, IsNotEmpty, IsOptional, IsString } from "class-validator";
 export class RealisasiCreateDTO {
   @IsUUID()
   @IsNotEmpty()
-  assignmentId!: string;
+  taskId!: string;
 
   @IsString()
   @IsOptional()

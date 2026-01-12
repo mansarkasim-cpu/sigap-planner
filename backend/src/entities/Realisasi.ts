@@ -1,14 +1,14 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm";
-import { Assignment } from "./Assignment";
+import { Task } from "./Task";
 
 @Entity({ name: "realisasi" })
 export class Realisasi {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
-  @ManyToOne(() => Assignment, (a) => a.realisasi, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "assignment_id" })
-  assignment!: Assignment;
+  @ManyToOne(() => Task, (t) => t.assignments, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "task_id" })
+  task!: Task;
 
   @Column({ type: "text", nullable: true })
   notes?: string | null;

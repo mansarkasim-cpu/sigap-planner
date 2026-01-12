@@ -33,9 +33,19 @@ class LocalDB {
     return _checklists.where((r) => r['assignmentId'] == assignmentId).toList();
   }
 
-  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? notes, String? photoPath}) async {
+  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath}) async {
     _queued.removeWhere((r) => r['id'] == id);
-    _queued.add({'id': id, 'assignmentId': assignmentId, 'notes': notes, 'photoPath': photoPath, 'startTime': null, 'endTime': null, 'submitted': 0, 'createdAt': DateTime.now().millisecondsSinceEpoch});
+    _queued.add({
+      'id': id,
+      'assignmentId': assignmentId,
+      'taskId': taskId,
+      'notes': notes,
+      'photoPath': photoPath,
+      'startTime': null,
+      'endTime': null,
+      'submitted': 0,
+      'createdAt': DateTime.now().millisecondsSinceEpoch
+    });
   }
 
   Future<List<Map<String, dynamic>>> getQueuedRealisasi() async => _queued.where((r) => r['submitted'] == 0).toList();

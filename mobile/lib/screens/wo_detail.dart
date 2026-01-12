@@ -226,6 +226,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       final endTime = DateTime.now();
       final body = {
         'assignmentId': widget.assignmentId,
+        'taskId': (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString(),
         'notes': _keterangan?.trim() ?? null,
         'photoBase64': bytes != null ? base64Encode(bytes) : null,
         'startTime': startTime?.toIso8601String(),
@@ -346,7 +347,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           if (savedBytes != null) {
             final photoPath = await LocalDB.instance.savePhotoFile(savedBytes, filename: 'queued_${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
             final qid = '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
-            await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, notes: _keterangan, photoPath: photoPath);
+            final qTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
+            await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, taskId: qTaskId, notes: _keterangan, photoPath: photoPath);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim, gambar disimpan dan akan dikirim ulang nanti.')));
           }
         } catch (qe) {
@@ -1005,6 +1007,23 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final bool _canStart = (assignmentStatus == 'ASSIGNED' ||
         assignmentStatus == 'DEPLOYED');
+    final bool _selectedHasRealisasi = (() {
+      try {
+        if (_selectedTaskId == null) return false;
+        final sel = tasks.firstWhere((t) {
+          final tid = (t['id'] ?? t['_id'] ?? t['taskId'] ?? '')?.toString() ?? '';
+          return tid == _selectedTaskId;
+        }, orElse: () => null);
+        if (sel == null) return false;
+        final rCount = int.tryParse((sel['realisasi_count'] ?? sel['realisasiCount'] ?? sel['realisasi']?.length ?? 0).toString()) ?? 0;
+        final pCount = int.tryParse((sel['pending_realisasi_count'] ?? sel['pendingRealisasiCount'] ?? sel['pending_realisasi']?.length ?? sel['pending']?.length ?? 0).toString()) ?? 0;
+        final hasFlag = (sel['has_realisasi'] == true) || (rCount > 0);
+        final pendingFlag = (sel['has_pending_realisasi'] == true) || (pCount > 0);
+        final st = (assignmentStatus ?? '').toString().toUpperCase();
+        final assignCompleted = (st.contains('COMP') || st.contains('VERIF') || st.contains('DONE') || st.contains('APPROV') || st.contains('OK') || st.contains('REALISASI'));
+        return hasFlag || pendingFlag || assignCompleted;
+      } catch (_) { return false; }
+    })();
     return Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -1099,6 +1118,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                             Text(woDetail?['description'] ?? '-',
                                 maxLines: 3, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 12),
+                            // determine if the selected task or assignment already has realisasi/completed
                             // Tools
                             Builder(builder: (_) {
                               final tools = _extractTools();
@@ -1638,10 +1658,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                               ),
                             ),
                             // Submit Realisasi button (enabled when progress reaches 100%)
-                            if ((assignmentStatus ?? '')
-                                    .toString()
-                                    .toUpperCase() !=
-                                'DEPLOYED')
+                            if (!_selectedHasRealisasi)
                               Padding(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 12),
@@ -1662,7 +1679,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                 ),
               ),
                   // Floating swipe control (only visible when available)
-                  if (_canStart)
+                  if (_canStart && !_selectedHasRealisasi)
                     Positioned(
                       bottom: 16,
                       left: 16,

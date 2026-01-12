@@ -43,6 +43,7 @@ class LocalDB {
         CREATE TABLE queued_realisasi (
           id TEXT PRIMARY KEY,
           assignmentId TEXT,
+          taskId TEXT,
           notes TEXT,
           photoPath TEXT,
           startTime INTEGER,
@@ -52,6 +53,28 @@ class LocalDB {
         )
       ''');
     });
+
+    // Ensure runtime migrations: if DB was created before adding startTime/endTime,
+    // add the columns so inserts don't fail. This is idempotent.
+    try {
+      final cols = await _db!.rawQuery("PRAGMA table_info('queued_realisasi')");
+      final colNames = cols.map((r) => (r['name'] as String).toLowerCase()).toSet();
+      if (!colNames.contains('taskid')) {
+        try {
+          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN taskId TEXT');
+        } catch (_) {}
+      }
+      if (!colNames.contains('starttime')) {
+        try {
+          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN startTime INTEGER');
+        } catch (_) {}
+      }
+      if (!colNames.contains('endtime')) {
+        try {
+          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN endTime INTEGER');
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   Future<String> _savePhotoToFile(Uint8List bytes, String filename) async {
@@ -119,12 +142,13 @@ class LocalDB {
     return out;
   }
 
-  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? notes, String? photoPath}) async {
+  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath}) async {
     await init();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db!.insert('queued_realisasi', {
       'id': id,
       'assignmentId': assignmentId,
+      'taskId': taskId,
       'notes': notes,
       'photoPath': photoPath,
       'startTime': null,
