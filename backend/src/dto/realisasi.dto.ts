@@ -31,7 +31,7 @@ export async function createAssignment(req: Request, res: Response) {
   const wo = await woRepo().findOneBy({ id: dto.woId });
   if (!wo) return res.status(404).json({ message: "WO not found" });
 
-  const assignment = new Assignment();
+  const assignment = assignmentRepo().create();
   assignment.wo = wo;
   assignment.assigneeId = dto.assigneeId;
   assignment.assignedBy = dto.assignedBy;

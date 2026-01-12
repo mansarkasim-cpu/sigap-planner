@@ -124,7 +124,7 @@ const uploadsCandidates = [
     path_1.default.join(__dirname, '..', 'upload'),
 ].map(p => (p || '').toString());
 const uploadsDirFound = uploadsCandidates.find((p) => p && fs_1.default.existsSync(p));
-// Fallback to `cwd/uploads` when nothing exists yet; create the folder so static serving works
+// Fallback to `cwd/uploads` when nothing exists yet; create folder so static serving works
 const defaultUploads = path_1.default.join(cwd, 'uploads');
 const finalUploadsDir = uploadsDirFound || (UPLOADS_DIR_ENV || defaultUploads);
 try {

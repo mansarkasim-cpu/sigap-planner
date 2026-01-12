@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PendingRealisasi = void 0;
 const typeorm_1 = require("typeorm");
-const Assignment_1 = require("./Assignment");
+const Task_1 = require("./Task");
 let PendingRealisasi = class PendingRealisasi {
 };
 __decorate([
@@ -19,10 +19,10 @@ __decorate([
     __metadata("design:type", String)
 ], PendingRealisasi.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Assignment_1.Assignment, (a) => a.realisasi, { onDelete: 'CASCADE' }),
-    (0, typeorm_1.JoinColumn)({ name: 'assignment_id' }),
-    __metadata("design:type", Assignment_1.Assignment)
-], PendingRealisasi.prototype, "assignment", void 0);
+    (0, typeorm_1.ManyToOne)(() => Task_1.Task, (t) => t.assignments, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({ name: 'task_id' }),
+    __metadata("design:type", Task_1.Task)
+], PendingRealisasi.prototype, "task", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", Object)
