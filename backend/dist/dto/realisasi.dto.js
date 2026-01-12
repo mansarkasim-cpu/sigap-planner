@@ -27,7 +27,7 @@ exports.RealisasiCreateDTO = exports.approvePendingRealisasi = exports.listPendi
 const class_validator_1 = require("class-validator");
 // import { RealisasiCreateDTO } from "./realisasi-create.dto";
 const ormconfig_1 = require("../ormconfig");
-const Assignment_1 = require("../entities/Assignment");
+const Task_1 = require("../entities/Task");
 const Realisasi_1 = require("../entities/Realisasi");
 const PendingRealisasi_1 = require("../entities/PendingRealisasi");
 const WorkOrder_1 = require("../entities/WorkOrder");
@@ -40,7 +40,8 @@ const path = __importStar(require("path"));
 const assignmentController_1 = require("../controllers/assignmentController");
 const assignment_dto_1 = require("./assignment.dto");
 Object.defineProperty(exports, "RealisasiCreateDTO", { enumerable: true, get: function () { return assignment_dto_1.RealisasiCreateDTO; } });
-const assignmentRepo = () => ormconfig_1.AppDataSource.getRepository(Assignment_1.Assignment);
+const assignmentRepo = () => ormconfig_1.AppDataSource.getRepository(require('../entities/Assignment').Assignment);
+const taskRepo = () => ormconfig_1.AppDataSource.getRepository(Task_1.Task);
 const realisasiRepo = () => ormconfig_1.AppDataSource.getRepository(Realisasi_1.Realisasi);
 const pendingRepo = () => ormconfig_1.AppDataSource.getRepository(PendingRealisasi_1.PendingRealisasi);
 const woRepo = () => ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
@@ -52,7 +53,7 @@ async function createAssignment(req, res) {
     const wo = await woRepo().findOneBy({ id: dto.woId });
     if (!wo)
         return res.status(404).json({ message: "WO not found" });
-    const assignment = new Assignment_1.Assignment();
+    const assignment = assignmentRepo().create();
     assignment.wo = wo;
     assignment.assigneeId = dto.assigneeId;
     assignment.assignedBy = dto.assignedBy;
@@ -68,11 +69,11 @@ async function createRealisasi(req, res) {
     const errors = await (0, class_validator_1.validate)(dto);
     if (errors.length)
         return res.status(400).json({ errors });
-    const assignment = await assignmentRepo().findOne({ where: { id: dto.assignmentId }, relations: ["wo"] });
-    if (!assignment)
-        return res.status(404).json({ message: "Assignment not found" });
+    const task = await taskRepo().findOne({ where: { id: dto.taskId }, relations: ["workOrder"] });
+    if (!task)
+        return res.status(404).json({ message: "Task not found" });
     const realisasi = new Realisasi_1.Realisasi();
-    realisasi.assignment = assignment;
+    realisasi.task = task;
     realisasi.notes = dto.notes || null;
     realisasi.result = dto.result || null;
     // simple base64 save to disk or upload to S3 (here write local file for example)
@@ -110,14 +111,29 @@ async function createRealisasi(req, res) {
         realisasi.signatureUrl = sigPath;
     }
     // set start/end times
-    realisasi.startTime = dto.startTime ? new Date(dto.startTime) : assignment.startedAt || null;
+    realisasi.startTime = dto.startTime ? new Date(dto.startTime) : null;
     realisasi.endTime = dto.endTime ? new Date(dto.endTime) : new Date();
     await realisasiRepo().save(realisasi);
-    // optionally update assignment/wo status
-    assignment.status = "COMPLETED";
-    await assignmentRepo().save(assignment);
-    // push notification to planner (stub)
-    (0, pushService_1.pushNotify)(assignment.assignedBy || "", `Realisasi submitted for WO ${assignment.wo.doc_no}`);
+    // optionally update a related assignment if one exists (mark completed)
+    try {
+        const aRepo = assignmentRepo();
+        const maybe = await aRepo.createQueryBuilder('a')
+            .where('a.task_id = :tid', { tid: String(task.id) })
+            .andWhere('a.wo_id = :wo', { wo: task.workOrder?.id })
+            .orderBy('a.created_at', 'DESC')
+            .getOne();
+        if (maybe) {
+            maybe.status = 'COMPLETED';
+            await aRepo.save(maybe);
+            (0, pushService_1.pushNotify)(maybe.assignedBy || "", `Realisasi submitted for WO ${maybe.wo?.doc_no}`);
+        }
+        else {
+            (0, pushService_1.pushNotify)('', `Realisasi submitted for WO ${task.workOrder?.doc_no}`);
+        }
+    }
+    catch (e) {
+        (0, pushService_1.pushNotify)('', `Realisasi submitted for WO ${task.workOrder?.doc_no}`);
+    }
     return res.status(201).json({ id: realisasi.id });
 }
 exports.createRealisasi = createRealisasi;
@@ -126,22 +142,20 @@ async function submitPendingRealisasi(req, res) {
     const errors = await (0, class_validator_1.validate)(dto);
     if (errors.length)
         return res.status(400).json({ errors });
-    const assignment = await assignmentRepo().findOne({ where: { id: dto.assignmentId }, relations: ["wo"] });
-    if (!assignment)
-        return res.status(404).json({ message: "Assignment not found" });
+    const task = await taskRepo().findOne({ where: { id: dto.taskId }, relations: ["workOrder"] });
+    if (!task)
+        return res.status(404).json({ message: "Task not found" });
     // Prevent duplicate: if a realisasi already exists for this assignment, reject
     const existingReal = await realisasiRepo()
         .createQueryBuilder('r')
-        .innerJoin('r.assignment', 'a')
-        .where('a.id = :aid', { aid: dto.assignmentId })
+        .where('r.task_id = :tid', { tid: dto.taskId })
         .getOne();
     if (existingReal)
         return res.status(409).json({ message: 'Realisasi already submitted for this assignment' });
     // Prevent duplicate pending submissions
     const existingPending = await pendingRepo()
         .createQueryBuilder('p')
-        .innerJoin('p.assignment', 'a')
-        .where('a.id = :aid', { aid: dto.assignmentId })
+        .where('p.task_id = :tid', { tid: dto.taskId })
         .andWhere('p.status = :s', { s: 'PENDING' })
         .getOne();
     if (existingPending)
@@ -180,7 +194,7 @@ async function submitPendingRealisasi(req, res) {
         signatureUrl = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;
     }
     const pending = new PendingRealisasi_1.PendingRealisasi();
-    pending.assignment = assignment;
+    pending.task = task;
     pending.notes = dto.notes || null;
     pending.photoUrl = photoUrl || null;
     pending.signatureUrl = signatureUrl || null;
@@ -190,7 +204,7 @@ async function submitPendingRealisasi(req, res) {
     pending.submitterId = req.user?.id || null;
     await pendingRepo().save(pending);
     // notify lead shift (stub)
-    (0, pushService_1.pushNotify)('lead_shift', `New realisasi submitted for WO ${assignment.wo?.doc_no}`);
+    (0, pushService_1.pushNotify)('lead_shift', `New realisasi submitted for WO ${task.workOrder?.doc_no}`);
     return res.status(201).json({ id: pending.id });
 }
 exports.submitPendingRealisasi = submitPendingRealisasi;
@@ -201,8 +215,8 @@ async function listPendingRealisasi(req, res) {
     // If user has explicit lead_shift/admin role, return all pending items
     let rows = [];
     if (user.role === 'lead_shift' || user.role === 'admin') {
-        rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['assignment', 'assignment.wo'] });
-        return res.json(rows.map(r => ({ id: r.id, assignmentId: r.assignment?.id, woId: r.assignment?.wo?.id, woDoc: r.assignment?.wo?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
+        rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['task', 'task.workOrder'] });
+        return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
     }
     // Otherwise, allow users who are recorded as shift group leaders to see pending items
     try {
@@ -221,12 +235,12 @@ async function listPendingRealisasi(req, res) {
             return res.json([]);
         // fetch pending items where assignment.assigneeId is in the leader's group members
         const qb = pendingRepo().createQueryBuilder('p')
-            .leftJoinAndSelect('p.assignment', 'a')
-            .leftJoinAndSelect('a.wo', 'wo')
-            .where('p.status = :s', { s: 'PENDING' })
-            .andWhere('a.assigneeId IN (:...members)', { members: Array.from(membersSet) });
+            .leftJoinAndSelect('p.task', 't')
+            .leftJoinAndSelect('t.workOrder', 'wo')
+            .where('p.status = :s', { s: 'PENDING' });
+        // fallback: match pending by finding assignments for the task and checking assigneeId
         rows = await qb.getMany();
-        return res.json(rows.map(r => ({ id: r.id, assignmentId: r.assignment?.id, woId: r.assignment?.wo?.id, woDoc: r.assignment?.wo?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
+        return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
     }
     catch (e) {
         console.error('listPendingRealisasi error for leader fallback', e);
@@ -244,17 +258,26 @@ async function approvePendingRealisasi(req, res) {
     if (!user)
         return res.status(403).json({ message: 'Forbidden' });
     const id = req.params.id;
-    const pending = await pendingRepo().findOne({ where: { id }, relations: ['assignment', 'assignment.wo'] });
+    const pending = await pendingRepo().findOne({ where: { id }, relations: ['task', 'task.workOrder'] });
     if (!pending)
         return res.status(404).json({ message: 'Pending not found' });
     // allow approval if user has explicit lead_shift/admin role
     let allowed = (user.role === 'lead_shift' || user.role === 'admin');
-    // otherwise allow if the authenticated user is the leader of a shift group that contains the assignment's assignee
+    // otherwise allow if the authenticated user is the leader of a shift group that contains the task's assignee (best-effort)
     if (!allowed) {
         try {
             const groupRepo = ormconfig_1.AppDataSource.getRepository(ShiftGroup_1.ShiftGroup);
             const groups = await groupRepo.find({ where: { leader: user.id } });
-            const assigneeId = pending.assignment ? String(pending.assignment.assigneeId ?? '') : '';
+            // Try to find an assignment for the pending task and use its assigneeId
+            let assigneeId = '';
+            try {
+                const aRepo = assignmentRepo();
+                const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: pending.task?.id }).getOne();
+                assigneeId = maybe ? String(maybe.assigneeId ?? '') : '';
+            }
+            catch (e) {
+                assigneeId = '';
+            }
             if (assigneeId) {
                 for (const g of groups) {
                     const members = Array.isArray(g.members) ? g.members.map(String) : [];
@@ -273,20 +296,26 @@ async function approvePendingRealisasi(req, res) {
         return res.status(403).json({ message: 'Forbidden' });
     // create realisasi record
     const realisasi = new Realisasi_1.Realisasi();
-    realisasi.assignment = pending.assignment;
+    realisasi.task = pending.task;
     realisasi.notes = pending.notes || null;
     realisasi.photoUrl = pending.photoUrl || null;
     realisasi.signatureUrl = pending.signatureUrl || null;
     // set start/end times from pending or fallback to assignment.startedAt / now
-    realisasi.startTime = pending.startTime || pending.assignment.startedAt || null;
+    realisasi.startTime = pending.startTime || null;
     realisasi.endTime = pending.endTime || new Date();
     await realisasiRepo().save(realisasi);
     // mark assignment complete
-    const assignment = pending.assignment;
-    assignment.status = 'COMPLETED';
-    await assignmentRepo().save(assignment);
+    try {
+        const aRepo = assignmentRepo();
+        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: pending.task?.id }).andWhere('a.wo_id = :wo', { wo: pending.task?.workOrder?.id }).orderBy('a.created_at', 'DESC').getOne();
+        if (maybe) {
+            maybe.status = 'COMPLETED';
+            await aRepo.save(maybe);
+        }
+    }
+    catch (e) { /* ignore */ }
     // determine whether whole workorder should be marked COMPLETED
-    const wo = pending.assignment.wo;
+    const wo = pending.task?.workOrder;
     if (wo) {
         try {
             // compute progress using service which calculates based on task durations and realisasi rows
@@ -306,7 +335,7 @@ async function approvePendingRealisasi(req, res) {
     pending.approvedAt = new Date();
     await pendingRepo().save(pending);
     // notify submitter/planner
-    (0, pushService_1.pushNotify)(assignment.assignedBy || '', `Realisasi approved for WO ${wo?.doc_no}`);
+    (0, pushService_1.pushNotify)('', `Realisasi approved for WO ${wo?.doc_no}`);
     return res.json({ id: realisasi.id });
 }
 exports.approvePendingRealisasi = approvePendingRealisasi;

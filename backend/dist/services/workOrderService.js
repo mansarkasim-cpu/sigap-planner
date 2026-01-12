@@ -368,8 +368,8 @@ async function computeWorkOrderProgress(workOrderId) {
     }
     if (total <= 0)
         return 0;
-    // find tasks which have realisasi: join realisasi->assignment to get assignment.task_id values for this workorder
-    const raw = await ormconfig_1.AppDataSource.query(`SELECT DISTINCT a.task_id as task_id FROM realisasi r JOIN assignment a ON r.assignment_id = a.id WHERE a.wo_id = $1`, [workOrderId]);
+    // find tasks which have realisasi: join realisasi->task to get task_id values for this workorder
+    const raw = await ormconfig_1.AppDataSource.query(`SELECT DISTINCT r.task_id as task_id FROM realisasi r JOIN task t ON r.task_id = t.id WHERE t.work_order_id = $1`, [workOrderId]);
     const completedTaskIds = new Set(raw.map((r) => String(r.task_id)));
     // only count completed durations for tasks that were assigned
     let completed = 0;
@@ -380,7 +380,7 @@ async function computeWorkOrderProgress(workOrderId) {
     // Fallback: if no completedTaskIds found (older assignments missing task_id), try matching by assignment.task_name
     if (completed === 0) {
         try {
-            const rows = await ormconfig_1.AppDataSource.query(`SELECT DISTINCT a.task_id as task_id, a.task_name as task_name FROM realisasi r JOIN assignment a ON r.assignment_id = a.id WHERE a.wo_id = $1`, [workOrderId]);
+            const rows = await ormconfig_1.AppDataSource.query(`SELECT DISTINCT r.task_id as task_id, t.name as task_name FROM realisasi r JOIN task t ON r.task_id = t.id WHERE t.work_order_id = $1`, [workOrderId]);
             if (rows && rows.length > 0) {
                 // build a lowercase name->id map for durations
                 const nameToId = new Map();

@@ -17,7 +17,7 @@ __decorate([
     (0, class_validator_1.IsUUID)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], RealisasiCreateDTO.prototype, "assignmentId", void 0);
+], RealisasiCreateDTO.prototype, "taskId", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
