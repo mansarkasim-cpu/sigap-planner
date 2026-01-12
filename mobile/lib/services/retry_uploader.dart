@@ -46,6 +46,7 @@ class RetryUploader {
         try {
           final id = (r['id'] ?? '').toString();
           final assignmentId = (r['assignmentId'] ?? '').toString();
+          String taskId = (r['taskId'] ?? '').toString();
           final notes = (r['notes'] ?? '').toString();
           final photoPath = (r['photoPath'] ?? '').toString();
           Uint8List? bytes;
@@ -55,8 +56,21 @@ class RetryUploader {
               bytes = await f.readAsBytes();
             }
           }
+          // If queued row didn't store taskId, try to resolve via assignments API.
+          if (taskId.isEmpty) {
+            try {
+              final asRes = await api.get('/assignments');
+              final alist = (asRes is List) ? asRes : (asRes is Map && asRes['data'] != null ? asRes['data'] : asRes);
+              if (alist is List) {
+                final found = alist.firstWhere((a) => ((a['id'] ?? '')?.toString() ?? '') == assignmentId, orElse: () => null);
+                if (found != null) taskId = (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
+              }
+            } catch (_) {}
+          }
+
           final body = {
             'assignmentId': assignmentId,
+            'taskId': taskId.isNotEmpty ? taskId : null,
             'notes': notes.isNotEmpty ? notes : null,
             'photoBase64': bytes != null ? base64Encode(bytes) : null,
             'startTime': null,

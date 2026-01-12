@@ -19,14 +19,14 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       .where('t.workOrder = :wo', { wo: workOrderId })
       .getMany();
 
-    // compute per-task realisasi counts by joining assignment->realisasi for this workorder
+    // compute per-task realisasi counts by joining task->realisasi for this workorder
     try {
       const counts = await AppDataSource.query(
-        `SELECT a.task_id, a.task_name, COUNT(r.id) AS realisasi_count
-         FROM assignment a
-         JOIN realisasi r ON r.assignment_id = a.id
-         WHERE a.wo_id = $1
-         GROUP BY a.task_id, a.task_name`,
+        `SELECT t.id AS task_id, t.name AS task_name, COUNT(r.id) AS realisasi_count
+         FROM task t
+         JOIN realisasi r ON r.task_id = t.id
+         WHERE t.work_order_id = $1
+         GROUP BY t.id, t.name`,
         [workOrderId]
       );
 
@@ -43,13 +43,13 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
         if (tname) byName[tname] = (byName[tname] || 0) + n;
       }
 
-      // compute pending counts (pending_realisasi table) grouped by assignment/task
+      // compute pending counts (pending_realisasi table) grouped by task
       const pendingRows = await AppDataSource.query(
-        `SELECT a.task_id, a.task_name, COUNT(p.id) AS pending_count
-         FROM assignment a
-         JOIN pending_realisasi p ON p.assignment_id = a.id
-         WHERE a.wo_id = $1 AND p.status = 'PENDING'
-         GROUP BY a.task_id, a.task_name`,
+        `SELECT t.id AS task_id, t.name AS task_name, COUNT(p.id) AS pending_count
+         FROM task t
+         JOIN pending_realisasi p ON p.task_id = t.id
+         WHERE t.work_order_id = $1 AND p.status = 'PENDING'
+         GROUP BY t.id, t.name`,
         [workOrderId]
       );
 
@@ -105,19 +105,19 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
   router.get('/work-orders/:id/realisasi', authMiddleware, async (req: Request, res: Response) => {
     try {
       const workOrderId = req.params.id;
-      // aggregate min(start_time) and max(end_time) from realisasi via assignments
+      // aggregate min(start_time) and max(end_time) from realisasi via tasks
       const agg = await AppDataSource.query(
         `SELECT MIN(r.start_time) AS actual_start, MAX(r.end_time) AS actual_end
          FROM realisasi r
-         JOIN assignment a ON r.assignment_id = a.id
-         WHERE a.wo_id = $1`,
+         JOIN task t ON r.task_id = t.id
+         WHERE t.work_order_id = $1`,
         [workOrderId]
       );
       const rows = await AppDataSource.query(
-        `SELECT r.id, r.start_time, r.end_time, a.id AS assignment_id
+        `SELECT r.id, r.start_time, r.end_time, r.task_id
          FROM realisasi r
-         JOIN assignment a ON r.assignment_id = a.id
-         WHERE a.wo_id = $1
+         JOIN task t ON r.task_id = t.id
+         WHERE t.work_order_id = $1
          ORDER BY r.start_time ASC`,
         [workOrderId]
       );
@@ -125,7 +125,7 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       const actualStart = agg && agg[0] && agg[0].actual_start ? new Date(agg[0].actual_start).toISOString() : null;
       const actualEnd = agg && agg[0] && agg[0].actual_end ? new Date(agg[0].actual_end).toISOString() : null;
 
-      const items = (rows || []).map((r: any) => ({ id: r.id, start: r.start_time ? new Date(r.start_time).toISOString() : null, end: r.end_time ? new Date(r.end_time).toISOString() : null, assignmentId: r.assignment_id }));
+      const items = (rows || []).map((r: any) => ({ id: r.id, start: r.start_time ? new Date(r.start_time).toISOString() : null, end: r.end_time ? new Date(r.end_time).toISOString() : null, taskId: r.task_id }));
       return res.json({ actualStart, actualEnd, items });
     } catch (e) {
       console.error('failed to fetch realisasi summary for workorder', e);
@@ -138,11 +138,12 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
     try {
       const workOrderId = req.params.id;
       const rows = await AppDataSource.query(
-        `SELECT r.id, r.start_time, r.end_time, r.notes, r.photo_url, r.signature_url, a.id AS assignment_id, a.task_id, a.task_name, u.id AS user_id, u.name AS user_name, u.nipp AS user_nipp
+        `SELECT r.id, r.start_time, r.end_time, r.notes, r.photo_url, r.signature_url, r.task_id, t.id AS task_id_alt, t.name AS task_name, ta.user_id, u.name AS user_name, u.nipp AS user_nipp
          FROM realisasi r
-         JOIN assignment a ON r.assignment_id = a.id
-         LEFT JOIN "user" u ON (a.assignee_id = u.id)
-         WHERE a.wo_id = $1
+         JOIN task t ON r.task_id = t.id
+         LEFT JOIN task_assignment ta ON ta.task_id = t.id
+         LEFT JOIN "user" u ON (ta.user_id = u.id)
+         WHERE t.work_order_id = $1
          ORDER BY r.start_time ASC`,
         [workOrderId]
       );
@@ -154,7 +155,6 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
         notes: r.notes || null,
         photoUrl: r.photo_url || r.photoUrl || null,
         signatureUrl: r.signature_url || r.signatureUrl || null,
-        assignmentId: r.assignment_id,
         taskId: r.task_id,
         taskName: r.task_name,
         user: { id: r.user_id, name: r.user_name, nipp: r.user_nipp }
