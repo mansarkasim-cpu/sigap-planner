@@ -83,7 +83,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           ? role
           : (role is List && role.isNotEmpty ? role[0] : '');
       bool leaderFlag = false;
-      if (roleStr.toString().toLowerCase() == 'lead_shift') leaderFlag = true;
+      if (roleStr.toString().toLowerCase().contains('lead')) leaderFlag = true;
       // also consider technician with shift_group.leader equal to user id (some backends use this pattern)
       if (!leaderFlag && user is Map) {
         try {
@@ -264,32 +264,60 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                     ? pendRes['data']
                     : pendRes);
             if (list is List) {
-              for (final p in list) {
-                try {
-                  final aid = (p is Map)
-                      ? (p['assignmentId'] ??
-                          p['assignment']?['id'] ??
-                          p['assignmentId'] ??
-                          p['assignment_id'])
-                      : null;
-                  if (aid != null && aid.toString() == widget.assignmentId) {
-                    pendingId = (p['id'] ??
-                                p['_id'] ??
-                                p['pendingId'] ??
-                                p['pending_id'])
-                            ?.toString() ??
-                        pendingId;
-                    break;
+                  for (final p in list) {
+                    try {
+                      // Try matching by assignment id (legacy)
+                      final aid = (p is Map)
+                          ? (p['assignmentId'] ?? p['assignment']?['id'] ?? p['assignmentId'] ?? p['assignment_id'])
+                          : null;
+                      if (aid != null && aid.toString() == widget.assignmentId) {
+                        pendingId = (p['id'] ?? p['_id'] ?? p['pendingId'] ?? p['pending_id'])?.toString() ?? pendingId;
+                        break;
+                      }
+
+                      // Try matching by task id (safer: pending records link to tasks)
+                      final ourTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
+                      if (p is Map) {
+                        final ptid = (p['taskId'] ?? p['task_id'] ?? p['task']?['id'] ?? p['task']?['task_id'])?.toString() ?? '';
+                        // build candidate ids from current assignment/task list (cover numeric id, uuid, external ids)
+                        final candidates = <String>{};
+                        if (ourTaskId != null && ourTaskId.isNotEmpty) candidates.add(ourTaskId);
+                        try {
+                          final aid = (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null)?.toString();
+                          if (aid != null && aid.isNotEmpty) candidates.add(aid);
+                        } catch (_) {}
+                        try {
+                          for (final t in tasks) {
+                            if (t == null) continue;
+                            try {
+                              final List keys = ['id','task_id','taskId','external_id','externalId','externalId'];
+                              for (final k in keys) {
+                                try {
+                                  final v = t[k];
+                                  if (v != null) candidates.add(v.toString());
+                                } catch (_) {}
+                              }
+                            } catch (_) {}
+                          }
+                        } catch (_) {}
+
+                        if (ptid.isNotEmpty) {
+                          if (candidates.contains(ptid)) {
+                            pendingId = (p['id'] ?? p['_id'] ?? p['pendingId'] ?? p['pending_id'])?.toString() ?? pendingId;
+                            break;
+                          }
+                        }
+                      }
+
+                      // if no assignment/task match, try deep search inside this pending item
+                      final deep = _deepFindPendingId(p);
+                      if (deep != null && deep.isNotEmpty) {
+                        pendingId = deep;
+                        break;
+                      }
+                    } catch (_) {}
                   }
-                  // if no assignmentId match, try deep search inside this pending item
-                  final deep = _deepFindPendingId(p);
-                  if (deep != null && deep.isNotEmpty) {
-                    pendingId = deep;
-                    break;
-                  }
-                } catch (_) {}
-              }
-            }
+                }
           } catch (e) {
             debugPrint('failed to fetch pending list for fallback: $e');
           }
@@ -312,15 +340,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       } catch (e) {
         debugPrint('auto-approve block failed: $e');
       }
-      // After the user explicitly clicked the Submit button, mark the work order as COMPLETED
-      try {
-        await api.patch('/work-orders/${Uri.encodeComponent(widget.woId)}',
-            {'status': 'COMPLETED'});
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Work order marked as COMPLETED')));
-      } catch (e) {
-        debugPrint('failed to mark work order completed: $e');
-      }
+      // Per policy: do not modify WorkOrder start_date/end_date on submit.
+      debugPrint('Skipping work order date update on submit (handled by server/leader only)');
       // on success navigate back to main screen
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
@@ -481,9 +502,9 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   Future<void> _acceptAssignment() async {
     final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
     try {
-      await api.patch(
+        await api.patch(
           '/assignments/${Uri.encodeComponent(widget.assignmentId)}',
-          {'status': 'ASSIGNED'});
+          {'status': 'PREPARATION'});
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Assignment accepted')));
       await _loadAll();
@@ -1005,7 +1026,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final bool _canStart = (assignmentStatus == 'ASSIGNED' ||
+    final bool _canStart = (assignmentStatus == 'PREPARATION' ||
         assignmentStatus == 'DEPLOYED');
     final bool _selectedHasRealisasi = (() {
       try {
@@ -1383,7 +1404,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                             }),
 
                             // Note: Accept button removed. Swipe-to-start is available when
-                            // assignmentStatus is DEPLOYED or ASSIGNED.
+                            // assignmentStatus is DEPLOYED or PREPARATION.
                           ],
                         ),
                       ),

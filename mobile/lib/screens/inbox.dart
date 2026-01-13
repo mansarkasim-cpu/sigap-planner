@@ -444,7 +444,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
       bool leaderFlag = false;
       List<String> members = [];
-      if (roleStr.toString().toLowerCase() == 'lead_shift') {
+      if (roleStr.toString().toLowerCase().contains('lead')) {
         leaderFlag = true;
       } else if (roleStr.toString().toLowerCase() == 'technician') {
         try {

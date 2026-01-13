@@ -274,8 +274,8 @@ export async function updateWorkOrderDates(req: Request, res: Response) {
       return res.status(400).json({ message: 'start_date or end_date required' });
     }
 
-    // parse to Date or null
-    const s = start_date ? new Date(start_date) : undefined;
+    // parse to Date or undefined
+    let s = start_date ? new Date(start_date) : undefined;
     const e = end_date ? new Date(end_date) : undefined;
     if (start_date && isNaN(s!.getTime())) return res.status(400).json({ message: 'Invalid start_date format' });
     if (end_date && isNaN(e!.getTime())) return res.status(400).json({ message: 'Invalid end_date format' });
@@ -328,6 +328,9 @@ export async function updateWorkOrderDates(req: Request, res: Response) {
         console.debug('failed to lookup user profile for changed_by enrichment', e);
       }
     }
+
+    // Note: Do not auto-compute or persist workorder start/end dates when status changes.
+    // Date fields will only be changed if client explicitly provides `start_date` or `end_date` in the request.
 
     const updated = await service.updateWorkOrderDates(id, { start_date: s, end_date: e, note: (keterangan || note) ?? undefined, changedBy });
     return res.json({ message: 'updated', data: updated });

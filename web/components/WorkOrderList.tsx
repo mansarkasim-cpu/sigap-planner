@@ -83,7 +83,12 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   function normalizeStatusRaw(s?: any) {
     if (s == null) return ''
     const str = String(s).toString()
-    if (str.toUpperCase().trim() === 'NEW') return 'PREPARATION'
+    const k = str.toUpperCase().trim().replace(/[-\s]/g, '_');
+    // Map legacy/old status names to the new canonical names:
+    // - NEW and old ASSIGNED -> PREPARATION
+    // - READY_TO_DEPLOY (or variants) -> ASSIGNED
+    if (k === 'NEW' || k === 'ASSIGNED') return 'PREPARATION'
+    if (k === 'READY_TO_DEPLOY' || k === 'READYTODEPLOY' || k === 'READY_TO_DEPLOY') return 'ASSIGNED'
     return str
   }
   const [list, setList] = useState<WorkOrder[]>([]);
@@ -449,15 +454,15 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   }
 
   function getColorForStatus(s: string) {
-    const k = normalizeStatusRaw(s).toString().toUpperCase();
+    // assume caller passes normalized status string; avoid calling normalizeStatusRaw again
+    const k = String(s || '').toUpperCase().replace(/[-\s]/g, '_');
     switch (k) {
-      case 'ASSIGNED': return '#1e40af';
+      case 'PREPARATION': return '#64748b';
+      case 'ASSIGNED': return '#60a5fa';
       case 'DEPLOYED': return '#db2777';
-      case 'READY_TO_DEPLOY': return '#7c3aed';
       case 'IN_PROGRESS': return '#f97316';
       case 'IN-PROGRESS': return '#f97316';
       case 'COMPLETED': return '#10b981';
-      case 'PREPARATION': return '#64748b';
       case 'OPEN': return '#64748b';
       case 'CANCELLED': return '#ef4444';
       case 'CLOSED': return '#334155';
@@ -468,7 +473,6 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   const STATUS_OPTIONS = [
     'PREPARATION',
     'ASSIGNED',
-    'READY TO DEPLOY',
     'DEPLOYED',
     'IN PROGRESS',
     'COMPLETED'
@@ -483,7 +487,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     const n = normalizeStatusRaw(s);
     const color = getColorForStatus(n);
     return (
-      <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 10, fontWeight: 600 }}>
+      <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 8, fontWeight: 600 }}>
         {String(n).replace(/_/g, ' ')}
       </span>
     );
@@ -742,10 +746,10 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  {(taskModal.wo as any)?.status === 'READY_TO_DEPLOY' && (
+                  {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'ASSIGNED' && (
                     <button onClick={() => handleDeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#7c3aed', color: 'white', borderRadius: 6 }}>Deploy</button>
                   )}
-                  {(taskModal.wo as any)?.status === 'DEPLOYED' && (
+                  {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'DEPLOYED' && (
                     <button onClick={() => handleUndeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#ef4444', color: 'white', borderRadius: 6 }}>Undeploy</button>
                   )}
                   <button onClick={closeTaskModal} style={{ padding: '6px 10px' }}>Close</button>

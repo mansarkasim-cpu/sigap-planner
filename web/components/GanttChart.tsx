@@ -6,12 +6,24 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Stack from '@mui/material/Stack';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import Checkbox from '@mui/material/Checkbox';
+import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Tooltip from '@mui/material/Tooltip';
+import LinearProgress from '@mui/material/LinearProgress';
+import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -20,6 +32,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import CloseIcon from '@mui/icons-material/Close';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 
 type WO = {
   id: string | number;
@@ -30,6 +44,10 @@ type WO = {
   end_date?: string | null;
   description?: string | null;
   raw?: any;
+  // optional top-level status (some backends provide this)
+  status?: string | null;
+  // optional top-level progress (0..1 or 0..100)
+  progress?: number | null;
   realisasi?: { actualStart?: string | null; actualEnd?: string | null; items?: Array<{ id: string; start?: string | null; end?: string | null }> } | null;
 };
 
@@ -102,20 +120,21 @@ const WORK_TYPE_COLORS: Record<string, string> = {
   'Default': '#3b82f6',
 };
 const STATUS_COLORS: Record<string, string> = {
-  'ASSIGNED': '#1e40af', // strong blue (more distinct)
-  'DEPLOYED': '#db2777', // magenta/pink (contrasting)
-  'READY_TO_DEPLOY': '#7c3aed', // purple
+  // mapping per request:
+  // PREPARATION = abu-abu, ASSIGNED = biru muda, DEPLOYED = magenta, IN_PROGRESS = orange, COMPLETED = hijau
+  'PREPARATION': '#64748b', // abu-abu
+  'ASSIGNED': '#60a5fa', // biru muda
+  'DEPLOYED': '#db2777', // magenta
   'IN_PROGRESS': '#f97316', // orange
   'COMPLETED': '#10b981', // green
-  'PREPARATION': '#64748b', // gray (formerly NEW)
-  'NEW': '#64748b', // legacy alias for compatibility
+  'NEW': '#64748b', // legacy alias
   'OPEN': '#64748b',
-  'CANCELLED': '#ef4444', // red
+  'CANCELLED': '#ef4444',
   'CLOSED': '#334155',
 };
 
 // preferred legend order for statuses
-const STATUS_ORDER = ['PREPARATION', 'ASSIGNED', 'READY_TO_DEPLOY', 'DEPLOYED', 'IN_PROGRESS', 'COMPLETED'];
+const STATUS_ORDER = ['PREPARATION', 'ASSIGNED', 'DEPLOYED', 'IN_PROGRESS', 'COMPLETED'];
 
 // simple hex -> rgb helper and luminance check for label text color
 function hexToRgbStatic(hex: string | undefined | null) {
@@ -144,9 +163,9 @@ function isDarkColor(hex: string) {
 function pickColorForWork(w: WO) {
   // prefer top-level status if present (set by backend), fallback to raw payload fields
   const statusRaw = (w as any).status || (w.raw && (w.raw.doc_status || w.raw.status || w.raw.state)) || null;
-  if (statusRaw && typeof statusRaw === 'string') {
-    const k = statusRaw.toString().toUpperCase().replace(/[-\s]/g, '_');
-    if (STATUS_COLORS[k]) return STATUS_COLORS[k];
+  if (statusRaw != null) {
+    const norm = normalizeStatusRaw(statusRaw);
+    if (norm) return getColorForStatus(norm);
   }
   const wt = (w.work_type || (w.raw && (w.raw.work_type || w.raw.type_work)) || '').toString();
   if (wt && WORK_TYPE_COLORS[wt]) return WORK_TYPE_COLORS[wt];
@@ -154,11 +173,86 @@ function pickColorForWork(w: WO) {
   return WORK_TYPE_COLORS['Default'];
 }
 
+function getWorkTypeColor(wt?: string | null) {
+  const val = (wt || '').toString();
+  if (!val) return WORK_TYPE_COLORS['Default'];
+  if (WORK_TYPE_COLORS[val]) return WORK_TYPE_COLORS[val];
+  const up = val.toUpperCase();
+  if (WORK_TYPE_COLORS[up as keyof typeof WORK_TYPE_COLORS]) return WORK_TYPE_COLORS[up as keyof typeof WORK_TYPE_COLORS];
+  return WORK_TYPE_COLORS['Default'];
+}
+
+function normalizeStatusRaw(s?: any) {
+  if (s == null) return '';
+  const str = String(s).toString();
+  const k = str.toUpperCase().trim().replace(/[-\s]/g, '_');
+  // remap legacy/raw statuses to canonical names
+  switch (k) {
+    case 'NEW':
+    case 'ASSIGNED':
+      return 'PREPARATION';
+    case 'READY_TO_DEPLOY':
+    case 'READY-TO-DEPLOY':
+      return 'ASSIGNED';
+    default:
+      return k;
+  }
+}
+
+function getColorForStatus(s: string) {
+  // assume `s` is already normalized by caller (i.e. `normalizeStatusRaw` was applied).
+  // Do not call `normalizeStatusRaw` again to avoid double-mapping.
+  const k = String(s || '').toUpperCase().replace(/[-\s]/g, '_');
+  switch (k) {
+    case 'PREPARATION': return STATUS_COLORS['PREPARATION'];
+    case 'ASSIGNED': return STATUS_COLORS['ASSIGNED'];
+    case 'DEPLOYED': return STATUS_COLORS['DEPLOYED'];
+    case 'IN_PROGRESS': return STATUS_COLORS['IN_PROGRESS'];
+    case 'IN-PROGRESS': return STATUS_COLORS['IN_PROGRESS'];
+    case 'COMPLETED': return STATUS_COLORS['COMPLETED'];
+    case 'OPEN': return STATUS_COLORS['OPEN'];
+    case 'CANCELLED': return STATUS_COLORS['CANCELLED'];
+    case 'CLOSED': return STATUS_COLORS['CLOSED'];
+    default: return '#6b7280';
+  }
+}
+
+function renderStatusBadge(s: any) {
+  const n = normalizeStatusRaw(s);
+  const color = getColorForStatus(n);
+  return (
+    <span style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 999, background: color, color: 'white', fontSize: 8, fontWeight: 600 }}>
+      {String(n).replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+function formatUtcDisplay(raw?: string | null) {
+  if (!raw) return '-';
+  const s = String(raw).trim();
+  const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+  const m = sqlRx.exec(s);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (m) {
+    const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+    return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+  }
+  const parsed = new Date(s);
+  if (isNaN(parsed.getTime())) return '-';
+  return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+function displayRealisasi(raw?: string | null, fallback = 'Belum direalisasi') {
+  if (!raw) return fallback;
+  return formatUtcDisplay(raw);
+}
+
 
 export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const [items, setItems] = useState<WO[]>([]);
   const [sites, setSites] = useState<string[]>([]);
   const [site, setSite] = useState<string>('');
+  const [workType, setWorkType] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,9 +260,126 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const [selectedDate, setSelectedDate] = useState<string>(todayIsoDate);
   const [scale, setScale] = useState<number>(1);
   const [selected, setSelected] = useState<WO | null>(null);
+  const [editing, setEditing] = useState<WO | null>(null);
+  const [editStartInput, setEditStartInput] = useState<string>('');
+  const [editEndInput, setEditEndInput] = useState<string>('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editNote, setEditNote] = useState<string>('');
+  const [dateHistory, setDateHistory] = useState<any[]>([]);
+  const [deployLoading, setDeployLoading] = useState<boolean>(false);
+  const [undeployLoading, setUndeployLoading] = useState<boolean>(false);
+  const [snackOpen, setSnackOpen] = useState<boolean>(false);
+  const [snackMsg, setSnackMsg] = useState<string>('');
+  const [snackSeverity, setSnackSeverity] = useState<'success' | 'info' | 'warning' | 'error'>('success');
+  const [taskModal, setTaskModal] = useState<{ open: boolean; wo: WO | null }>({ open: false, wo: null });
+  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [techQuery, setTechQuery] = useState<string>('');
+  const [selectedAssignees, setSelectedAssignees] = useState<Record<string, string[]>>({});
+  const [currentUser, setCurrentUser] = useState<any | null | undefined>(undefined);
+  const [techLoading, setTechLoading] = useState<boolean>(false);
+  const [taskLoading, setTaskLoading] = useState<boolean>(false);
+  const [assignLoading, setAssignLoading] = useState<Record<string, boolean>>({});
   // displayMode: 'both' | 'planned' | 'actual'
   const [displayMode, setDisplayMode] = useState<string>('both');
 
+  // drag / resize state for interactive Gantt
+  const [dragState, setDragState] = useState<null | {
+    id: string | number;
+    type: 'move' | 'resize-left' | 'resize-right';
+    startX: number; // clientX at start
+    origStartMs: number;
+    origEndMs: number;
+  }>(null);
+  const [dragPreview, setDragPreview] = useState<null | { id: string | number; startMs: number; endMs: number }>(null);
+  const [savingDrag, setSavingDrag] = useState<boolean>(false);
+  const suppressClickRef = useRef<boolean>(false);
+
+  // handle global pointer movements while dragging/resizing
+  useEffect(() => {
+    function onMove(ev: MouseEvent) {
+      if (!dragState) return;
+      try {
+        const clientX = ev.clientX;
+        const deltaPx = clientX - dragState.startX;
+        if (Math.abs(deltaPx) > 4) suppressClickRef.current = true;
+        const deltaMs = deltaPx / pxPerMs;
+        let newStart = dragState.origStartMs;
+        let newEnd = dragState.origEndMs;
+        const minDurationMs = 5 * 60 * 1000; // 5 minutes min
+        if (dragState.type === 'move') {
+          newStart = Math.round(dragState.origStartMs + deltaMs);
+          newEnd = Math.round(dragState.origEndMs + deltaMs);
+        } else if (dragState.type === 'resize-left') {
+          newStart = Math.round(dragState.origStartMs + deltaMs);
+          if (newEnd - newStart < minDurationMs) newStart = newEnd - minDurationMs;
+        } else if (dragState.type === 'resize-right') {
+          newEnd = Math.round(dragState.origEndMs + deltaMs);
+          if (newEnd - newStart < minDurationMs) newEnd = newStart + minDurationMs;
+        }
+        // clamp to current day window
+        newStart = Math.max(dayStartMs, Math.min(newStart, dayEndMs - 60000));
+        newEnd = Math.max(dayStartMs + 60000, Math.min(newEnd, dayEndMs));
+        setDragPreview({ id: dragState.id, startMs: newStart, endMs: newEnd });
+      } catch (e) { console.error('drag move', e); }
+    }
+    async function onUp(ev: MouseEvent) {
+      if (!dragState) return;
+      try {
+        const preview = dragPreview;
+        const id = dragState.id;
+        // compute movement to distinguish click vs drag
+        const deltaPx = ev.clientX - dragState.startX;
+        setDragState(null);
+        setDragPreview(null);
+        if (Math.abs(deltaPx) < 4) {
+          // treat as click: open details modal for this work order
+          try {
+            let wo: WO | undefined = items.find(it => String(it.id) === String(id));
+            if (!wo) {
+              try {
+                const res = await apiClient(`/work-orders/${encodeURIComponent(String(id))}`);
+                wo = res?.data ?? res;
+              } catch (e) { wo = undefined; }
+            }
+            if (wo) setSelected(wo as any);
+          } catch (e) { console.error('open details on click after drag', e); }
+          // reset suppress flag
+          suppressClickRef.current = false;
+          return;
+        }
+        if (!preview) return;
+        // otherwise treat as drag/resize: open Edit Dates dialog as confirmation
+        if (preview.startMs !== dragState.origStartMs || preview.endMs !== dragState.origEndMs) {
+          try {
+            let wo: WO | undefined = items.find(it => String(it.id) === String(id));
+            if (!wo) {
+              try {
+                const res = await apiClient(`/work-orders/${encodeURIComponent(String(id))}`);
+                wo = res?.data ?? res;
+              } catch (e) { wo = undefined; }
+            }
+            if (!wo) return;
+            setEditing(wo as any);
+            setEditStartInput(msToInputDatetime(preview.startMs));
+            setEditEndInput(msToInputDatetime(preview.endMs));
+            setEditNote('');
+            setSelected(null);
+            // dateHistory will be loaded by the existing effect that watches `editing`
+          } catch (e) {
+            console.error('open edit dialog after drag', e);
+          }
+        }
+      } catch (e) { console.error('drag up', e); }
+    }
+    if (dragState) {
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      return () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+    }
+  }, [dragState, dragPreview, load, scale, selectedDate]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgWrapperRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(900);
@@ -194,7 +405,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
   useEffect(() => { loadSites(); }, []);
 
-  useEffect(() => { load(); }, [site]);
+  useEffect(() => { load(); }, [site, selectedDate, workType, pageSize]);
 
   // Auto-refresh: call `load()` every 60 seconds without recreating the interval.
   const loadRef = useRef<any>(null);
@@ -256,6 +467,185 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     }
   }
 
+  function toInputDatetime(iso?: string | null) {
+    if (!iso) return '';
+    const s = String(iso).trim();
+    const rx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+    const m = rx.exec(s);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    if (m) {
+      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+      return `${yyyy}-${mm}-${dd}T${pad(Number(hh))}:${pad(Number(mi))}`;
+    }
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return '';
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  }
+
+  async function saveEdit(id: string, start_date?: string | null, end_date?: string | null) {
+    setEditLoading(true);
+    try {
+      const body: any = {};
+      if (start_date !== undefined) body.start_date = start_date || null;
+      if (end_date !== undefined) body.end_date = end_date || null;
+      if (editNote && editNote.trim().length) body.note = editNote.trim();
+      await apiClient(`/work-orders/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      await load();
+      setEditing(null);
+      setSelected(null);
+      setEditNote('');
+      setDateHistory([]);
+    } catch (err: any) {
+      console.error('save edit', err);
+      alert('Gagal menyimpan: ' + (err?.body?.message || err?.message));
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function shouldShowAssignColumn(wo: WO | null) {
+    const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
+    return !(s === 'IN_PROGRESS' || s === 'COMPLETED');
+  }
+
+  async function openTaskModal(w: WO) {
+    // mirror logic from WorkOrderList.openTaskModal
+    if (!w.start_date) {
+      alert('Work Order belum memiliki Start Date. Isi Start Date dan End Date terlebih dahulu.');
+      return;
+    }
+    setTaskModal({ open: true, wo: w });
+    setTechQuery('');
+    setTechnicians([]);
+    setSelectedAssignees({});
+    (async () => {
+      setTechLoading(true);
+      setTaskLoading(true);
+      let filteredTechs: any[] = [];
+      try {
+        const woSiteRaw = (w.raw && (w.raw.vendor_cabang || w.raw.site)) || (w as any).vendor_cabang || '';
+        const woSite = String(woSiteRaw || '').toLowerCase().trim();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        function parseToUtcDate(val?: string | null): Date | null {
+          if (!val) return null;
+          const s = String(val).trim();
+          const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+          const m = sqlRx.exec(s);
+          if (m) {
+            const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
+            const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(parsed.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+          return null;
+        }
+
+        const sdUtc = parseToUtcDate(String(w.start_date));
+        if (!sdUtc) {
+          alert('Start Date tidak valid.');
+          setTaskModal({ open: false, wo: null });
+          setTechLoading(false);
+          setTaskLoading(false);
+          return;
+        }
+        const assignDate = `${sdUtc.getUTCFullYear()}-${pad(sdUtc.getUTCMonth() + 1)}-${pad(sdUtc.getUTCDate())}`;
+        const assignTime = `${pad(sdUtc.getUTCHours())}:${pad(sdUtc.getUTCMinutes())}`;
+        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&time=${encodeURIComponent(assignTime)}` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
+        try {
+          const sched = await apiClient(schedUrl);
+          const schedRows = Array.isArray(sched) ? sched : (sched?.data ?? []);
+          filteredTechs = schedRows;
+        } catch (e) {
+          try {
+            const techs = await apiClient('/users?role=technician');
+            const list = Array.isArray(techs) ? techs : (techs?.data ?? []);
+            filteredTechs = list;
+          } catch (e2) {
+            filteredTechs = [];
+          }
+        }
+        setTechnicians(filteredTechs);
+      } catch (e) {
+        setTechnicians([]);
+      }
+
+      try {
+        const res = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}`);
+        const woDetail = res?.data ?? res;
+        try {
+          const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}/tasks`);
+          const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+          (woDetail as any).tasks = tasks;
+        } catch (e) {
+          const acts = Array.isArray(woDetail.raw?.activities) ? woDetail.raw.activities : [];
+          (woDetail as any).tasks = acts.map((act: any, idx: number) => ({ id: `raw-${idx}`, name: act.task_name || act.name || `Task ${idx + 1}`, duration_min: act.task_duration }));
+        }
+        setTaskModal({ open: true, wo: woDetail });
+
+        const nextSelected: Record<string, string[]> = {};
+        const taskRows = Array.isArray((woDetail as any).tasks) ? (woDetail as any).tasks : [];
+        const techIds = new Set((Array.isArray(filteredTechs) ? filteredTechs : []).map(t => String(t.id)));
+        for (const t of taskRows) {
+          const key = String(t.id ?? t.task_id ?? t.external_id ?? '');
+          if (!key) continue;
+          const assigns = Array.isArray(t.assignments) ? t.assignments : [];
+          const keeps: string[] = [];
+          for (const a of assigns) {
+            const assId = String(a?.user?.id ?? a.user_id ?? a.userId ?? '');
+            if (!assId) continue;
+            if (!techIds.has(assId)) continue;
+            if (!keeps.includes(assId)) keeps.push(assId);
+          }
+          if (keeps.length > 0) nextSelected[key] = keeps;
+        }
+        setSelectedAssignees(nextSelected);
+      } catch (err) {
+        // ignore
+      }
+
+      try {
+        const me = await apiClient('/auth/me');
+        setCurrentUser(me?.data ?? me);
+      } catch (err) {
+        setCurrentUser(null);
+      }
+      setTechLoading(false);
+      setTaskLoading(false);
+    })();
+  }
+
+  function closeTaskModal() {
+    setTaskModal({ open: false, wo: null });
+    setTechQuery('');
+    setTechnicians([]);
+    setSelectedAssignees({});
+    setTechLoading(false);
+    setTaskLoading(false);
+    setAssignLoading({});
+    try { load(); } catch (e) { }
+  }
+
+  useEffect(() => {
+    if (!editing) {
+      setDateHistory([]);
+      return;
+    }
+    (async () => {
+      try {
+        const h = await apiClient(`/work-orders/${encodeURIComponent(String(editing.id))}/date-history`);
+        const rows = h?.data ?? h;
+        setDateHistory(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        setDateHistory([]);
+      }
+    })();
+  }, [editing]);
+
   async function loadSites() {
     try {
       const res = await apiClient('/users?page=1&pageSize=1000');
@@ -266,6 +656,15 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       console.error('load sites for gantt', err);
     }
   }
+
+  const workTypes = useMemo(() => {
+    const s = new Set<string>();
+    for (const it of items) {
+      const wt = it.work_type ?? (it.raw && (it.raw.work_type || it.raw.type_work)) ?? '';
+      if (wt) s.add(String(wt));
+    }
+    return Array.from(s).sort();
+  }, [items]);
 
   const { dayStartMs, dayEndMs } = useMemo(() => {
     const ds = dateInputToDayStart(selectedDate);
@@ -281,6 +680,14 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   function msToX(ms: number) { return gutter + Math.round((ms - dayStartMs) * pxPerMs); }
   function clampBarWidth(x1: number, x2: number) { return Math.max(minBarWidthPx, x2 - x1); }
 
+  function msToInputDatetime(ms: number) {
+    // produce backend-local naive datetime string similar to other inputs: YYYY-MM-DDTHH:MM
+    const BACKEND_TZ_OFFSET_HOURS = 8;
+    const d = new Date(ms + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  }
+
   const tickStepMs = 30 * 60 * 1000;
   const ticks = useMemo(() => {
     const out: number[] = [];
@@ -293,9 +700,37 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const validItems = useMemo(() => {
     const debugReasons: any[] = [];
     const filtered = items.filter(it => {
-      const s = isoToMs(it.start_date);
-      const e = isoToMs(it.end_date);
-      const rec: any = { id: it.id ?? it.doc_no, rawStart: it.start_date, rawEnd: it.end_date, s, e };
+      // filter by selected work type (if any)
+      const wtVal = (it.work_type ?? (it.raw && (it.raw.work_type || it.raw.type_work)) ?? '').toString();
+      if (Array.isArray(workType) && workType.length > 0 && !workType.includes(wtVal)) {
+        const rec: any = { id: it.id ?? it.doc_no, rawWorkType: wtVal, passes: false, reason: `filtered by workType (${wtVal})` };
+        debugReasons.push(rec);
+        return false;
+      }
+      // prefer realisasi dates for COMPLETED work orders if available
+      let sIso: string | null = (it.start_date ?? null) as any;
+      let eIso: string | null = (it.end_date ?? null) as any;
+      try {
+        const statusNorm = normalizeStatusRaw((it as any).status ?? it.raw?.status ?? it.raw?.state ?? '');
+        // prefer realisasi start for COMPLETED and IN_PROGRESS items when available;
+        // for IN_PROGRESS, keep the original estimated end_date as the bar end
+        if (statusNorm === 'COMPLETED' || statusNorm === 'IN_PROGRESS') {
+          const r = (it as any).realisasi ?? (it.raw && (it.raw.realisasi || it.raw.realisasis || it.raw.realisasi_items)) ?? null;
+          if (r) {
+            if (r.actualStart) sIso = r.actualStart;
+            else if (Array.isArray(r.items) && r.items.length > 0 && r.items[0].start) sIso = r.items[0].start;
+            if (statusNorm === 'COMPLETED') {
+              if (r.actualEnd) eIso = r.actualEnd;
+              else if (Array.isArray(r.items) && r.items.length > 0 && r.items[0].end) eIso = r.items[0].end;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore and fallback to original start/end
+      }
+      const s = isoToMs(sIso ?? it.start_date);
+      const e = isoToMs(eIso ?? it.end_date);
+      const rec: any = { id: it.id ?? it.doc_no, rawStart: sIso ?? it.start_date, rawEnd: eIso ?? it.end_date, s, e };
       if (s == null && e == null) {
         rec.passes = false;
         rec.reason = 'no start and end';
@@ -329,9 +764,23 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       return true;
     });
     // sort by start time
-    const sorted = filtered.sort((a,b) => {
-      const sa = isoToMs(a.start_date) ?? 0;
-      const sb = isoToMs(b.start_date) ?? 0;
+      const sorted = filtered.sort((a,b) => {
+      function preferredStartMs(x: any) {
+        try {
+          const sNorm = normalizeStatusRaw(x.status ?? x.raw?.status ?? x.raw?.state ?? '');
+          if (sNorm === 'COMPLETED' || sNorm === 'IN_PROGRESS') {
+            const r = x.realisasi ?? (x.raw && (x.raw.realisasi || x.raw.realisasis || x.raw.realisasi_items)) ?? null;
+            if (r) {
+              const sIso = r.actualStart ?? (Array.isArray(r.items) && r.items.length > 0 ? r.items[0].start : null) ?? null;
+              const ms = isoToMs(sIso);
+              if (ms != null) return ms;
+            }
+          }
+        } catch (e) {}
+        return isoToMs(x.start_date) ?? 0;
+      }
+      const sa = preferredStartMs(a);
+      const sb = preferredStartMs(b);
       return sa - sb;
     });
     if (typeof window !== 'undefined' && (window as any).console && (window as any).console.debug) {
@@ -437,20 +886,32 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   </Select>
                 </FormControl>
 
-                <FormControl size="small" sx={{ minWidth: 180 }}>
-                  <InputLabel id="gantt-show-label">Show</InputLabel>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel id="gantt-worktype-label">Jenis WO</InputLabel>
                   <Select
-                    labelId="gantt-show-label"
-                    label="Show"
-                    value={displayMode}
-                    onChange={e => setDisplayMode(String(e.target.value))}
+                    labelId="gantt-worktype-label"
+                    label="Jenis WO"
+                    multiple
+                    value={workType}
+                    onChange={e => {
+                      const val = e.target.value as string[];
+                      if (Array.isArray(val) && val.includes('__clear__')) setWorkType([]);
+                      else setWorkType(val);
+                    }}
+                    renderValue={(v) => (Array.isArray(v) && v.length ? (v as string[]).join(', ') : '-- All types --')}
                     sx={{ minWidth: 160 }}
                   >
-                    <MenuItem value="both">Planned + Actual</MenuItem>
-                    <MenuItem value="planned">Planned only</MenuItem>
-                    <MenuItem value="actual">Actual only</MenuItem>
+                    <MenuItem value="__clear__"><ListItemText primary="-- All types --" /></MenuItem>
+                    {workTypes.map(wt => (
+                      <MenuItem key={wt} value={wt}>
+                        <Checkbox checked={workType.indexOf(wt) > -1} />
+                        <ListItemText primary={wt} />
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
+
+                {/* show/planned toggle hidden per UX request */}
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -490,14 +951,11 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
               key={status}
               label={status.replace(/_/g, ' ')}
               size="small"
-              sx={{ backgroundColor: color, color: textColor, fontWeight: 700 }}
+              sx={{ backgroundColor: color, color: textColor, fontWeight: 700, fontSize: 8, px: 0.5, height: 22 }}
             />
           );
         })}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-          <Box sx={{ width: 14, height: 14, backgroundColor: '#0f172a', borderRadius: 0.5, opacity: 0.12 }} />
-          <Typography sx={{ fontSize: 13, color: '#333' }}>Realisasi (actual)</Typography>
-        </Box>
+        {/* Realisasi legend removed */}
       </Box>
 
       {/* svg wrapper: used for fullscreen request */}
@@ -534,14 +992,11 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                     key={status + '-fs'}
                     label={status.replace(/_/g, ' ')}
                     size="small"
-                    sx={{ backgroundColor: color, color: textColor, fontWeight: 700 }}
+                    sx={{ backgroundColor: color, color: textColor, fontWeight: 700, fontSize: 8, px: 0.5, height: 22 }}
                   />
                 );
               })}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-                <Box sx={{ width: 14, height: 14, backgroundColor: '#0f172a', borderRadius: 0.5, opacity: 0.12 }} />
-                <Typography sx={{ fontSize: 13, color: '#333' }}>Realisasi (actual)</Typography>
-              </Box>
+              {/* Realisasi legend removed in fullscreen */}
             </Box>
 
             <Box sx={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -554,24 +1009,37 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
           <div style={{ display:'flex', minWidth: Math.max(900, svgWidth) }}>
             {/* labels */}
             <div style={{ width: labelWidth, borderRight: '1px solid #f0f0f0', background: '#fafafa' }}>
-              <div style={{ padding: '10px 12px', fontWeight:700 }}>Work Order</div>
-              <div style={{ height:8 }} />
-              {validItems.map((w, idx) => (
-                <div key={w.id} style={{
-                  height: rowHeight,
-                  display:'flex',
-                  flexDirection:'column',
-                  justifyContent:'center',
-                  padding: '6px 12px',
-                  borderBottom: '1px solid #f1f1f1',
-                  whiteSpace: 'nowrap',
-                  overflow:'hidden',
-                  textOverflow:'ellipsis'
-                }}>
-                  <div style={{ fontSize:13, fontWeight:700 }}>{w.asset_name ?? ''}</div>
-                  <div style={{ marginTop:4, color:'#666', fontSize:12 }}>{w.doc_no ?? w.id} {w.work_type ? ` • ${w.work_type}` : ''}</div>
-                </div>
-              ))}
+              <div style={{ height: 40, padding: '10px 12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', fontWeight:700 }}>Work Order</div>
+              {validItems.map((w, idx) => {
+                const wt = w.work_type ?? (w.raw && (w.raw.work_type || w.raw.type_work)) ?? '';
+                const badgeColor = getWorkTypeColor(wt);
+                const badgeTextColor = isDarkColor(badgeColor) ? '#ffffff' : '#000000';
+                return (
+                  <div key={w.id} style={{
+                    height: rowHeight,
+                    display:'flex',
+                    flexDirection:'column',
+                    justifyContent:'center',
+                    padding: '6px 12px',
+                    borderBottom: '1px solid #f1f1f1',
+                    whiteSpace: 'nowrap',
+                    overflow:'hidden',
+                    textOverflow:'ellipsis'
+                  }}>
+                    <div style={{ fontSize:13, fontWeight:700 }}>{w.asset_name ?? ''}</div>
+                    <div style={{ marginTop:6, display:'flex', gap:8, alignItems:'center' }}>
+                      <div style={{ color:'#666', fontSize:12, overflow:'hidden', textOverflow:'ellipsis' }}>{w.doc_no ?? w.id}</div>
+                      {wt ? (
+                        <Chip
+                          label={wt}
+                          size="small"
+                          sx={{ backgroundColor: badgeColor, color: badgeTextColor, fontWeight:700, fontSize: 8, px: 0.5, height: 20 }}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* timeline */}
@@ -610,13 +1078,26 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
                 {/* bars */}
                 {validItems.map((w, idx) => {
-                  const sMsRaw = isoToMs(w.start_date) as number | null;
-                  const eMsRaw = isoToMs(w.end_date) as number | null;
-                  const realStartMsRaw = isoToMs(w.realisasi?.actualStart) as number | null;
-                  const realEndMsRaw = isoToMs(w.realisasi?.actualEnd) as number | null;
-                  if (sMsRaw == null || eMsRaw == null) return null;
-                  const sMs = Math.max(sMsRaw, dayStartMs);
-                  const eMs = Math.min(eMsRaw, dayEndMs);
+                  const baseStartRaw = isoToMs(w.start_date) as number | null;
+                  const baseEndRaw = isoToMs(w.end_date) as number | null;
+                  const realStartMsRaw = isoToMs(w.realisasi?.actualStart ?? w.realisasi?.items?.[0]?.start) as number | null;
+                  const realEndMsRaw = isoToMs(w.realisasi?.actualEnd ?? w.realisasi?.items?.[0]?.end) as number | null;
+                  // determine which start/end to use: for COMPLETED prefer realisasi start/end when available
+                  const statusNorm = normalizeStatusRaw((w as any).status || w.raw?.status || w.raw?.doc_status);
+                  let chosenStartRaw: number | null = baseStartRaw;
+                  let chosenEndRaw: number | null = baseEndRaw;
+                  if (statusNorm === 'COMPLETED') {
+                    if (realStartMsRaw != null || realEndMsRaw != null) {
+                      chosenStartRaw = realStartMsRaw ?? baseStartRaw;
+                      chosenEndRaw = realEndMsRaw ?? baseEndRaw;
+                    }
+                  } else if (statusNorm === 'IN_PROGRESS') {
+                    // prefer real start for in-progress but keep estimated end
+                    if (realStartMsRaw != null) chosenStartRaw = realStartMsRaw;
+                  }
+                  if (chosenStartRaw == null || chosenEndRaw == null) return null;
+                  const sMs = Math.max(chosenStartRaw, dayStartMs);
+                  const eMs = Math.min(chosenEndRaw, dayEndMs);
                   if (eMs <= sMs) return null;
                   const x1 = msToX(sMs);
                   const x2 = msToX(eMs);
@@ -626,8 +1107,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   // bar color reflects status or work-type (original behavior)
                   const color = pickColorForWork(w);
 
-                  // determine status normalized
-                  const statusNorm = ((w as any).status || (w.raw && (w.raw.status || w.raw.doc_status)) || '').toString().toUpperCase().replace(/[-\s]/g, '_');
+                  // statusNorm already computed above
                   // progress value: prefer top-level `progress` (0..1) then raw.progress; accept 0..1 or 0..100
                   let progressVal: number | null = null;
                   const pRaw = (w as any).progress ?? w.raw?.progress ?? null;
@@ -680,30 +1160,88 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   const progressColor = darkenHex(color, 0.22);
                   const progressTextColorInside = isDark(progressColor) ? '#ffffff' : '#000000';
 
+                  // determine per-status allowed interactions:
+                  const canMove = (statusNorm === 'PREPARATION' || statusNorm === 'ASSIGNED');
+                  const canResizeLeft = canMove;
+                  const canResizeRight = canMove || statusNorm === 'DEPLOYED' || statusNorm === 'IN_PROGRESS';
+                  const interactive = canMove || canResizeRight;
+                  const cursorStyle = canMove ? 'grab' : (canResizeRight ? 'ew-resize' : 'pointer');
+
                   return (
-                    <g key={'bar'+w.id} style={{ cursor:'pointer' }} onClick={() => setSelected(w)}>
+                    <g
+                      key={'bar'+w.id}
+                      style={{ cursor: cursorStyle }}
+                      onClick={() => {
+                        if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+                        setSelected(w);
+                      }}
+                      onMouseDown={(ev) => {
+                        try {
+                          if (!interactive) return;
+                          ev.stopPropagation();
+                          const rect = (ev.currentTarget as SVGGElement).ownerSVGElement?.getBoundingClientRect();
+                          if (!rect) return;
+                          const clientX = ev.clientX;
+                          const localX = clientX - rect.left;
+                          const leftEdge = x1;
+                          const rightEdge = x2;
+                          const edgeThreshold = 10;
+                          let type: 'move' | 'resize-left' | 'resize-right' | null = null;
+                          if (Math.abs(localX - leftEdge) <= edgeThreshold) {
+                            if (canResizeLeft) type = 'resize-left';
+                            else if (canResizeRight) type = 'resize-right';
+                          } else if (Math.abs(localX - rightEdge) <= edgeThreshold) {
+                            if (canResizeRight) type = 'resize-right';
+                          } else {
+                            if (canMove) type = 'move';
+                          }
+                          if (!type) return; // click area not interactive for this status
+                          setDragState({ id: w.id as any, type, startX: clientX, origStartMs: sMs, origEndMs: eMs });
+                          // set initial preview
+                          setDragPreview({ id: w.id as any, startMs: sMs, endMs: eMs });
+                          // prevent text selection / page drag
+                          if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+                        } catch (e) {
+                          console.error('start drag', e);
+                        }
+                      }}
+                    >
                       {/* work-type badge moved to Y-axis labels */}
+                      {/* For COMPLETED items: draw the planned interval behind the realized bar (lighter color / dashed) */}
+                      {(statusNorm === 'COMPLETED' && baseStartRaw != null && baseEndRaw != null && (realStartMsRaw != null || realEndMsRaw != null)) && (() => {
+                        const ps = Math.max(baseStartRaw, dayStartMs);
+                        const pe = Math.min(baseEndRaw, dayEndMs);
+                        if (pe > ps) {
+                          const px1 = msToX(ps);
+                          const px2 = msToX(pe);
+                          const pwidth = clampBarWidth(px1, px2);
+                          return (
+                            <>
+                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="#f3f4f6" />
+                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="none" stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4,2" />
+                            </>
+                          );
+                        }
+                        return null;
+                      })()}
                       {displayMode !== 'actual' && (
                         <rect x={x1} y={y} rx={rx} ry={rx} width={width} height={rowHeight - 12} fill={color} opacity={0.98} />
                       )}
 
-                      {/* realized interval (if available) — draw a thinner, semi-transparent overlay */}
-                      {realStartMsRaw != null && realEndMsRaw != null && displayMode !== 'planned' && (() => {
-                        const rs = Math.max(realStartMsRaw, dayStartMs);
-                        const re = Math.min(realEndMsRaw, dayEndMs);
-                        if (re <= rs) return null;
-                        const rx1 = msToX(rs);
-                        const rx2 = msToX(re);
-                        const rwidth = clampBarWidth(rx1, rx2);
-                        const ry = y + 6; // inset slightly
-                        const rheight = Math.max(6, rowHeight - 24);
+                      {/* drag preview (while dragging/resizing) */}
+                      {dragPreview && dragPreview.id === w.id && (() => {
+                        const px1 = msToX(dragPreview.startMs);
+                        const px2 = msToX(dragPreview.endMs);
+                        const pwidth = clampBarWidth(px1, px2);
                         return (
                           <>
-                            <rect x={rx1} y={ry} rx={3} ry={3} width={rwidth} height={rheight} fill="#0f172a" opacity={0.12} />
-                            <rect x={rx1} y={ry} rx={3} ry={3} width={rwidth} height={rheight} fill="none" stroke="#0f172a" strokeWidth={1} opacity={0.22} />
+                            <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill={color} opacity={0.6} />
+                            <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="none" stroke="#000" strokeWidth={1} opacity={0.12} />
                           </>
                         );
                       })()}
+
+                      {/* realized overlay removed per UX request */}
 
                       {/* show realisasi/progress overlay when item is IN_PROGRESS and progress available, or COMPLETED (show 100%) */}
                           {((statusNorm === 'IN_PROGRESS' && progressVal !== null) || statusNorm === 'COMPLETED') && (() => {
@@ -731,28 +1269,398 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         </div>
       </div>
 
-      {/* modal */}
-      {selected && (
-        <div style={{
-          position:'fixed', left:0, right:0, top:0, bottom:0, background:'rgba(0,0,0,0.36)',
-          display:'flex', justifyContent:'center', alignItems:'center', zIndex:9999
-        }}>
-          <div style={{ background:'#fff', width:720, maxHeight:'80%', overflowY:'auto', borderRadius:8, padding:16 }}>
-            <h3 style={{ marginTop:0 }}>{selected.doc_no}</h3>
-            <div><strong>Asset:</strong> {selected.asset_name}</div>
-            <div><strong>Type:</strong> {selected.work_type}</div>
-            <div><strong>Start:</strong> {formatDdMmYyyyHHMM(isoToMs(selected.start_date))}</div>
-            <div><strong>End:</strong> {formatDdMmYyyyHHMM(isoToMs(selected.end_date))}</div>
-            <div><strong>Actual Start:</strong> {formatDdMmYyyyHHMM(isoToMs(selected.realisasi?.actualStart))}</div>
-            <div><strong>Actual End:</strong> {formatDdMmYyyyHHMM(isoToMs(selected.realisasi?.actualEnd))}</div>
-            <div style={{ marginTop:12 }}>
-              <pre style={{ whiteSpace:'pre-wrap', background:'#f7f7f7', padding:8, borderRadius:6 }}>{selected.description ?? JSON.stringify(selected.raw ?? selected, null, 2)}</pre>
+      {/* Details Dialog for selected work order (match WorkOrderList dialog) */}
+      <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Details — {selected?.doc_no ?? selected?.id}</DialogTitle>
+        <DialogContent dividers>
+          {selected && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ fontWeight: 700 }}>{selected.asset_name ?? '-'}</div>
+              <div style={{ color: '#666' }}>{selected.description ?? '-'}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Location: {selected.raw?.vendor_cabang ?? selected.raw?.site ?? ''}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(selected.start_date)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(selected.end_date)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Realisasi Start: {displayRealisasi(selected.realisasi?.actualStart ?? selected.realisasi?.items?.[0]?.start)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Realisasi End: {displayRealisasi(selected.realisasi?.actualEnd ?? selected.realisasi?.items?.[0]?.end, '-')}</div>
+              <div style={{ marginTop: 8 }}>{renderStatusBadge((selected as any).status ?? selected.raw?.status ?? 'PREPARATION')}</div>
+              {typeof (selected as any).progress === 'number' && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700 }}>{Math.round(Math.max(0, Math.min(1, (selected as any).progress || 0)) * 100)}%</Typography>
+                  <LinearProgress variant="determinate" value={Math.round(Math.max(0, Math.min(1, (selected as any).progress || 0)) * 100)} sx={{ height: 8, borderRadius: 2, backgroundColor: '#f1f5f9', '& .MuiLinearProgress-bar': { background: getColorForStatus((selected as any).status ?? selected.raw?.status ?? 'PREPARATION') } }} />
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSelected(null)}>Close</Button>
+          {selected && normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') !== 'COMPLETED' && (
+            <Tooltip title="Edit Tanggal">
+              <IconButton onClick={() => {
+                if (!selected) return;
+                setEditing(selected);
+                setEditStartInput(toInputDatetime(selected.start_date));
+                setEditEndInput(toInputDatetime(selected.end_date));
+                setEditNote('');
+                setSelected(null);
+              }}>
+                <EditOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title={`Lihat Task`}>
+            <IconButton onClick={() => { if (!selected) return; openTaskModal(selected); setSelected(null); }}>
+              <ListAltOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+          {selected && normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') === 'ASSIGNED' && (
+            <Button size="small" variant="contained" color="primary" onClick={async () => {
+              if (!selected) return;
+              if (!confirm('Yakin ingin deploy Work Order ini?')) return;
+              setDeployLoading(true);
+              try {
+                // Use server-side deploy endpoint to ensure assignments and status updates
+                await apiClient(`/work-orders/${encodeURIComponent(String(selected.id))}/deploy`, { method: 'POST' });
+                await load();
+                setSelected(null);
+                setSnackMsg('Deploy berhasil');
+                setSnackSeverity('success');
+                setSnackOpen(true);
+              } catch (err: any) {
+                console.error('deploy error', err);
+                const msg = err?.body?.message || err?.message || String(err);
+                setSnackMsg('Gagal deploy: ' + msg);
+                setSnackSeverity('error');
+                setSnackOpen(true);
+              } finally {
+                setDeployLoading(false);
+              }
+            }}>{deployLoading ? 'Processing...' : 'Deploy'}</Button>
+          )}
+          {selected && normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') === 'DEPLOYED' && (
+            <Button size="small" variant="outlined" color="secondary" onClick={async () => {
+              if (!selected) return;
+              if (!confirm('Yakin ingin undeploy Work Order ini?')) return;
+              setUndeployLoading(true);
+              try {
+                await apiClient(`/work-orders/${encodeURIComponent(String(selected.id))}/undeploy`, { method: 'POST' });
+                await load();
+                setSelected(null);
+                setSnackMsg('Undeploy berhasil');
+                setSnackSeverity('success');
+                setSnackOpen(true);
+              } catch (err: any) {
+                console.error('undeploy error', err);
+                const msg = err?.body?.message || err?.message || String(err);
+                setSnackMsg('Gagal undeploy: ' + msg);
+                setSnackSeverity('error');
+                setSnackOpen(true);
+              } finally {
+                setUndeployLoading(false);
+              }
+            }}>{undeployLoading ? 'Processing...' : 'Undeploy'}</Button>
+          )}
+        </DialogActions>
+      </Dialog>
+      <Snackbar open={snackOpen} autoHideDuration={4000} onClose={() => setSnackOpen(false)}>
+        <Alert onClose={() => setSnackOpen(false)} severity={snackSeverity} sx={{ width: '100%' }}>
+          {snackMsg}
+        </Alert>
+      </Snackbar>
+
+      {/* Edit Dates Dialog (styled) */}
+      <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit Dates — {editing?.doc_no ?? editing?.id}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Start Date & Time"
+              type="datetime-local"
+              size="small"
+              value={editStartInput}
+              onChange={e => setEditStartInput(e.target.value)}
+              disabled={['DEPLOYED', 'IN_PROGRESS'].includes(normalizeStatusRaw(editing?.status ?? editing?.raw?.status ?? ''))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.start_date)}</div>
+
+            <TextField
+              label="End Date & Time"
+              type="datetime-local"
+              size="small"
+              value={editEndInput}
+              onChange={e => setEditEndInput(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.end_date)}</div>
+            <TextField
+              label="Keterangan (opsional)"
+              placeholder="Keterangan (opsional)"
+              multiline
+              rows={4}
+              value={editNote}
+              onChange={e => setEditNote(e.target.value)}
+              fullWidth
+              size="small"
+            />
+            {Array.isArray(dateHistory) && dateHistory.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>History perubahan tanggal</div>
+                <div style={{ maxHeight: 240, overflow: 'auto' }}>
+                  {dateHistory.map((h, idx) => (
+                    <div key={h.id || idx} style={{ padding: 12, borderBottom: '1px solid #f5f5f5' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: 13, color: '#333', fontWeight: 700 }}>{h.changed_at ? new Date(h.changed_at).toLocaleString() : '-'}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>{h.changed_by ? `${h.changed_by.nipp ?? h.changed_by.id ?? '-'} • ${h.changed_by.name ?? h.changed_by.email ?? '-'}` : '-'}</div>
+                      </div>
+                      <div style={{ marginTop: 6, color: '#444' }}>
+                        <div>Start: {h.old_start ? formatUtcDisplay(h.old_start) : '-'} → {h.new_start ? formatUtcDisplay(h.new_start) : '-'}</div>
+                        <div>End: {h.old_end ? formatUtcDisplay(h.old_end) : '-'} → {h.new_end ? formatUtcDisplay(h.new_end) : '-'}</div>
+                      </div>
+                      {h.note && <div style={{ marginTop: 8, fontSize: 13, color: '#555' }}>Catatan: {h.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setEditing(null)} disabled={editLoading}>Batal</Button>
+          <Button variant="contained" color="primary" onClick={async () => {
+            function datetimeLocalToSql(local?: string | null) {
+              if (!local) return null;
+              const rx = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+              const m = rx.exec(local);
+              if (!m) return null;
+              const [, yy, mm, dd, hh, mi] = m as any;
+              return `${yy}-${mm}-${dd} ${hh}:${mi}:00`;
+            }
+            if (editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { alert('Start date tidak valid'); return; }
+            if (editEndInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editEndInput)) { alert('End date tidak valid'); return; }
+            const sSql = datetimeLocalToSql(editStartInput || null);
+            const eSql = datetimeLocalToSql(editEndInput || null);
+            await saveEdit(String(editing!.id), sSql, eSql);
+          }} disabled={editLoading}>{editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Task Modal (copied/adapted from WorkOrderList) */}
+      {taskModal.open && taskModal.wo && (
+        <Dialog open={true} onClose={closeTaskModal} fullWidth maxWidth="md" scroll="paper">
+          {(techLoading || taskLoading) && <LinearProgress />}
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              Task - {taskModal.wo.doc_no ?? taskModal.wo.id}
+              <div style={{ color: '#666', fontSize: 13 }}>{taskModal.wo.description}</div>
             </div>
-            <div style={{ textAlign:'right', marginTop:8 }}>
-              <Button variant="contained" size="small" startIcon={<CloseIcon />} onClick={() => setSelected(null)}>Close</Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {currentUser === undefined ? (
+                <span style={{ color: '#666' }}>Checking auth...</span>
+              ) : currentUser === null ? (
+                <span style={{ color: '#c00' }}>Not authenticated</span>
+              ) : (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700 }}>{currentUser.name || currentUser.username || currentUser.email}</div>
+                  <div style={{ color: '#666', fontSize: 12 }}>{currentUser.email} — {currentUser.role ?? currentUser.type}</div>
+                </div>
+              )}
+              <IconButton onClick={closeTaskModal}><CloseIcon /></IconButton>
             </div>
-          </div>
-        </div>
+          </DialogTitle>
+          <DialogContent dividers>
+            <div style={{ marginBottom: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '50px' }} />
+                  <col />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '340px' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>No</th>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>Task Name</th>
+                    <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd', textAlignLast: 'right' }}>Duration (min)</th>
+                    {shouldShowAssignColumn(taskModal.wo) && (
+                      <th style={{ textAlign: 'left', padding: 12, borderBottom: '1px solid #ddd' }}>Assign technicians</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray((taskModal.wo as any).tasks) && (taskModal.wo as any).tasks.map((act: any, idx: number) => {
+                    const taskKey = String(act.id ?? act.task_id ?? String(idx));
+                    const selected = selectedAssignees[taskKey] || [];
+                    function taskHasRealisasi(t: any) {
+                      try {
+                        const lists = ['realisasi','realisasis','realisasi_list','realisasi_entries','realisasiItems','realisasi_items','realisasiEntries'];
+                        for (const k of lists) {
+                          const v = t[k];
+                          if (Array.isArray(v) && v.length > 0) return true;
+                        }
+                        if (Array.isArray(t.assignments)) {
+                          for (const a of t.assignments) {
+                            if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                            if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                            const s = (a.status || a.state || '').toString().toUpperCase();
+                            if (s.includes('COMP') || s.includes('VERIF') || s.includes('DONE') || s.includes('APPROV')) return true;
+                          }
+                        }
+                        const woAssigns = Array.isArray((taskModal.wo as any)?.assignments) ? (taskModal.wo as any).assignments : [];
+                        if (woAssigns.length > 0) {
+                          for (const a of woAssigns) {
+                            const aTaskId = (a.task_id ?? a.taskId ?? a.task?.id) ? String(a.task_id ?? a.taskId ?? a.task?.id) : null;
+                            const tId = (t.id ?? t.task_id ?? t.external_id) ? String(t.id ?? t.task_id ?? t.external_id) : null;
+                            if (aTaskId && tId && aTaskId === tId) {
+                              if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                              if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                              const s = (a.status || a.state || '').toString().toUpperCase();
+                              if (s.includes('COMP') || s.includes('VERIF') || s.includes('DONE') || s.includes('APPROV')) return true;
+                            }
+                            const aName = (a.task_name || a.taskName || a.task?.name || '').toString().trim().toLowerCase();
+                            const tName = (t.name || t.task_name || t.taskName || '').toString().trim().toLowerCase();
+                            if (aName && tName && aName === tName) {
+                              if (Array.isArray(a.realisasi) && a.realisasi.length > 0) return true;
+                              if ((a.realisasi_count || a.realisasiCount || a.realisasiTotal) > 0) return true;
+                              const s2 = (a.status || a.state || '').toString().toUpperCase();
+                              if (s2.includes('COMP') || s2.includes('VERIF') || s2.includes('DONE') || s2.includes('APPROV')) return true;
+                            }
+                          }
+                        }
+                        if (t.completed === true || t.is_completed === true || String(t.status || '').toUpperCase().includes('COMP')) return true;
+                        if (t.completed_at || t.realisasi_at || t.approved_at) return true;
+                      } catch (e) {}
+                      return false;
+                    }
+                    const hasRealisasi = taskHasRealisasi(act) || Boolean(act.has_realisasi || act.realisasi_count);
+                    return (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f1f1f1' }}>
+                        <td style={{ padding: 12, verticalAlign: 'top' }}>{act.task_number ?? idx + 1}</td>
+                        <td style={{ padding: 12, verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ fontWeight: 700 }}>{act.name ?? act.task_name ?? '-'}</div>
+                            {hasRealisasi ? (
+                              <span style={{ background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Realisasi ✓</span>
+                            ) : (
+                              (() => {
+                                const pendingCount = Number(act.pending_realisasi_count || act.pendingCount || 0);
+                                const hasPending = Boolean(act.has_pending || pendingCount > 0);
+                                if (hasPending) {
+                                  return <span style={{ background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Pending{pendingCount ? ` (${pendingCount})` : ''}</span>;
+                                }
+                                return <span style={{ background: '#64748b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Belum Realisasi</span>;
+                              })()
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>ID: {act.id ?? '-'}</div>
+                          {Array.isArray(act.assignments) && act.assignments.length > 0 && (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {act.assignments.map((asgn: any) => (
+                                  <div
+                                    key={asgn.id}
+                                    style={{ background: '#eef2ff', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'center' }}
+                                  >
+                                    <span style={{ fontSize: 13, fontWeight: 600 }}>{asgn.user?.name ?? asgn.user?.nipp ?? asgn.user?.email ?? asgn.assigned_to ?? 'Unknown'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                        </td>
+                        <td style={{ padding: 12, verticalAlign: 'top', textAlign: 'right' }}>{(act.duration_min ?? act.task_duration) ?? '-'}</td>
+                        {shouldShowAssignColumn(taskModal.wo) ? (
+                          <td style={{ padding: 12, verticalAlign: 'top' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <Autocomplete
+                                multiple
+                                options={technicians || []}
+                                getOptionLabel={(t: any) => (t.name || t.nipp || t.email || '').toString()}
+                                filterSelectedOptions
+                                value={(selectedAssignees[taskKey] || []).map((id: any) => technicians.find((t: any) => t.id === id)).filter(Boolean)}
+                                onChange={(e, newVal) => setSelectedAssignees(prev => ({ ...prev, [taskKey]: newVal.map((n: any) => n.id) }))}
+                                renderInput={(params) => <TextField {...params} placeholder="Cari teknisi (nama / email / id)" size="small" />}
+                              />
+
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                                  {(technicians || []).slice(0, 200).map((t: any) => {
+                                    const isSel = (selectedAssignees[taskKey] || []).includes(t.id);
+                                    return (
+                                      <Chip
+                                        key={t.id}
+                                        label={(t.name || t.nipp || t.email || '').toString()}
+                                        onClick={() => {
+                                          setSelectedAssignees(prev => {
+                                            const cur = new Set(prev[taskKey] || []);
+                                            if (cur.has(t.id)) cur.delete(t.id); else cur.add(t.id);
+                                            return { ...prev, [taskKey]: Array.from(cur) };
+                                          });
+                                        }}
+                                        clickable
+                                        color={isSel ? 'primary' : 'default'}
+                                        variant={isSel ? 'filled' : 'outlined'}
+                                        size="small"
+                                        sx={{ marginRight: 0.5 }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start', marginTop: 8 }}>
+                                {currentUser === undefined ? (
+                                  <Button size="small" disabled>Checking...</Button>
+                                ) : currentUser === null ? (
+                                  <>
+                                    <Button size="small" variant="contained" color="primary" onClick={() => { window.location.href = '/login'; }}>Login to assign</Button>
+                                    <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
+                                  </>
+                                ) : !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
+                                  <>
+                                    <Button size="small" variant="contained" disabled={Boolean(assignLoading[taskKey])} onClick={async () => {
+                                      const ass = selectedAssignees[taskKey] || [];
+                                      if (!ass || ass.length === 0) { alert('Pilih minimal 1 teknisi'); return; }
+                                      setAssignLoading(prev => ({ ...prev, [taskKey]: true }));
+                                      try {
+                                        const unique = Array.from(new Set(ass));
+                                        await Promise.all(unique.map((uid) => apiClient(`/tasks/${encodeURIComponent(String(act.id ?? act.task_id ?? String(idx)))}/assign`, { method: 'POST', body: { userId: uid, assignedBy: currentUser?.id } } as any)));
+                                        alert('Assignment created');
+                                        try {
+                                          const res = await apiClient(`/work-orders/${encodeURIComponent(String(taskModal.wo?.id))}`);
+                                          const woDetail = res?.data ?? res;
+                                          const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(String(taskModal.wo?.id))}/tasks`);
+                                          const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+                                          setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
+                                        } catch (e) { console.warn('refresh tasks after assign failed', e); }
+                                        try { load(); } catch (e) {}
+                                      } catch (err) {
+                                        console.error('assign error', err);
+                                        alert(err?.body?.message || err?.message || 'Assignment failed');
+                                      } finally {
+                                        setAssignLoading(prev => ({ ...prev, [taskKey]: false }));
+                                      }
+                                    }}>{assignLoading[taskKey] ? <CircularProgress size={16} /> : 'Assign'}</Button>
+                                    <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
+                                  </>
+                                ) : (
+                                  <Button size="small" disabled>Deployed</Button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        ) : (
+                          <td style={{ padding: 12, verticalAlign: 'top' }} />
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeTaskModal}>Close</Button>
+          </DialogActions>
+        </Dialog>
       )}
 
       {/* small styles for fallback fullscreen */}
