@@ -81,8 +81,21 @@ export async function createRealisasi(req: Request, res: Response) {
     realisasi.signatureUrl = sigPath;
   }
 
-  // set start/end times
-  realisasi.startTime = (dto as any).startTime ? new Date((dto as any).startTime) : null;
+  // determine resolved startTime: prefer client-provided, else try assignment.startedAt
+  let resolvedStartCreate: Date | null = (dto as any).startTime ? new Date((dto as any).startTime) : null;
+  if (!resolvedStartCreate) {
+    try {
+      const aRepo = assignmentRepo();
+      const maybeA = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: (task as any).id }).andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id }).orderBy('a.created_at','DESC').getOne();
+      if (maybeA && (maybeA as any).startedAt) resolvedStartCreate = (maybeA as any).startedAt;
+    } catch (e) {
+      // ignore
+    }
+  }
+  if (!resolvedStartCreate) {
+    return res.status(400).json({ message: 'startTime required: missing start from client and no assignment.startedAt available' });
+  }
+  realisasi.startTime = resolvedStartCreate;
   realisasi.endTime = (dto as any).endTime ? new Date((dto as any).endTime) : new Date();
 
   await realisasiRepo().save(realisasi);
@@ -160,8 +173,22 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   pending.notes = dto.notes || null;
   pending.photoUrl = photoUrl || null;
   pending.signatureUrl = signatureUrl || null;
-  // accept optional start/end times from client, otherwise null
-  pending.startTime = dto.startTime ? new Date(dto.startTime) : null;
+  // accept optional start/end times from client; if startTime missing, fallback to assignment.startedAt if available
+  let resolvedPendingStart: Date | null = dto.startTime ? new Date(dto.startTime) : null;
+  if (!resolvedPendingStart) {
+    try {
+      const aRepo = assignmentRepo();
+      const maybeA = await aRepo.createQueryBuilder('a')
+        .where('a.task_id = :tid', { tid: (task as any).id })
+        .andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id })
+        .orderBy('a.created_at','DESC')
+        .getOne();
+      if (maybeA && (maybeA as any).startedAt) resolvedPendingStart = (maybeA as any).startedAt;
+    } catch (e) {
+      // ignore lookup errors
+    }
+  }
+  pending.startTime = resolvedPendingStart;
   pending.endTime = dto.endTime ? new Date(dto.endTime) : null;
   pending.submitterId = (req as any).user?.id || null;
   await pendingRepo().save(pending);
@@ -178,16 +205,25 @@ export async function listPendingRealisasi(req: Request, res: Response) {
 
   // If user has explicit lead_shift/admin role, return all pending items
   let rows: any[] = [];
-  if (user.role === 'lead_shift' || user.role === 'admin') {
+  const isAdmin = (user?.role === 'admin') || (Array.isArray(user?.roles) && (user.roles as any[]).includes('admin'));
+  try { console.debug('listPendingRealisasi: userId=', user?.id, 'role=', user?.role); } catch (_) {}
+  if (isAdmin) {
     rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['task', 'task.workOrder'] as any });
     return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
   }
 
   // Otherwise, allow users who are recorded as shift group leaders to see pending items
-  try {
+    try {
     const groupRepo = AppDataSource.getRepository(ShiftGroup);
-    const groups = await groupRepo.find({ where: { leader: user.id } as any });
+    // fetch all groups and match by flexible leader/member identifiers
+    const allGroups = await groupRepo.find();
+    const candidates = new Set<string>([String(user?.id || ''), String(user?.nipp || ''), String(user?.email || '')].filter(Boolean));
+    try { console.debug('listPendingRealisasi: leaderCandidates=', Array.from(candidates)); } catch (_) {}
+    // only consider groups where the current user is recorded as leader
+    const groups = (allGroups || []).filter(g => Boolean(g.leader && candidates.has(String(g.leader))));
     if (!groups || groups.length === 0) return res.json([]);
+
+    // collect member ids from matched groups
     const membersSet = new Set<string>();
     for (const g of groups) {
       if (Array.isArray(g.members)) {
@@ -196,15 +232,25 @@ export async function listPendingRealisasi(req: Request, res: Response) {
     }
     if (membersSet.size === 0) return res.json([]);
 
-    // fetch pending items where assignment.assigneeId is in the leader's group members
+    // fetch pending items (will be filtered below by assignment assignee matching)
     const qb = pendingRepo().createQueryBuilder('p')
       .leftJoinAndSelect('p.task', 't')
       .leftJoinAndSelect('t.workOrder', 'wo')
       .where('p.status = :s', { s: 'PENDING' });
 
-    // fallback: match pending by finding assignments for the task and checking assigneeId
     rows = await qb.getMany();
-    return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
+    // best-effort: filter pending items by whether the submitter or the task's latest assignment assignee is in membersSet
+    const aRepo = assignmentRepo();
+    const filtered: any[] = [];
+    for (const r of rows) {
+      try {
+        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: r.task?.id }).orderBy('a.created_at','DESC').getOne();
+        const assigneeId = maybe ? String((maybe as any).assigneeId ?? '') : '';
+        const submitterId = String(r.submitterId || r.submitter || '');
+        if ((assigneeId && membersSet.has(assigneeId)) || (submitterId && membersSet.has(submitterId))) filtered.push(r);
+      } catch (_) { }
+    }
+    return res.json((filtered.length ? filtered : rows).map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
   } catch (e) {
     console.error('listPendingRealisasi error for leader fallback', e);
     return res.status(500).json({ message: 'Failed to list pending realisasi' });
@@ -219,31 +265,49 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   const id = req.params.id;
   const pending = await pendingRepo().findOne({ where: { id }, relations: ['task', 'task.workOrder'] as any });
   if (!pending) return res.status(404).json({ message: 'Pending not found' });
+  // If the pending item is already processed, return 409 to indicate conflict
+  if (pending.status !== 'PENDING') {
+    try { console.debug('approvePendingRealisasi: pending status not PENDING=', pending.status); } catch (_) {}
+    return res.status(409).json({ message: 'Pending realisasi is not in PENDING state' });
+  }
 
-  // allow approval if user has explicit lead_shift/admin role
-  let allowed = (user.role === 'lead_shift' || user.role === 'admin');
+  // allow approval if user has explicit lead-like role or admin
+  const isAdmin = (user?.role === 'admin') || (Array.isArray(user?.roles) && (user.roles as any[]).includes('admin'));
+  try { console.debug('approvePendingRealisasi: userId=', user?.id, 'role=', user?.role, 'pendingId=', id); } catch (_) {}
+  let allowed = Boolean(isAdmin);
   // otherwise allow if the authenticated user is the leader of a shift group that contains the task's assignee (best-effort)
   if (!allowed) {
     try {
       const groupRepo = AppDataSource.getRepository(ShiftGroup);
-      const groups = await groupRepo.find({ where: { leader: user.id } as any });
+      const allGroups = await groupRepo.find();
+      const candidates = new Set<string>([String(user?.id || ''), String(user?.nipp || ''), String(user?.email || '')].filter(Boolean));
+      try { console.debug('approvePendingRealisasi: leaderCandidates=', Array.from(candidates)); } catch (_) {}
+      // only consider groups where the current user is recorded as leader
+      const groups = (allGroups || []).filter(g => Boolean(g.leader && candidates.has(String(g.leader))));
+      try { console.debug('approvePendingRealisasi: matchedGroups=', groups.map(g => ({ id: g.id, leader: g.leader, membersCount: Array.isArray(g.members) ? g.members.length : 0 }))); } catch (_) {}
+      try { console.debug('approvePendingRealisasi: groupsFound=', Array.isArray(groups) ? groups.length : 0); } catch (_) {}
       // Try to find an assignment for the pending task and use its assigneeId
       let assigneeId = '';
       try {
         const aRepo = assignmentRepo();
-        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: pending.task?.id }).getOne();
+        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: pending.task?.id }).orderBy('a.created_at','DESC').getOne();
         assigneeId = maybe ? String((maybe as any).assigneeId ?? '') : '';
+        try { console.debug('approvePendingRealisasi: found assignment assigneeId=', assigneeId); } catch (_) {}
       } catch (e) { assigneeId = ''; }
-      if (assigneeId) {
+      // allow if either the assignment assignee OR the pending submitter is in the leader's group members
+      const submitterId = String(pending.submitterId || pending.submitter || '');
+      if (assigneeId || submitterId) {
         for (const g of groups) {
           const members = Array.isArray(g.members) ? g.members.map(String) : [];
-          if (members.includes(assigneeId)) { allowed = true; break; }
+          try { console.debug('approvePendingRealisasi: checking group id=', (g as any).id, 'members=', members.length); } catch (_) {}
+          if ((assigneeId && members.includes(assigneeId)) || (submitterId && members.includes(submitterId))) { allowed = true; break; }
         }
       }
     } catch (e) {
       // ignore lookup errors and keep allowed=false
     }
   }
+  try { console.debug('approvePendingRealisasi: allowed=', allowed); } catch (_) {}
   if (!allowed) return res.status(403).json({ message: 'Forbidden' });
 
   // create realisasi record
@@ -252,8 +316,72 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   realisasi.notes = pending.notes || null;
   realisasi.photoUrl = pending.photoUrl || null;
   realisasi.signatureUrl = pending.signatureUrl || null;
-  // set start/end times from pending or fallback to assignment.startedAt / now
-  realisasi.startTime = pending.startTime || null;
+  // set start/end times from pending — try multiple fallbacks (pending -> assignment task+wo -> task-only -> wo-only)
+  let resolvedStart: Date | null = pending.startTime || null;
+  if (!resolvedStart) {
+    try {
+      const aRepo = assignmentRepo();
+      let maybeA: any = null;
+      // 1) try assignment matching task_id + wo_id
+      if (pending.task?.id && pending.task?.workOrder?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.task_id = :tid', { tid: pending.task?.id })
+          .andWhere('a.wo_id = :wo', { wo: pending.task?.workOrder?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      // 2) fallback: try assignment matching task_id only
+      if ((!maybeA || !maybeA.startedAt) && pending.task?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.task_id = :tid', { tid: pending.task?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      // 3) fallback: try assignment matching workorder only
+      if ((!maybeA || !maybeA.startedAt) && pending.task?.workOrder?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.wo_id = :wo', { wo: pending.task?.workOrder?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      if (maybeA && (maybeA as any).startedAt) resolvedStart = (maybeA as any).startedAt;
+    } catch (e) {
+      // ignore lookup errors
+    }
+  }
+  // final fallback: allow auto-fill with now if explicitly enabled by env var
+  if (!resolvedStart) {
+    if (process.env.ALLOW_APPROVE_WITHOUT_START === 'true') {
+      resolvedStart = new Date();
+    } else {
+      return res.status(400).json({ message: 'startTime required: pending item has no startTime and no assignment.startedAt available' });
+    }
+  }
+  realisasi.startTime = resolvedStart;
+  // persist resolvedStart back to pending.startTime if it was missing
+  try {
+    if (!pending.startTime) {
+      pending.startTime = resolvedStart;
+      await pendingRepo().save(pending);
+    }
+  } catch (e) {
+    console.warn('Failed to persist pending.startTime fallback', e);
+  }
+  // also ensure assignment.startedAt is set if missing for data consistency
+  try {
+    const aRepo = assignmentRepo();
+    const maybeAssign = await aRepo.createQueryBuilder('a')
+      .where('a.task_id = :tid', { tid: pending.task?.id })
+      .andWhere('a.wo_id = :wo', { wo: pending.task?.workOrder?.id })
+      .orderBy('a.created_at','DESC')
+      .getOne();
+    if (maybeAssign && !(maybeAssign as any).startedAt) {
+      (maybeAssign as any).startedAt = resolvedStart;
+      await aRepo.save(maybeAssign);
+    }
+  } catch (e) {
+    console.warn('Failed to persist assignment.startedAt fallback', e);
+  }
   realisasi.endTime = pending.endTime || new Date();
   await realisasiRepo().save(realisasi);
 
