@@ -93,12 +93,13 @@ function niceTime(ms: number | null) {
   const d = new Date(ms);
   return d.toLocaleString();
 }
-// Format ms to dd/mm/yyyy HH24:mi using UTC getters to avoid local TZ differences
+// Format ms to dd/mm/yyyy HH24:mi
+// ms is already in UTC from Date.parse, so just display it in WIB (UTC+7)
 function formatDdMmYyyyHHMM(ms: number | null) {
   if (!ms) return '-';
-  // display with +8h offset (backend local timezone) on the frontend
-  const BACKEND_TZ_OFFSET_HOURS = 8;
-  const d = new Date(ms + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+  // Display in WIB timezone (UTC+7) since backend is in Indonesia
+  const WIB_OFFSET_HOURS = 7;
+  const d = new Date(ms + WIB_OFFSET_HOURS * 60 * 60 * 1000);
   const pad = (n: number) => n.toString().padStart(2, '0');
   const dd = pad(d.getUTCDate());
   const mm = pad(d.getUTCMonth() + 1);
