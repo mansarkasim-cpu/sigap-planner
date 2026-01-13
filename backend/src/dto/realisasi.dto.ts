@@ -246,7 +246,7 @@ export async function listPendingRealisasi(req: Request, res: Response) {
       try {
         const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: r.task?.id }).orderBy('a.created_at','DESC').getOne();
         const assigneeId = maybe ? String((maybe as any).assigneeId ?? '') : '';
-        const submitterId = String(r.submitterId || r.submitter || '');
+        const submitterId = String(r.submitterId || '');
         if ((assigneeId && membersSet.has(assigneeId)) || (submitterId && membersSet.has(submitterId))) filtered.push(r);
       } catch (_) { }
     }
@@ -295,7 +295,7 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
         try { console.debug('approvePendingRealisasi: found assignment assigneeId=', assigneeId); } catch (_) {}
       } catch (e) { assigneeId = ''; }
       // allow if either the assignment assignee OR the pending submitter is in the leader's group members
-      const submitterId = String(pending.submitterId || pending.submitter || '');
+      const submitterId = String(pending.submitterId || '');
       if (assigneeId || submitterId) {
         for (const g of groups) {
           const members = Array.isArray(g.members) ? g.members.map(String) : [];
