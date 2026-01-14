@@ -84,12 +84,6 @@ export default function Nav(){
     <nav className="nav">
       <ul className="nav-menu">
         <li className="nav-item"><Link href="/dashboard" className="nav-link">Dashboard</Link></li>
-        <li className="nav-item has-sub">
-          <span className="nav-link">Daily Checklist</span>
-          <ul className="sub-menu">
-            <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
-          </ul>
-        </li>
 
         {showMaster && (
           <li className="nav-item has-sub">
@@ -109,6 +103,13 @@ export default function Nav(){
           <span className="nav-link">Konfigurasi</span>
           <ul className="sub-menu">
             <li><Link href="/shifts" className="nav-link">Shift</Link></li>
+          </ul>
+        </li>
+
+        <li className="nav-item has-sub">
+          <span className="nav-link">Daily Checklist</span>
+          <ul className="sub-menu">
+            <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
           </ul>
         </li>
 
