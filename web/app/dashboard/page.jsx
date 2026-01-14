@@ -13,6 +13,13 @@ import ListItem from '@mui/material/ListItem'
 import ListItemText from '@mui/material/ListItemText'
 import Divider from '@mui/material/Divider'
 import LinearProgress from '@mui/material/LinearProgress'
+import Chip from '@mui/material/Chip'
+import Avatar from '@mui/material/Avatar'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import BuildIcon from '@mui/icons-material/Build'
+import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import DoneAllIcon from '@mui/icons-material/DoneAll'
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 
 import apiClient from '../../lib/api-client'
 // Gantt preview removed from dashboard
@@ -102,34 +109,49 @@ export default function Dashboard(){
       </Box>
 
       <Grid container spacing={2} sx={{mb:2}}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{p:2}}>
-            <Typography variant="subtitle2">Total Work Orders</Typography>
-            <Typography variant="h5">{stats.total}</Typography>
+        {/* colorful stat cards */}
+        <Grid item xs={12} md={3}>
+          <Paper sx={{p:2, color:'#fff', background:'linear-gradient(135deg,#7b2ff7,#f107a3)', borderRadius:2, boxShadow:'0 6px 18px rgba(0,0,0,0.08)'}}>
+            <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <Box>
+                <Typography variant="subtitle2" sx={{opacity:0.95}}>Total Work Orders</Typography>
+                <Typography variant="h4" sx={{fontWeight:700}}>{stats.total}</Typography>
+              </Box>
+              <Avatar sx={{bgcolor:'rgba(255,255,255,0.18)'}}><AssignmentIcon /></Avatar>
+            </Box>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3} md={2}>
-          <Paper sx={{p:2}}>
-            <Typography variant="subtitle2">Assigned</Typography>
-            <Typography variant="h6">{stats.assigned}</Typography>
+
+        <Grid item xs={6} sm={4} md={2}>
+          <Paper sx={{p:2, color:'#fff', background:'linear-gradient(135deg,#6ad7ff,#3b8cff)', borderRadius:2}}>
+            <Typography variant="subtitle2" sx={{opacity:0.95}}>Assigned</Typography>
+            <Typography variant="h5" sx={{fontWeight:700}}>{stats.assigned}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3} md={2}>
-          <Paper sx={{p:2}}>
-            <Typography variant="subtitle2">In Progress</Typography>
-            <Typography variant="h6">{stats.in_progress}</Typography>
+
+        <Grid item xs={6} sm={4} md={2}>
+          <Paper sx={{p:2, color:'#fff', background:'linear-gradient(135deg,#ffd36b,#ff7a5c)', borderRadius:2}}>
+            <Typography variant="subtitle2" sx={{opacity:0.95}}>In Progress</Typography>
+            <Typography variant="h5" sx={{fontWeight:700}}>{stats.in_progress}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3} md={2}>
-          <Paper sx={{p:2}}>
-            <Typography variant="subtitle2">Deployed</Typography>
-            <Typography variant="h6">{stats.deployed}</Typography>
+
+        <Grid item xs={6} sm={4} md={2}>
+          <Paper sx={{p:2, color:'#fff', background:'linear-gradient(135deg,#43e97b,#38f9d7)', borderRadius:2}}>
+            <Typography variant="subtitle2" sx={{opacity:0.95}}>Completed</Typography>
+            <Typography variant="h5" sx={{fontWeight:700}}>{stats.completed}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={6} sm={3} md={3}>
+
+        <Grid item xs={6} sm={4} md={3}>
           <Paper sx={{p:2}}>
-            <Typography variant="subtitle2">Completed</Typography>
-            <Typography variant="h6">{stats.completed}</Typography>
+            <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <Box>
+                <Typography variant="subtitle2">Deployed</Typography>
+                <Typography variant="h6">{stats.deployed}</Typography>
+              </Box>
+              <Chip icon={<CalendarTodayIcon />} label={`Overdue: ${stats.overdue}`} color={stats.overdue>0? 'error' : 'default'} />
+            </Box>
           </Paper>
         </Grid>
       </Grid>
