@@ -1006,14 +1006,10 @@ async function getWorkOrderDateHistory(workOrderId) {
     return rows.map(r => ({
         id: r.id,
         work_order_id: r.work_order_id,
-        old_start: r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.old_start) : null,
-        old_end: r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.old_end) : null,
-        new_start: r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.new_start) : null,
-        new_end: r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.new_end) : null,
+        old_start: (r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.old_start) : null),
+        old_end: (r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.old_end) : null),
+        new_start: (r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.new_start) : null),
+        new_end: (r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.new_end) : null),
         note: r.note ?? null,
         changed_by: r.changed_by ?? null,
         changed_at: r.changed_at ? (new Date(r.changed_at)).toISOString() : null,
