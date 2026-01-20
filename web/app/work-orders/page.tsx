@@ -18,7 +18,7 @@ export default function Page() {
       </section>
 
       <section>
-        <WorkOrderListAny onRefreshRequested={(fn: any) => { return refreshRef.current = fn; }} />
+        <WorkOrderListAny excludeWorkType="DAILY" onRefreshRequested={(fn: any) => { return refreshRef.current = fn; }} />
       </section>
     </main>
   );

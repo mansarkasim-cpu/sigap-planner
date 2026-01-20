@@ -90,6 +90,7 @@ export async function createQuestion(req: Request, res: Response) {
     const ent = repo.create({
       jenis_alat: payload.jenis_alat_id ? ({ id: payload.jenis_alat_id } as any) : undefined,
       question_text: String(payload.question_text).trim(),
+      kelompok: payload.kelompok || payload.group || null,
       input_type: payload.input_type || 'boolean',
       required: payload.required !== undefined ? Boolean(payload.required) : true,
       order: payload.order || 0,
@@ -117,6 +118,7 @@ export async function updateQuestion(req: Request, res: Response) {
     const repo = AppDataSource.getRepository(MasterChecklistQuestion);
     const payload = req.body || {};
     const update: any = { ...payload };
+    if (payload.kelompok !== undefined) update.kelompok = payload.kelompok;
     if (payload.jenis_alat_id !== undefined) {
       update.jenis_alat = payload.jenis_alat_id ? ({ id: payload.jenis_alat_id } as any) : null;
       delete update.jenis_alat_id;

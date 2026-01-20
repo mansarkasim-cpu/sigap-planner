@@ -46,6 +46,10 @@ __decorate([
     __metadata("design:type", String)
 ], MasterAlat.prototype, "notes", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ length: 20, default: 'ACTIVE' }),
+    __metadata("design:type", String)
+], MasterAlat.prototype, "status", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
 ], MasterAlat.prototype, "created_at", void 0);

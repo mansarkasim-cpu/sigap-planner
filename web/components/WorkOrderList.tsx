@@ -60,19 +60,32 @@ export type WorkOrder = {
 
 type Props = {
   onRefreshRequested?: (fn: () => Promise<void>) => void;
+  excludeWorkType?: string;
 };
 
-export default function WorkOrderList({ onRefreshRequested }: Props) {
+export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: Props) {
   // format stored dates (possibly SQL 'YYYY-MM-DD HH:mm:ss' without timezone)
   function formatUtcDisplay(raw?: string | null) {
     if (!raw) return '-';
     const s = String(raw).trim();
     // If stored as SQL-like 'YYYY-MM-DD HH:mm:ss' return the same local datetime
     const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const m = sqlRx.exec(s);
+    const usRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+    const ddHyphenRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
     const pad = (n: number) => String(n).padStart(2, '0');
+    const m = sqlRx.exec(s);
     if (m) {
       const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+    }
+    const mu = usRx.exec(s);
+    if (mu) {
+      const [, mm, dd, yyyy, hh = '00', mi = '00'] = mu as any;
+      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+    }
+    const md = ddHyphenRx.exec(s);
+    if (md) {
+      const [, dd, mm, yyyy, hh = '00', mi = '00'] = md as any;
       return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
     }
     // fallback: parse ISO and show local components (best-effort)
@@ -80,16 +93,29 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     if (isNaN(parsed.getTime())) return '-';
     return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
   }
+
+  function resolveStartDate(w: WorkOrder) {
+    return (w.start_date as any) ?? (w as any).date_start ?? w.raw?.date_start ?? w.raw?.start_date ?? null;
+  }
+
+  function resolveEndDate(w: WorkOrder) {
+    return (w.end_date as any) ?? (w as any).date_end ?? w.raw?.date_end ?? w.raw?.end_date ?? null;
+  }
   function normalizeStatusRaw(s?: any) {
-    if (s == null) return ''
-    const str = String(s).toString()
+    if (s == null) return '';
+    const str = String(s).toString();
     const k = str.toUpperCase().trim().replace(/[-\s]/g, '_');
-    // Map legacy/old status names to the new canonical names:
-    // - NEW and old ASSIGNED -> PREPARATION
-    // - READY_TO_DEPLOY (or variants) -> ASSIGNED
-    if (k === 'NEW' || k === 'ASSIGNED') return 'PREPARATION'
-    if (k === 'READY_TO_DEPLOY' || k === 'READYTODEPLOY' || k === 'READY_TO_DEPLOY') return 'ASSIGNED'
-    return str
+    // remap legacy/raw statuses to canonical names
+    switch (k) {
+      case 'NEW':
+      case 'ASSIGNED':
+        return 'PREPARATION';
+      case 'READY_TO_DEPLOY':
+      case 'READY-TO-DEPLOY':
+        return 'ASSIGNED';
+      default:
+        return k;
+    }
   }
   const [list, setList] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -104,6 +130,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   const [editing, setEditing] = useState<WorkOrder | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -118,7 +145,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
   const [editStartInput, setEditStartInput] = useState<string>('');
   const [editEndInput, setEditEndInput] = useState<string>('');
 
-  async function load(p = page, query = q, location = locationFilter) {
+  async function load(p = page, query = q, location = locationFilter, date = dateFilter) {
     setLoading(true);
     setError(null);
     try {
@@ -126,8 +153,13 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
       if (query) params.set('q', query);
       params.set('page', String(p));
       params.set('pageSize', String(pageSize));
-      if (location) params.set('location', location);
+      if (location) params.set('site', location);
+      if (date) params.set('date', date);
+      console.debug('[WorkOrderList] loading', { url: `/work-orders?${params.toString()}`, p, query, location, date });
+      // support excluding work_type when requested by parent
+      if (excludeWorkType) params.set('exclude_work_type', excludeWorkType);
       const res = await apiClient(`/work-orders?${params.toString()}`);
+      console.debug('[WorkOrderList] api response', res);
       const data = Array.isArray(res) ? res : (res?.data ?? []);
       const meta = (res && typeof res === 'object' && !Array.isArray(res)) ? (res.meta ?? { page: p, pageSize, total: 0 }) : { page: p, pageSize, total: 0 };
       const listData = Array.isArray(data) ? data : [];
@@ -175,13 +207,13 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     }
   }
 
-  useEffect(() => { load(1, q); setPage(1); }, [q, locationFilter, selectedStatuses]);
+  useEffect(() => { load(1, q, locationFilter, dateFilter); setPage(1); }, [q, locationFilter, selectedStatuses, dateFilter]);
 
   // expose the refresh function to parent via callback (so WorkOrderForm can trigger it)
   useEffect(() => {
     if (typeof onRefreshRequested === 'function') {
       onRefreshRequested(async () => {
-        await load(1, q, locationFilter);
+        await load(1, q, locationFilter, dateFilter);
         setPage(1);
       });
     }
@@ -204,15 +236,26 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   }
 
+  function blurActive() {
+    try {
+      const el = (typeof document !== 'undefined') ? (document.activeElement as HTMLElement | null) : null;
+      if (el && typeof el.blur === 'function') el.blur();
+    } catch (e) {
+      // ignore
+    }
+  }
+
   // modal for showing full details when Expand is clicked in table view
   const [modalRow, setModalRow] = useState<WorkOrder | null>(null);
-  function openRowModal(w: WorkOrder) { setModalRow(w); }
+  function openRowModal(w: WorkOrder) { blurActive(); setModalRow(w); }
   function closeRowModal() { setModalRow(null); }
+
 
   function onPrev() { if (page > 1) { setPage(p => { const np = p - 1; load(np); return np; }); } }
   function onNext() { const maxPage = Math.ceil(total / pageSize); if (page < maxPage) { setPage(p => { const np = p + 1; load(np); return np; }); } }
 
   function openEdit(w: WorkOrder) {
+    blurActive();
     setEditing(w);
     setEditNote('');
     setEditStartInput(toInputDatetime(w.start_date));
@@ -244,6 +287,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
     setTechQuery('');
     setTechnicians([]);
     setSelectedAssignees({});
+    blurActive();
     setTaskModal({ open: true, wo: w });
     // load technicians (users with role=technician) and workorder detail (assignments)
     (async () => {
@@ -251,7 +295,12 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
       try {
         // determine workorder site/location (use vendor_cabang or raw.site)
         const woSiteRaw = (w.vendor_cabang ?? w.raw?.vendor_cabang ?? w.raw?.site ?? '');
-        const woSite = String(woSiteRaw || '').toLowerCase().trim();
+        const woSite = (() => {
+          const v = woSiteRaw;
+          if (v == null) return '';
+          if (typeof v === 'object') return String(v.name ?? v.code ?? v.id ?? v.site ?? '');
+          return String(v);
+        })().toLowerCase().trim();
         // determine assignment date/time from workorder start_date (must exist)
         // parse stored start_date robustly and interpret SQL datetimes without timezone as UTC
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -259,14 +308,51 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
           if (!val) return null;
           const s = String(val).trim();
           const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          const m = sqlRx.exec(s);
+          const hyphenDdRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+          const slashRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+          let m: RegExpExecArray | null = null;
+
+          // YYYY-MM-DD[ HH:MM(:SS)]
+          m = sqlRx.exec(s);
           if (m) {
             const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
-            // interpret stored value as UTC, then shift to backend-local (+8h) for assignment calculations
             const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
             const BACKEND_TZ_OFFSET_HOURS = 0;
             return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
           }
+
+          // DD-MM-YYYY[ HH:MM]
+          m = hyphenDdRx.exec(s);
+          if (m) {
+            const [, dd, mm, yyyy, hh = '00', mi = '00'] = m as any;
+            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), 0));
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+
+          // MM/DD/YYYY or DD/MM/YYYY with slashes — disambiguate by values
+          m = slashRx.exec(s);
+          if (m) {
+            const [, a, b, yyyy, hh = '00', mi = '00'] = m as any;
+            const na = Number(a);
+            const nb = Number(b);
+            let dd = na;
+            let mm = nb;
+            // If first segment > 12, it's day-first (DD/MM/YYYY)
+            if (na > 12) {
+              dd = na; mm = nb;
+            } else if (nb > 12) {
+              // second segment > 12 -> first is month
+              dd = nb; mm = na;
+            } else {
+              // both <=12; prefer MM/DD (common for 'date_doc'), but either is ambiguous.
+              mm = na; dd = nb;
+            }
+            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), 0));
+            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+
           const parsed = new Date(s);
           if (!isNaN(parsed.getTime())) {
             const BACKEND_TZ_OFFSET_HOURS = 0;
@@ -323,7 +409,12 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
         }
 
         console.debug('[openTaskModal] final filteredTechs', { count: filteredTechs.length, sample: filteredTechs.slice(0, 5) });
-        setTechnicians(filteredTechs);
+        const sorted = Array.isArray(filteredTechs) ? filteredTechs.slice().sort((a:any,b:any)=>{
+          const na = String(a?.name || a?.nama || a?.nipp || a?.email || a?.id || '').toLowerCase();
+          const nb = String(b?.name || b?.nama || b?.nipp || b?.email || b?.id || '').toLowerCase();
+          if (na < nb) return -1; if (na > nb) return 1; return 0;
+        }) : [];
+        setTechnicians(sorted);
       } catch (e) {
         console.warn('Failed to load technicians from shift assignments', e);
         setTechnicians([]);
@@ -573,9 +664,28 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
               size="small"
               sx={{ flex: 1, minWidth: 240 }}
             />
+            <TextField
+              size="small"
+              type="date"
+              label="Date"
+              value={dateFilter}
+              onChange={e => {
+                const v = String(e.target.value || '').trim();
+                setDateFilter(v);
+                try {
+                  console.debug('[WorkOrderList] date changed, reloading', v);
+                  load(1, q, locationFilter, v);
+                  setPage(1);
+                } catch (err) {
+                  console.warn('failed reloading on date change', err);
+                }
+              }}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: 160 }}
+            />
 
-            <Button variant="contained" color="primary" size="small" onClick={() => load(1, q)} disabled={loading}>Search</Button>
-            <Button variant="outlined" size="small" onClick={() => load(1, q)} disabled={loading}>Refresh</Button>
+            <Button variant="contained" color="primary" size="small" onClick={() => load(1, q, locationFilter, dateFilter)} disabled={loading}>Search</Button>
+            <Button variant="outlined" size="small" onClick={() => load(1, q, locationFilter, dateFilter)} disabled={loading}>Refresh</Button>
 
             <Box sx={{ alignSelf: 'center', ml: 'auto', color: 'text.secondary' }}>{total} item</Box>
           </Box>
@@ -598,8 +708,8 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
                       <div style={{ fontWeight: 700 }}>{w.doc_no ?? w.id} — {w.asset_name ?? '-'}</div>
                       <div style={{ color: '#666', marginTop: 6 }}>{w.description ?? '-'}</div>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                        <div style={{ fontSize: 12, color: '#666' }}>Start: {formatUtcDisplay(w.start_date)}</div>
-                        <div style={{ fontSize: 12, color: '#666' }}>End: {formatUtcDisplay(w.end_date)}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>Start: {formatUtcDisplay(resolveStartDate(w))}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>End: {formatUtcDisplay(resolveEndDate(w))}</div>
                         <div>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</div>
                       </Box>
                       <div style={{ marginTop: 8 }}>
@@ -675,8 +785,8 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
                       <TableRow key={w.id} hover>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.doc_no ?? w.id}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '-'}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(w.start_date)}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(w.end_date)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(resolveStartDate(w))}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{formatUtcDisplay(resolveEndDate(w))}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.asset_name ?? '-'}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
@@ -986,8 +1096,8 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
               <div style={{ fontWeight: 700 }}>{modalRow.asset_name ?? '-'}</div>
               <div style={{ color: '#666' }}>{modalRow.description ?? '-'}</div>
               <div style={{ color: '#666', fontSize: 13 }}>Location: {modalRow.vendor_cabang ?? modalRow.raw?.vendor_cabang ?? '-'}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(modalRow.start_date)}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(modalRow.end_date)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(modalRow ? resolveStartDate(modalRow) : undefined)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(modalRow ? resolveEndDate(modalRow) : undefined)}</div>
               <div style={{ marginTop: 8 }}>{renderStatusBadge((modalRow as any).status ?? modalRow?.raw?.status ?? 'PREPARATION')}</div>
               {typeof (modalRow as any).progress === 'number' && (
                 <Box sx={{ mt: 1 }}>
@@ -1029,7 +1139,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
-            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.start_date)}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing ? resolveStartDate(editing) : undefined)}</div>
 
             <TextField
               label="End Date & Time"
@@ -1040,7 +1150,7 @@ export default function WorkOrderList({ onRefreshRequested }: Props) {
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
-            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing?.end_date)}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>Current: {formatUtcDisplay(editing ? resolveEndDate(editing) : undefined)}</div>
 
             <TextField
               label="Keterangan (opsional)"

@@ -39,8 +39,13 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const page = Math.max(Number(req.query.page || 1), 1);
     const pageSize = Math.max(Number(req.query.pageSize || 10), 1);
     const site = (req.query.site as string) || '';
+    const date = (req.query.date as string) || '';
+    const jenis = (req.query.jenis as string) || '';
+    const work_type = (req.query.work_type as string) || undefined;
+    const type_work = (req.query.type_work as string) || undefined;
+    const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
 
-    const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site });
+    const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
 
     return res.json({
       data: rows.map(r => ({ ...r, status: (r as any).status ?? 'NEW' })),
@@ -166,6 +171,27 @@ export async function fetchAndCreateFromSigap(req: Request, res: Response) {
 
     const detail = err?.response?.data ?? err.message ?? 'error';
     return res.status(500).json({ message: 'Failed to fetch or save', detail });
+  }
+}
+
+/**
+ * POST /api/work-orders/generate-daily
+ * body: { date?: string }
+ */
+export async function generateDailyWorkOrders(req: Request, res: Response) {
+  try {
+    const body = req.body || {};
+    // If frontend supplied custom items use the custom creator
+    if (Array.isArray(body.items) && body.items.length > 0) {
+      const created = (await service.createCustomDailyChecklistWorkOrders(body.items)) || [];
+      return res.status(201).json({ message: 'generated', count: created.length, data: created });
+    }
+    const { date } = body;
+    const created = (await service.generateDailyChecklistWorkOrders(date)) || [];
+    return res.status(201).json({ message: 'generated', count: created.length, data: created });
+  } catch (err: any) {
+    console.error('generateDailyWorkOrders error', err);
+    return res.status(500).json({ message: 'Failed to generate daily work orders', detail: err?.message ?? err });
   }
 }
 
@@ -566,5 +592,18 @@ export async function undeployWorkOrder(req: Request, res: Response) {
   } catch (err) {
     console.error('undeployWorkOrder error', err);
     return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to undeploy work order' });
+  }
+}
+
+/** DELETE /api/work-orders/:id */
+export async function deleteWorkOrderHandler(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    const deleted = await service.deleteWorkOrder(id);
+    if (!deleted) return res.status(404).json({ message: 'WorkOrder not found' });
+    return res.json({ message: 'deleted', data: deleted });
+  } catch (err: any) {
+    console.error('deleteWorkOrder error', err);
+    return res.status(500).json({ message: 'Failed to delete work order', detail: err?.message ?? err });
   }
 }

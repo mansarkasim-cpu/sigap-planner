@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.fetchAndCreateFromSigap = exports.listWorkOrders = exports.listWorkOrdersPaginated = void 0;
+exports.deleteWorkOrderHandler = exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.generateDailyWorkOrders = exports.fetchAndCreateFromSigap = exports.listWorkOrders = exports.listWorkOrdersPaginated = void 0;
 const axios_1 = __importDefault(require("axios"));
 const service = __importStar(require("../services/workOrderService"));
 const ormconfig_1 = require("../ormconfig");
@@ -44,7 +44,12 @@ async function listWorkOrdersPaginated(req, res) {
         const page = Math.max(Number(req.query.page || 1), 1);
         const pageSize = Math.max(Number(req.query.pageSize || 10), 1);
         const site = req.query.site || '';
-        const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site });
+        const date = req.query.date || '';
+        const jenis = req.query.jenis || '';
+        const work_type = req.query.work_type || undefined;
+        const type_work = req.query.type_work || undefined;
+        const exclude_work_type = req.query.exclude_work_type || undefined;
+        const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
         return res.json({
             data: rows.map(r => ({ ...r, status: r.status ?? 'NEW' })),
             meta: { page, pageSize, total },
@@ -161,6 +166,28 @@ async function fetchAndCreateFromSigap(req, res) {
     }
 }
 exports.fetchAndCreateFromSigap = fetchAndCreateFromSigap;
+/**
+ * POST /api/work-orders/generate-daily
+ * body: { date?: string }
+ */
+async function generateDailyWorkOrders(req, res) {
+    try {
+        const body = req.body || {};
+        // If frontend supplied custom items use the custom creator
+        if (Array.isArray(body.items) && body.items.length > 0) {
+            const created = (await service.createCustomDailyChecklistWorkOrders(body.items)) || [];
+            return res.status(201).json({ message: 'generated', count: created.length, data: created });
+        }
+        const { date } = body;
+        const created = (await service.generateDailyChecklistWorkOrders(date)) || [];
+        return res.status(201).json({ message: 'generated', count: created.length, data: created });
+    }
+    catch (err) {
+        console.error('generateDailyWorkOrders error', err);
+        return res.status(500).json({ message: 'Failed to generate daily work orders', detail: err?.message ?? err });
+    }
+}
+exports.generateDailyWorkOrders = generateDailyWorkOrders;
 function parseSigapDateToIso(raw) {
     if (!raw)
         return undefined;
@@ -257,8 +284,8 @@ async function updateWorkOrderDates(req, res) {
         if (!start_date && !end_date) {
             return res.status(400).json({ message: 'start_date or end_date required' });
         }
-        // parse to Date or null
-        const s = start_date ? new Date(start_date) : undefined;
+        // parse to Date or undefined
+        let s = start_date ? new Date(start_date) : undefined;
         const e = end_date ? new Date(end_date) : undefined;
         if (start_date && isNaN(s.getTime()))
             return res.status(400).json({ message: 'Invalid start_date format' });
@@ -318,6 +345,8 @@ async function updateWorkOrderDates(req, res) {
                 console.debug('failed to lookup user profile for changed_by enrichment', e);
             }
         }
+        // Note: Do not auto-compute or persist workorder start/end dates when status changes.
+        // Date fields will only be changed if client explicitly provides `start_date` or `end_date` in the request.
         const updated = await service.updateWorkOrderDates(id, { start_date: s, end_date: e, note: (keterangan || note) ?? undefined, changedBy });
         return res.json({ message: 'updated', data: updated });
     }
@@ -566,3 +595,18 @@ async function undeployWorkOrder(req, res) {
     }
 }
 exports.undeployWorkOrder = undeployWorkOrder;
+/** DELETE /api/work-orders/:id */
+async function deleteWorkOrderHandler(req, res) {
+    try {
+        const id = req.params.id;
+        const deleted = await service.deleteWorkOrder(id);
+        if (!deleted)
+            return res.status(404).json({ message: 'WorkOrder not found' });
+        return res.json({ message: 'deleted', data: deleted });
+    }
+    catch (err) {
+        console.error('deleteWorkOrder error', err);
+        return res.status(500).json({ message: 'Failed to delete work order', detail: err?.message ?? err });
+    }
+}
+exports.deleteWorkOrderHandler = deleteWorkOrderHandler;

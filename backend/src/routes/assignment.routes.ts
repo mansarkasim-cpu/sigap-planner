@@ -59,6 +59,18 @@ router.post("/assignment", authMiddleware, async (req: Request, res: Response) =
     const assignmentRepo = AppDataSource.getRepository(Assignment);
     const assigned = Array.isArray(dto.assigned_to) ? dto.assigned_to : [dto.assigned_to as string];
     const created: any[] = [];
+    // For DAILY work orders, enforce single-technician semantics by cancelling existing active assignments
+    try {
+      if ((wo as any).work_type === 'DAILY') {
+        await assignmentRepo.createQueryBuilder()
+          .update(Assignment)
+          .set({ status: 'CANCELLED' })
+          .where('wo_id = :wo AND status IN (:...st)', { wo: String(wo.id), st: ['ASSIGNED', 'DEPLOYED', 'IN_PROGRESS'] })
+          .execute();
+      }
+    } catch (e) {
+      console.warn('Failed to cancel existing assignments for DAILY workorder', e);
+    }
     for (const assignee of assigned) {
       const a = new Assignment();
       a.wo = wo as any;

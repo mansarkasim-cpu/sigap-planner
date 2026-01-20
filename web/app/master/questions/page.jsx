@@ -58,6 +58,21 @@ export default function QuestionsPage(){
 
   useEffect(()=>{ load(); loadRefs(); },[]);
 
+  // auto-refresh when filterJenis changes (immediate)
+  useEffect(() => {
+    setPage(1);
+    load(1, pageSize);
+  }, [filterJenis]);
+
+  // debounced search when q changes
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      load(1, pageSize);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [q]);
+
   function openCreate(){ setEditing({ question_text:'', jenis_alat_id: null, input_type: 'boolean', required: true, order: 0, options: [] }); setModalOpen(true); }
   async function openEdit(row){
     setLoading(true);
@@ -128,14 +143,16 @@ export default function QuestionsPage(){
           <Box sx={{ color:'text.secondary', fontSize:13 }}>Manage checklist questions and options</Box>
         </Box>
         <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
-          <Select size="small" value={filterJenis ?? ''} onChange={e=>{ const v = e.target.value || null; setFilterJenis(v); load(); }} displayEmpty sx={{ minWidth:200 }}>
+          <Select size="small" value={filterJenis ?? ''} onChange={e=>{ const v = e.target.value || null; setFilterJenis(v); }} displayEmpty sx={{ minWidth:200 }}>
             <MenuItem value=""><em>All Jenis</em></MenuItem>
-            {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
+            {jenis.map(j=> (
+              <MenuItem key={j.id} value={j.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <Box component="span" sx={{ fontWeight: 600 }}>{j.nama}</Box>
+                {j.deskripsi || j.description ? <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>{j.deskripsi || j.description}</Box> : null}
+              </MenuItem>
+            ))}
           </Select>
-          <TextField size="small" placeholder="Search" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ setPage(1); load(1,pageSize); } }} />
-          <Button variant="outlined" onClick={()=>{ setPage(1); load(1,pageSize); }} startIcon={loading? <CircularProgress size={18}/> : null}>Search</Button>
-          <Button variant="outlined" onClick={()=>{ setQ(''); setFilterJenis(null); setPage(1); load(1,pageSize); }} sx={{ ml:1 }}>Clear</Button>
-          <Button variant="outlined" onClick={()=>load(page,pageSize)} startIcon={loading? <CircularProgress size={18}/> : null}>Refresh</Button>
+          <TextField size="small" placeholder="Search" value={q} onChange={e=>setQ(e.target.value)} />
           <Button variant="contained" sx={{ ml:1 }} startIcon={<AddIcon/>} onClick={openCreate}>Create Question</Button>
         </Box>
       </Box>
@@ -144,13 +161,14 @@ export default function QuestionsPage(){
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow><TableCell>ID</TableCell><TableCell>Jenis</TableCell><TableCell>Question</TableCell><TableCell>Input</TableCell><TableCell>Required</TableCell><TableCell align="right">Action</TableCell></TableRow>
+              <TableRow><TableCell>ID</TableCell><TableCell>Jenis</TableCell><TableCell>Kelompok</TableCell><TableCell>Question</TableCell><TableCell>Input</TableCell><TableCell>Required</TableCell><TableCell align="right">Action</TableCell></TableRow>
             </TableHead>
             <TableBody>
               {rows.map(r=> (
                 <TableRow key={r.id} hover>
                   <TableCell>{r.id}</TableCell>
                   <TableCell>{r.jenis_alat? r.jenis_alat.nama : '-'}</TableCell>
+                  <TableCell>{r.kelompok || r.group || r.group_name || '-'}</TableCell>
                   <TableCell>{r.question_text}</TableCell>
                   <TableCell>{r.input_type}</TableCell>
                   <TableCell>{r.required? 'Yes' : 'No'}</TableCell>
@@ -187,9 +205,15 @@ export default function QuestionsPage(){
           <Box sx={{ display:'grid', gap:2, mt:1 }}>
             <Select size="small" value={editing?.jenis_alat_id ?? ''} onChange={e=>setEditing({...editing, jenis_alat_id: e.target.value || null})}>
               <MenuItem value=""><em>Select jenis</em></MenuItem>
-              {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
+              {jenis.map(j=> (
+                <MenuItem key={j.id} value={j.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <Box component="span" sx={{ fontWeight: 600 }}>{j.nama}</Box>
+                  {j.deskripsi || j.description ? <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>{j.deskripsi || j.description}</Box> : null}
+                </MenuItem>
+              ))}
             </Select>
             <TextField label="Question Text" size="small" value={editing?.question_text||''} onChange={e=>setEditing({...editing, question_text: e.target.value})} />
+            <TextField label="Kelompok Pertanyaan" size="small" value={editing?.kelompok || editing?.group || ''} onChange={e=>setEditing({...editing, kelompok: e.target.value})} />
             <Select size="small" value={editing?.input_type || 'boolean'} onChange={e=>setEditing({...editing, input_type: e.target.value})}>
               <MenuItem value="boolean">Boolean</MenuItem>
               <MenuItem value="text">Text</MenuItem>

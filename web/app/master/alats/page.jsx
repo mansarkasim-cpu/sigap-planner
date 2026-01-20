@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import apiClient from '../../../lib/api-client';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
+import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Table from '@mui/material/Table';
@@ -37,12 +38,12 @@ export default function AlatsPage(){
   const [q,setQ] = useState('');
   const [filterJenis,setFilterJenis] = useState(null);
   const [filterSite,setFilterSite] = useState(null);
+  const [showFilters,setShowFilters] = useState(false);
 
   async function load(p = page, ps = pageSize, search = q){
     setLoading(true);
     try{
       const params = new URLSearchParams();
-      if (search) params.set('q', search);
       if (p) params.set('page', String(p));
       if (ps) params.set('pageSize', String(ps));
       if (filterJenis) params.set('jenis_alat_id', String(filterJenis));
@@ -58,6 +59,12 @@ export default function AlatsPage(){
 
   useEffect(()=>{ load(); loadRefs(); },[]);
 
+  // auto-refresh when jenis or site filter changes
+  useEffect(()=>{
+    setPage(1);
+    load(1, pageSize, q);
+  }, [filterJenis, filterSite]);
+
   function openCreate(){ setEditing({ nama:'', kode:'', serial_no:'', jenis_alat_id: null, site_id: null, notes:'' }); setModalOpen(true); }
   function openEdit(r){ setEditing({...r, jenis_alat_id: r.jenis_alat? r.jenis_alat.id : null, site_id: r.site? r.site.id: null}); setModalOpen(true); }
 
@@ -72,17 +79,7 @@ export default function AlatsPage(){
           <Box sx={{ color:'text.secondary', fontSize:13 }}>Manage equipment instances</Box>
         </Box>
         <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
-          <Select size="small" value={filterJenis ?? ''} onChange={e=>{ const v = e.target.value || null; setFilterJenis(v); setPage(1); load(1,pageSize); }} displayEmpty sx={{ minWidth:160 }}>
-            <MenuItem value=""><em>All Jenis</em></MenuItem>
-            {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
-          </Select>
-          <Select size="small" value={filterSite ?? ''} onChange={e=>{ const v = e.target.value || null; setFilterSite(v); setPage(1); load(1,pageSize); }} displayEmpty sx={{ minWidth:160 }}>
-            <MenuItem value=""><em>All Sites</em></MenuItem>
-            {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
-          </Select>
-          <TextField size="small" placeholder="Search" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ setPage(1); load(1,pageSize,e.target.value); } }} />
-          <Button variant="outlined" onClick={()=>{ setPage(1); load(1,pageSize,q); }} startIcon={loading? <CircularProgress size={18}/> : null}>Search</Button>
-          <Button variant="outlined" onClick={()=>{ setQ(''); setFilterJenis(null); setFilterSite(null); setPage(1); load(1,pageSize,''); }} sx={{ ml:1 }}>Clear</Button>
+          {/* Removed search/clear/filter buttons per request; keep Refresh and Create */}
           <Button variant="outlined" onClick={()=>load(page,pageSize,q)} startIcon={loading? <CircularProgress size={18}/> : null}>Refresh</Button>
           <Button variant="contained" sx={{ ml:1 }} startIcon={<AddIcon/>} onClick={openCreate}>Create Alat</Button>
         </Box>
@@ -99,7 +96,26 @@ export default function AlatsPage(){
                 <TableRow key={r.id} hover>
                   <TableCell>{r.id}</TableCell>
                   <TableCell>{r.nama}</TableCell>
-                  <TableCell>{r.jenis_alat? r.jenis_alat.nama : '-'}</TableCell>
+                  <TableCell>
+                    {r.jenis_alat ? (
+                      <Box>
+                        <Box sx={{ fontWeight:700 }}>{r.jenis_alat.nama}</Box>
+                        {r.jenis_alat.description && <Box sx={{ fontSize:12, color:'text.secondary' }}>{r.jenis_alat.description}</Box>}
+                      </Box>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {r.status ? (
+                      <Chip
+                        label={r.status}
+                        size="small"
+                        color={r.status === 'ACTIVE' ? 'success' : 'default'}
+                        variant={r.status === 'ACTIVE' ? 'filled' : 'outlined'}
+                      />
+                    ) : (
+                      <Chip label="ACTIVE" size="small" color="success" />
+                    )}
+                  </TableCell>
                   <TableCell>{r.site? r.site.name : '-'}</TableCell>
                   <TableCell>{r.kode || r.serial_no || '-'}</TableCell>
                   <TableCell align="right">
@@ -138,7 +154,16 @@ export default function AlatsPage(){
             <TextField label="Serial No" size="small" value={editing?.serial_no||''} onChange={e=>setEditing({...editing, serial_no: e.target.value})} />
             <Select size="small" value={editing?.jenis_alat_id ?? ''} onChange={e=>setEditing({...editing, jenis_alat_id: e.target.value || null})}>
               <MenuItem value=""><em>Select jenis</em></MenuItem>
-              {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
+              {jenis.map(j=> (
+                <MenuItem key={j.id} value={j.id} sx={{ display:'flex', flexDirection:'column', alignItems:'flex-start' }}>
+                  <Box sx={{ fontWeight:700 }}>{j.nama}</Box>
+                  {j.description && <Box sx={{ fontSize:12, color:'text.secondary' }}>{j.description}</Box>}
+                </MenuItem>
+              ))}
+            </Select>
+            <Select size="small" value={editing?.status ?? 'ACTIVE'} onChange={e=>setEditing({...editing, status: e.target.value})} sx={{ mt:1 }}>
+              <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+              <MenuItem value="INACTIVE">INACTIVE</MenuItem>
             </Select>
             <Select size="small" value={editing?.site_id ?? ''} onChange={e=>setEditing({...editing, site_id: e.target.value || null})}>
               <MenuItem value=""><em>None</em></MenuItem>

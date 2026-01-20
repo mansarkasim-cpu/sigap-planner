@@ -70,6 +70,10 @@ __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at' }),
     __metadata("design:type", Date)
 ], WorkOrder.prototype, "created_at", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamptz', name: 'deleted_at', nullable: true }),
+    __metadata("design:type", Date)
+], WorkOrder.prototype, "deleted_at", void 0);
 WorkOrder = __decorate([
     (0, typeorm_1.Entity)({ name: 'work_order' })
 ], WorkOrder);
