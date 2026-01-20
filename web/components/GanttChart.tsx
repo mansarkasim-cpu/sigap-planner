@@ -99,6 +99,25 @@ function isoToMs(val?: string | null) {
       return isNaN(nUtc) ? null : nUtc;
     }
   }
+  // If string is an ISO datetime with an explicit timezone (Z or +HH:mm/-HH:mm),
+  // parse components and construct a local Date so the displayed clock time
+  // matches the server-provided wall-clock time in the gantt (avoid automatic
+  // UTC shifting by Date.parse). This ensures chart positions match modal display.
+  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?[Zz+-]\d{2}:?\d{2}$/.test(s) || /Z$/.test(s)) {
+    const norm = s.replace(' ', 'T');
+    const m = norm.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?([Zz]|[+-]\d{2}:?\d{2})$/);
+    if (m) {
+      const year = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10) - 1;
+      const day = parseInt(m[3], 10);
+      const hour = parseInt(m[4], 10);
+      const minute = parseInt(m[5], 10);
+      const second = m[6] ? parseInt(m[6], 10) : 0;
+      const ms = m[7] ? Math.round(Number('0.' + m[7]) * 1000) : 0;
+      const dLocal = new Date(year, month, day, hour, minute, second, ms);
+      return isNaN(dLocal.getTime()) ? null : dLocal.getTime();
+    }
+  }
   const n = Date.parse(s);
   return isNaN(n) ? null : n;
 }
