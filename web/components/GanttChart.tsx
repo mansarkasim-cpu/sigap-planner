@@ -262,6 +262,12 @@ function formatUtcDisplay(raw?: string | null) {
   }
   const parsed = new Date(s);
   if (isNaN(parsed.getTime())) return '-';
+  // If the original string included an explicit timezone (Z or +HH:mm/-HH:mm),
+  // present the timestamp using UTC components to preserve the server-provided clock time.
+  if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    return `${pad(parsed.getUTCDate())}/${pad(parsed.getUTCMonth() + 1)}/${parsed.getUTCFullYear()} ${pad(parsed.getUTCHours())}:${pad(parsed.getUTCMinutes())}`;
+  }
+  // Otherwise treat the parsed Date as local time
   return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
