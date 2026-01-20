@@ -107,19 +107,16 @@ function niceTime(ms: number | null) {
   const d = new Date(ms);
   return d.toLocaleString();
 }
-// Format ms to dd/mm/yyyy HH24:mi
-// ms is already in UTC from Date.parse, so just display it in WIB (UTC+7)
+// Format ms to dd/mm/yyyy HH24:mi using browser local timezone
 function formatDdMmYyyyHHMM(ms: number | null) {
   if (!ms) return '-';
-  // Display in WIB timezone (UTC+7) since backend is in Indonesia
-  const WIB_OFFSET_HOURS = 7;
-  const d = new Date(ms + WIB_OFFSET_HOURS * 60 * 60 * 1000);
+  const d = new Date(ms);
   const pad = (n: number) => n.toString().padStart(2, '0');
-  const dd = pad(d.getUTCDate());
-  const mm = pad(d.getUTCMonth() + 1);
-  const yyyy = d.getUTCFullYear();
-  const hh = pad(d.getUTCHours());
-  const mi = pad(d.getUTCMinutes());
+  const dd = pad(d.getDate());
+  const mm = pad(d.getMonth() + 1);
+  const yyyy = d.getFullYear();
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 function dateInputToDayStart(dateStr: string) {
@@ -250,15 +247,18 @@ function formatUtcDisplay(raw?: string | null) {
   const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
   const m = sqlRx.exec(s);
   if (m) {
-    const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
-    return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+    const [, yyyy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
+    // construct a Date in browser local timezone from components
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   // Common backend format: DD-MM-YYYY or DD-MM-YYYY HH:mm(:ss)
   const dmyRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
   const m2 = dmyRx.exec(s);
   if (m2) {
-    const [, dd, mm, yyyy, hh = '00', mi = '00'] = m2 as any;
-    return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m2 as any;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const parsed = new Date(s);
   if (isNaN(parsed.getTime())) return '-';
