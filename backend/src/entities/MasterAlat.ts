@@ -27,6 +27,9 @@ export class MasterAlat {
   @Column({ type: 'text', nullable: true })
   notes?: string;
 
+  @Column({ length: 20, default: 'ACTIVE' })
+  status!: string;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   created_at!: Date;
 

@@ -25,7 +25,10 @@ class LocationData {
 }
 
 class ChecklistScreen extends StatefulWidget {
-  const ChecklistScreen({super.key});
+  final List<dynamic>? initialChecklist;
+  final Map<String, dynamic>? initialAlat;
+  final String? initialWorkOrderId;
+  const ChecklistScreen({super.key, this.initialChecklist, this.initialAlat, this.initialWorkOrderId});
 
   @override
   State<ChecklistScreen> createState() => _ChecklistScreenState();
@@ -55,6 +58,20 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     final p = await SharedPreferences.getInstance();
     setState(() { _token = p.getString('api_token') ?? ''; });
     await loadRefs();
+    // if opened with an initial checklist or alat, apply them
+    try {
+      if (widget.initialAlat != null) {
+        setState(() { selectedAlat = widget.initialAlat; });
+        final aid = (widget.initialAlat!['id'] ?? widget.initialAlat!['alat_id']);
+        final idn = aid != null ? int.tryParse(aid.toString()) : null;
+        if (idn != null) await loadQuestionsForAlat(idn);
+      }
+      if (widget.initialChecklist != null) {
+        setState(() { questions = List<dynamic>.from(widget.initialChecklist!); });
+      }
+      // capture optional work order id (when opened from a WO)
+      try { if (widget.initialWorkOrderId != null) { /* store if needed */ } } catch (_) {}
+    } catch (_) {}
   }
 
   Future<void> loadRefs() async {
@@ -270,26 +287,37 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 
   Future<void> _pickQuestionPhoto(int idx) async {
     try {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Wrap(children: [
+            ListTile(leading: const Icon(Icons.camera_alt), title: const Text('Camera'), onTap: () => Navigator.pop(ctx, 'camera')),
+            ListTile(leading: const Icon(Icons.photo_library), title: const Text('Gallery / Files'), onTap: () => Navigator.pop(ctx, 'gallery')),
+            ListTile(leading: const Icon(Icons.close), title: const Text('Cancel'), onTap: () => Navigator.pop(ctx, null)),
+          ])
+        )
+      );
+      if (choice == null) return;
+
       final picker = ImagePicker();
-      try {
-        final picked = await picker.pickImage(source: ImageSource.camera, maxWidth: 1280);
-        if (picked != null) {
-          _setQuestionField(idx, 'photo', picked.path);
-          return;
+      XFile? picked;
+      if (choice == 'camera') {
+        try {
+          picked = await picker.pickImage(source: ImageSource.camera, maxWidth: 1280);
+        } catch (e) {
+          debugPrint('camera pick failed: $e');
         }
-      } catch (e) {
-        // camera may be unsupported on desktop; fallback to gallery
-        debugPrint('camera pick failed, will try gallery: $e');
+      } else if (choice == 'gallery') {
+        try {
+          picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1280);
+        } catch (e) {
+          debugPrint('gallery pick failed: $e');
+        }
       }
-      // Try gallery next
-      try {
-        final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1280);
-        if (picked != null) {
-          _setQuestionField(idx, 'photo', picked.path);
-          return;
-        }
-      } catch (e) {
-        debugPrint('gallery pick failed: $e');
+
+      if (picked != null) {
+        _setQuestionField(idx, 'photo', picked.path);
+        return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No photo selected or camera not available')));
@@ -299,7 +327,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     }
   }
 
-  Widget _buildQuestionRow(dynamic q, int idx) {
+  Widget _buildQuestionRow(dynamic q, int idx, [int? displayNumber]) {
     final qtype = (q['input_type'] ?? 'boolean').toString();
     final bool isRequired = (q['required'] == null) ? true : (q['required'] == true || q['required'].toString() == '1');
     final opts = q['options'] is List ? q['options'] as List : [];
@@ -311,7 +339,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(child: Text.rich(TextSpan(children: [
-              TextSpan(text: '${idx+1}. ${q['question_text']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              TextSpan(text: '${(displayNumber != null ? (displayNumber + 1) : (idx+1))}. ${q['question_text']}', style: const TextStyle(fontWeight: FontWeight.w600)),
               if (isRequired) const TextSpan(text: ' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ]))),
           ]),
@@ -438,17 +466,24 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       };
       final res = await api.post('/mobile/checklists', payload);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Checklist submitted')));
-      // clear entire form (immutable) and refresh references so done-today list updates
-      setState((){
-        selectedAlat = null;
-        questions = [];
-        notes = '';
-        latitude = null;
-        longitude = null;
-      });
+      // If this checklist was opened from a Work Order, attempt to mark the WO as completed
       try {
-        await loadRefs();
+        final woId = widget.initialWorkOrderId;
+        if (woId != null && woId.toString().isNotEmpty) {
+          try {
+            final patchPayload = { 'end_date': DateTime.now().toIso8601String(), 'note': 'Checklist completed via mobile' };
+            await api.patch('/work-orders/${Uri.encodeComponent(woId.toString())}', patchPayload);
+          } catch (e) {
+            debugPrint('Failed to mark work order $woId completed: $e');
+          }
+        }
       } catch (_) {}
+
+      // Return to previous screen and indicate success so caller can refresh
+      if (mounted) {
+        Navigator.pop(context, true);
+        return;
+      }
     } catch (e) {
       debugPrint('submit failed: $e');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Submit failed: $e')));
@@ -459,13 +494,94 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // group questions by 'kelompok' property for display
+    try {
+      debugPrint('Checklist total questions: ${questions.length}');
+      final samples = questions.take(30).map((q) {
+        try { return '${q['id']}:${q['kelompok']}'; } catch (_) { return q.toString(); }
+      }).toList();
+      debugPrint('Checklist sample id:kelompok -> ${samples.join(', ')}');
+    } catch (_) {}
+    final Map<String, List<MapEntry<int, dynamic>>> _grouped = {};
+    for (final e in questions.asMap().entries) {
+      String k = 'Umum';
+      try {
+        final raw = e.value as Map?;
+        if (raw != null) {
+          dynamic gv;
+          if (raw.containsKey('kelompok')) gv = raw['kelompok'];
+          else if (raw.containsKey('group')) gv = raw['group'];
+          else if (raw.containsKey('group_name')) gv = raw['group_name'];
+          else if (raw.containsKey('kelompok_pertanyaan')) gv = raw['kelompok_pertanyaan'];
+          else if (raw.containsKey('group_label')) gv = raw['group_label'];
+          else if (raw.containsKey('groupLabel')) gv = raw['groupLabel'];
+          if (gv != null) {
+            if (gv is Map) {
+              k = (gv['name'] ?? gv['label'] ?? gv['nama'] ?? gv['kelompok'] ?? gv.toString()).toString().trim();
+            } else {
+              k = gv.toString().trim();
+            }
+          }
+          if (k.isEmpty) k = 'Umum';
+          // fallback: if kelompok not set, group by jenis_alat name when available
+          if ((k == 'Umum' || k.trim().isEmpty) && raw.containsKey('jenis_alat') && raw['jenis_alat'] is Map) {
+            try {
+              final ja = raw['jenis_alat'];
+              final jname = (ja['nama'] ?? ja['name'] ?? ja['label'])?.toString();
+              if (jname != null && jname.trim().isNotEmpty) k = jname.trim();
+            } catch (_) {}
+          }
+        }
+      } catch (_) { k = 'Umum'; }
+      _grouped.putIfAbsent(k, () => []).add(e);
+    }
+    final List<Widget> _questionWidgets = [];
+    final groupKeys = _grouped.keys.toList()..sort();
+    try { debugPrint('Checklist groups: ' + groupKeys.map((g) => '$g:${_grouped[g]!.length}').join(', ')); } catch (_) {}
+    int _displayCounter = 0;
+    for (final g in groupKeys) {
+      _questionWidgets.add(Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(g, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))));
+      final entries = _grouped[g]!;
+      // sort entries by `index` then `order` when available, fallback to id/original index
+      entries.sort((a, b) {
+        int _num(dynamic v) {
+          if (v == null) return 0;
+          try {
+            final s = v.toString();
+            final i = int.tryParse(s);
+            if (i != null) return i;
+            final d = double.tryParse(s);
+            if (d != null) return d.toInt();
+          } catch (_) {}
+          return 0;
+        }
+        try {
+          final va = a.value is Map ? (a.value['index'] ?? a.value['order'] ?? a.value['id'] ?? a.key) : a.key;
+          final vb = b.value is Map ? (b.value['index'] ?? b.value['order'] ?? b.value['id'] ?? b.key) : b.key;
+          final na = _num(va);
+          final nb = _num(vb);
+          if (na != nb) return na.compareTo(nb);
+          // tie-breaker: compare as strings
+          return va.toString().compareTo(vb.toString());
+        } catch (_) { return a.key.compareTo(b.key); }
+      });
+      for (final en in entries) {
+        _questionWidgets.add(_buildQuestionRow(en.value, en.key, _displayCounter));
+        _displayCounter += 1;
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Daily Checklist')),
       body: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(children: [
           Row(children: [
-            Expanded(child: DropdownButtonFormField<int>(
+            Expanded(child: selectedAlat != null ? TextFormField(
+              initialValue: (selectedAlat['nama'] ?? selectedAlat['name'] ?? selectedAlat['asset_name'] ?? selectedAlat['asset'] ?? selectedAlat['doc_no'] ?? '').toString(),
+              readOnly: true,
+              decoration: const InputDecoration(labelText: 'Alat'),
+            ) : DropdownButtonFormField<int>(
               value: selectedAlat != null ? selectedAlat['id'] : null,
               items: (alats is List ? alats.where((a) {
                 try {
@@ -495,7 +611,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           const SizedBox(height: 12),
           if (loading) const LinearProgressIndicator(),
           Expanded(child: ListView(children: [
-            ...questions.asMap().entries.map((e) => _buildQuestionRow(e.value, e.key)).toList(),
+            ..._questionWidgets,
             const SizedBox(height: 8),
             TextField(decoration: const InputDecoration(labelText: 'Notes'), maxLines: 3, onChanged: (t){ notes = t; }),
             const SizedBox(height: 8),

@@ -58,18 +58,32 @@ const minBarWidthPx = 4;
 
 function isoToMs(val?: string | null) {
   if (!val) return null;
+  const s = String(val).trim();
+  // Handle dd-MM-yyyy or dd-MM-yyyy HH:mm(:ss)
+  const dmy = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}:\d{2})(?::(\d{2}))?)?$/);
+  if (dmy) {
+    const dd = dmy[1];
+    const mm = dmy[2];
+    const yyyy = dmy[3];
+    const time = dmy[4] || '00:00';
+    const sec = dmy[5] || '00';
+    const iso = `${yyyy}-${mm}-${dd}T${time}:${sec}`;
+    const n = Date.parse(iso);
+    if (!isNaN(n)) return n;
+    // fallthrough to other heuristics if parse failed
+  }
   // If string is date-only (YYYY-MM-DD), parse as local midnight to avoid UTC offset issues
-  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-    const d = new Date(`${val}T00:00:00`);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(`${s}T00:00:00`);
     const n = d.getTime();
     return isNaN(n) ? null : n;
   }
   // If string is datetime without timezone (e.g. "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD HH:mm:ss"),
   // parse components and treat them as backend-local time. Many backends send naive datetimes
   // (no TZ) — assume backend uses UTC+8 and subtract that offset to get UTC ms.
-  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(val) && !/[Z+-]\d{2}:?\d{2}$/.test(val) && !/Z$/.test(val)) {
+  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) && !/[Z+-]\d{2}:?\d{2}$/.test(s) && !/Z$/.test(s)) {
     // normalize separator to T
-    const norm = val.replace(' ', 'T');
+    const norm = s.replace(' ', 'T');
     const m = norm.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/);
     if (m) {
       const year = parseInt(m[1], 10);
@@ -85,7 +99,7 @@ function isoToMs(val?: string | null) {
       return isNaN(nUtc) ? null : nUtc;
     }
   }
-  const n = Date.parse(val);
+  const n = Date.parse(s);
   return isNaN(n) ? null : n;
 }
 function niceTime(ms: number | null) {
@@ -231,11 +245,19 @@ function renderStatusBadge(s: any) {
 function formatUtcDisplay(raw?: string | null) {
   if (!raw) return '-';
   const s = String(raw).trim();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  // SQL / ISO-style: YYYY-MM-DD[ HH:MM(:SS)?]
   const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
   const m = sqlRx.exec(s);
-  const pad = (n: number) => String(n).padStart(2, '0');
   if (m) {
     const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
+    return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
+  }
+  // Common backend format: DD-MM-YYYY or DD-MM-YYYY HH:mm(:ss)
+  const dmyRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+  const m2 = dmyRx.exec(s);
+  if (m2) {
+    const [, dd, mm, yyyy, hh = '00', mi = '00'] = m2 as any;
     return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
   }
   const parsed = new Date(s);
@@ -342,7 +364,10 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                 wo = res?.data ?? res;
               } catch (e) { wo = undefined; }
             }
-            if (wo) setSelected(wo as any);
+            if (wo) {
+              console.debug('[Gantt] open details (after drag click) payload:', wo);
+              setSelected(wo as any);
+            }
           } catch (e) { console.error('open details on click after drag', e); }
           // reset suppress flag
           suppressClickRef.current = false;
@@ -427,10 +452,34 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     setLoading(true);
     setError(null);
     try {
-      const url = `/work-orders?q=&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
-      const res = await apiClient(url);
+      const baseUrl = `/work-orders?q=&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
+      const res = await apiClient(baseUrl);
       const rows = res?.data ?? res;
-      const mapped: WO[] = (rows || []).map((r: any) => ({
+      // Also explicitly fetch DAILY work orders and merge to ensure they appear on the Gantt
+      let dailyRows: any[] = [];
+      try {
+        const dailyUrl = `/work-orders?work_type=DAILY&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
+        const dres = await apiClient(dailyUrl);
+        dailyRows = dres?.data ?? dres ?? [];
+      } catch (e) {
+        dailyRows = [];
+      }
+      // Also fetch items where type_work='DAILY_CHECKLIST' (legacy or alternative column)
+      let typeWorkRows: any[] = [];
+      try {
+        const twUrl = `/work-orders?type_work=DAILY_CHECKLIST&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
+        const tres = await apiClient(twUrl);
+        typeWorkRows = tres?.data ?? tres ?? [];
+      } catch (e) {
+        typeWorkRows = [];
+      }
+      // merge rows and dailyRows deduping by id
+      const map = new Map<string|number, any>();
+      (Array.isArray(rows) ? rows : []).forEach((r: any) => { if (r && r.id != null) map.set(String(r.id), r); });
+      (Array.isArray(dailyRows) ? dailyRows : []).forEach((r: any) => { if (r && r.id != null) map.set(String(r.id), r); });
+      (Array.isArray(typeWorkRows) ? typeWorkRows : []).forEach((r: any) => { if (r && r.id != null) map.set(String(r.id), r); });
+      const merged = Array.from(map.values());
+      const mapped: WO[] = (merged || []).map((r: any) => ({
         ...r,
         start_date: r.start_date ?? null,
         end_date: r.end_date ?? null,
@@ -525,22 +574,35 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       let filteredTechs: any[] = [];
       try {
         const woSiteRaw = (w.raw && (w.raw.vendor_cabang || w.raw.site)) || (w as any).vendor_cabang || '';
-        const woSite = String(woSiteRaw || '').toLowerCase().trim();
+        const woSite = (() => {
+          const v = woSiteRaw;
+          if (v == null) return '';
+          if (typeof v === 'object') return String(v.name ?? v.code ?? v.id ?? v.site ?? '');
+          return String(v);
+        })().toLowerCase().trim();
         const pad = (n: number) => String(n).padStart(2, '0');
         function parseToUtcDate(val?: string | null): Date | null {
           if (!val) return null;
           const s = String(val).trim();
+          const BACKEND_TZ_OFFSET_HOURS = 0;
+          // ISO / SQL: YYYY-MM-DD [HH:mm(:ss)?]
           const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
           const m = sqlRx.exec(s);
           if (m) {
             const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
             const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
-            const BACKEND_TZ_OFFSET_HOURS = 0;
+            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
+          }
+          // Common backend format: DD-MM-YYYY or DD/MM/YYYY [HH:mm(:ss)?]
+          const dmyRx = /^(\d{2})[-\/](\d{2})[-\/](\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+          const m2 = dmyRx.exec(s);
+          if (m2) {
+            const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m2 as any;
+            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
             return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
           }
           const parsed = new Date(s);
           if (!isNaN(parsed.getTime())) {
-            const BACKEND_TZ_OFFSET_HOURS = 0;
             return new Date(parsed.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
           }
           return null;
@@ -570,7 +632,12 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
             filteredTechs = [];
           }
         }
-        setTechnicians(filteredTechs);
+        const sortedTechs = Array.isArray(filteredTechs) ? filteredTechs.slice().sort((a:any,b:any)=>{
+          const na = String(a?.name || a?.nama || a?.nipp || a?.email || a?.id || '').toLowerCase();
+          const nb = String(b?.name || b?.nama || b?.nipp || b?.email || b?.id || '').toLowerCase();
+          if (na < nb) return -1; if (na > nb) return 1; return 0;
+        }) : [];
+        setTechnicians(sortedTechs);
       } catch (e) {
         setTechnicians([]);
       }
@@ -709,21 +776,24 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         return false;
       }
       // prefer realisasi dates for COMPLETED work orders if available
-      let sIso: string | null = (it.start_date ?? null) as any;
-      let eIso: string | null = (it.end_date ?? null) as any;
+      // but fall back to common raw fields when top-level start/end are missing
+      const pickRawStart = (obj: any) => obj?.start_date ?? obj?.start_date_sql ?? obj?.date_start ?? obj?.date ?? obj?.planned_start ?? null;
+      const pickRawEnd = (obj: any) => obj?.end_date ?? obj?.end_date_sql ?? obj?.up_date ?? obj?.date_end ?? obj?.planned_end ?? null;
+      let sIso: string | null = (it.start_date ?? pickRawStart(it.raw) ?? null) as any;
+      let eIso: string | null = (it.end_date ?? pickRawEnd(it.raw) ?? null) as any;
       try {
         const statusNorm = normalizeStatusRaw((it as any).status ?? it.raw?.status ?? it.raw?.state ?? '');
         // prefer realisasi start for COMPLETED and IN_PROGRESS items when available;
         // for IN_PROGRESS, keep the original estimated end_date as the bar end
-        if (statusNorm === 'COMPLETED' || statusNorm === 'IN_PROGRESS') {
+        // prefer realisasi dates only for COMPLETED work orders when available
+        if (statusNorm === 'COMPLETED') {
           const r = (it as any).realisasi ?? (it.raw && (it.raw.realisasi || it.raw.realisasis || it.raw.realisasi_items)) ?? null;
           if (r) {
-            if (r.actualStart) sIso = r.actualStart;
-            else if (Array.isArray(r.items) && r.items.length > 0 && r.items[0].start) sIso = r.items[0].start;
-            if (statusNorm === 'COMPLETED') {
-              if (r.actualEnd) eIso = r.actualEnd;
-              else if (Array.isArray(r.items) && r.items.length > 0 && r.items[0].end) eIso = r.items[0].end;
-            }
+            // only override with realisasi when it actually contains dates; otherwise keep work-order start/end (including raw fallbacks)
+            const realS = r.actualStart ?? (Array.isArray(r.items) && r.items.length > 0 ? r.items[0].start : null) ?? null;
+            const realE = r.actualEnd ?? (Array.isArray(r.items) && r.items.length > 0 ? r.items[0].end : null) ?? null;
+            if (realS) sIso = realS;
+            if (realE) eIso = realE;
           }
         }
       } catch (e) {
@@ -769,7 +839,8 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       function preferredStartMs(x: any) {
         try {
           const sNorm = normalizeStatusRaw(x.status ?? x.raw?.status ?? x.raw?.state ?? '');
-          if (sNorm === 'COMPLETED' || sNorm === 'IN_PROGRESS') {
+          // only prefer realisasi for COMPLETED status
+          if (sNorm === 'COMPLETED') {
             const r = x.realisasi ?? (x.raw && (x.raw.realisasi || x.raw.realisasis || x.raw.realisasi_items)) ?? null;
             if (r) {
               const sIso = r.actualStart ?? (Array.isArray(r.items) && r.items.length > 0 ? r.items[0].start : null) ?? null;
@@ -1079,11 +1150,12 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
                 {/* bars */}
                 {validItems.map((w, idx) => {
-                  const baseStartRaw = isoToMs(w.start_date) as number | null;
-                  const baseEndRaw = isoToMs(w.end_date) as number | null;
+                  const baseStartRaw = isoToMs(w.start_date ?? w.raw?.start_date ?? w.raw?.start_date_sql ?? w.raw?.date_start ?? w.raw?.date ?? w.raw?.planned_start) as number | null;
+                  const baseEndRaw = isoToMs(w.end_date ?? w.raw?.end_date ?? w.raw?.end_date_sql ?? w.raw?.up_date ?? w.raw?.date_end ?? w.raw?.planned_end) as number | null;
                   const realStartMsRaw = isoToMs(w.realisasi?.actualStart ?? w.realisasi?.items?.[0]?.start) as number | null;
                   const realEndMsRaw = isoToMs(w.realisasi?.actualEnd ?? w.realisasi?.items?.[0]?.end) as number | null;
                   // determine which start/end to use: for COMPLETED prefer realisasi start/end when available
+                  // for other statuses (PREPARATION, ASSIGNED, DEPLOYED, IN_PROGRESS) use work order start_date/end_date
                   const statusNorm = normalizeStatusRaw((w as any).status || w.raw?.status || w.raw?.doc_status);
                   let chosenStartRaw: number | null = baseStartRaw;
                   let chosenEndRaw: number | null = baseEndRaw;
@@ -1092,9 +1164,11 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                       chosenStartRaw = realStartMsRaw ?? baseStartRaw;
                       chosenEndRaw = realEndMsRaw ?? baseEndRaw;
                     }
-                  } else if (statusNorm === 'IN_PROGRESS') {
-                    // prefer real start for in-progress but keep estimated end
-                    if (realStartMsRaw != null) chosenStartRaw = realStartMsRaw;
+                  }
+                  // Normalize tiny anomalies where end <= start (e.g. rounding issues)
+                  const MIN_BAR_DURATION_MS = 60 * 1000; // 1 minute
+                  if (chosenStartRaw != null && chosenEndRaw != null && chosenEndRaw <= chosenStartRaw) {
+                    chosenEndRaw = chosenStartRaw + MIN_BAR_DURATION_MS;
                   }
                   if (chosenStartRaw == null || chosenEndRaw == null) return null;
                   const sMs = Math.max(chosenStartRaw, dayStartMs);
@@ -1172,9 +1246,19 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                     <g
                       key={'bar'+w.id}
                       style={{ cursor: cursorStyle }}
-                      onClick={() => {
+                      onClick={async () => {
                         if (suppressClickRef.current) { suppressClickRef.current = false; return; }
-                        setSelected(w);
+                        try {
+                          // fetch full details to ensure start_date/end_date and realisasi are present
+                          const res = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}`);
+                          const woDetail = res?.data ?? res;
+                          console.debug('[Gantt] open details (click) payload:', woDetail || w);
+                          setSelected(woDetail || w);
+                        } catch (e) {
+                          // fallback to list item
+                          console.debug('[Gantt] open details (click) fallback payload:', w);
+                          setSelected(w);
+                        }
                       }}
                       onMouseDown={(ev) => {
                         try {
@@ -1279,10 +1363,29 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
               <div style={{ fontWeight: 700 }}>{selected.asset_name ?? '-'}</div>
               <div style={{ color: '#666' }}>{selected.description ?? '-'}</div>
               <div style={{ color: '#666', fontSize: 13 }}>Location: {selected.raw?.vendor_cabang ?? selected.raw?.site ?? ''}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(selected.start_date)}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(selected.end_date)}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>Realisasi Start: {displayRealisasi(selected.realisasi?.actualStart ?? selected.realisasi?.items?.[0]?.start)}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>Realisasi End: {displayRealisasi(selected.realisasi?.actualEnd ?? selected.realisasi?.items?.[0]?.end, '-')}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>
+                Start: {formatUtcDisplay(
+                  // prefer normalized top-level start_date, then try common raw fields
+                  selected.start_date ?? selected.raw?.start_date ?? selected.raw?.start_date_sql ?? selected.raw?.date_start ?? null
+                )}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>
+                End: {formatUtcDisplay(
+                  selected.end_date ?? selected.raw?.end_date ?? selected.raw?.end_date_sql ?? selected.raw?.up_date ?? null
+                )}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>
+                Realisasi Start: {displayRealisasi(
+                  // try unified `realisasi` summary first, otherwise common raw shapes
+                  selected.realisasi?.actualStart ?? selected.realisasi?.items?.[0]?.start ?? selected.raw?.realisasi?.actualStart ?? (Array.isArray(selected.raw?.realisasi) ? selected.raw.realisasi[0]?.start : null)
+                )}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>
+                Realisasi End: {displayRealisasi(
+                  selected.realisasi?.actualEnd ?? selected.realisasi?.items?.[0]?.end ?? selected.raw?.realisasi?.actualEnd ?? (Array.isArray(selected.raw?.realisasi) ? selected.raw.realisasi[0]?.end : null),
+                  '-'
+                )}
+              </div>
               <div style={{ marginTop: 8 }}>{renderStatusBadge((selected as any).status ?? selected.raw?.status ?? 'PREPARATION')}</div>
               {typeof (selected as any).progress === 'number' && (
                 <Box sx={{ mt: 1 }}>
@@ -1456,6 +1559,8 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
             <div>
               Task - {taskModal.wo.doc_no ?? taskModal.wo.id}
               <div style={{ color: '#666', fontSize: 13 }}>{taskModal.wo.description}</div>
+              <div style={{ color: '#666', fontSize: 13, marginTop: 6 }}>Start: {formatUtcDisplay(taskModal.wo.start_date)} &nbsp; End: {formatUtcDisplay(taskModal.wo.end_date)}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>Realisasi Start: {displayRealisasi(taskModal.wo.realisasi?.actualStart ?? taskModal.wo.realisasi?.items?.[0]?.start)} • Realisasi End: {displayRealisasi(taskModal.wo.realisasi?.actualEnd ?? taskModal.wo.realisasi?.items?.[0]?.end, '-')}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {currentUser === undefined ? (

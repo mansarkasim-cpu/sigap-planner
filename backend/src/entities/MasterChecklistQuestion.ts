@@ -20,6 +20,9 @@ export class MasterChecklistQuestion {
   @Column({ default: true })
   required!: boolean;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  kelompok?: string | null;
+
   @Column({ name: 'order', type: 'int', default: 0 })
   order!: number;
 

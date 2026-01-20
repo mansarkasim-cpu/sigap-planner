@@ -93,6 +93,7 @@ async function createQuestion(req, res) {
         const ent = repo.create({
             jenis_alat: payload.jenis_alat_id ? { id: payload.jenis_alat_id } : undefined,
             question_text: String(payload.question_text).trim(),
+            kelompok: payload.kelompok || payload.group || null,
             input_type: payload.input_type || 'boolean',
             required: payload.required !== undefined ? Boolean(payload.required) : true,
             order: payload.order || 0,
@@ -120,6 +121,8 @@ async function updateQuestion(req, res) {
         const repo = ormconfig_1.AppDataSource.getRepository(MasterChecklistQuestion_1.MasterChecklistQuestion);
         const payload = req.body || {};
         const update = { ...payload };
+        if (payload.kelompok !== undefined)
+            update.kelompok = payload.kelompok;
         if (payload.jenis_alat_id !== undefined) {
             update.jenis_alat = payload.jenis_alat_id ? { id: payload.jenis_alat_id } : null;
             delete update.jenis_alat_id;

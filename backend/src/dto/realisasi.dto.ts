@@ -316,8 +316,14 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   realisasi.notes = pending.notes || null;
   realisasi.photoUrl = pending.photoUrl || null;
   realisasi.signatureUrl = pending.signatureUrl || null;
+  // allow client to explicitly provide startTime in approve request body
+  let resolvedStart: Date | null = null;
+  try {
+    const bodyStart = (req as any).body?.startTime || (req as any).body?.start_time;
+    if (bodyStart) resolvedStart = new Date(bodyStart);
+  } catch (_) {}
   // set start/end times from pending — try multiple fallbacks (pending -> assignment task+wo -> task-only -> wo-only)
-  let resolvedStart: Date | null = pending.startTime || null;
+  if (!resolvedStart) resolvedStart = pending.startTime || null;
   if (!resolvedStart) {
     try {
       const aRepo = assignmentRepo();

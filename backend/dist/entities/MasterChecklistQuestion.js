@@ -37,6 +37,10 @@ __decorate([
     __metadata("design:type", Boolean)
 ], MasterChecklistQuestion.prototype, "required", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], MasterChecklistQuestion.prototype, "kelompok", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'order', type: 'int', default: 0 }),
     __metadata("design:type", Number)
 ], MasterChecklistQuestion.prototype, "order", void 0);

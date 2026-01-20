@@ -14,7 +14,8 @@ async function listAlats(req, res) {
         const qb = repo.createQueryBuilder('a')
             .leftJoinAndSelect('a.jenis_alat', 'jenis')
             .leftJoinAndSelect('a.site', 'site')
-            .orderBy('a.id', 'ASC');
+            // default sort by equipment name
+            .orderBy('a.nama', 'ASC');
         if (search) {
             qb.where('(a.nama ILIKE :q OR a.kode ILIKE :q OR a.serial_no ILIKE :q OR jenis.nama ILIKE :q OR site.name ILIKE :q)', { q: `%${search}%` });
         }
@@ -76,6 +77,7 @@ async function createAlat(req, res) {
             jenis_alat: payload.jenis_alat_id ? { id: payload.jenis_alat_id } : undefined,
             site: payload.site_id ? { id: payload.site_id } : undefined,
             notes: payload.notes,
+            status: payload.status ? String(payload.status) : 'ACTIVE',
         });
         const saved = await repo.save(ent);
         return res.status(201).json(saved);

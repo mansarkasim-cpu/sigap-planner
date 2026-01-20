@@ -33,6 +33,9 @@ router.get('/', ctrl.listWorkOrdersPaginated);
 // tambah dari SIGAP (existing)
 router.post('/add', ctrl.fetchAndCreateFromSigap);
 router.post('/fetch-and-create', ctrl.fetchAndCreateFromSigap);
+// generate daily checklist work orders for all master alat
+router.post('/generate-daily', auth_1.authMiddleware, ctrl.generateDailyWorkOrders);
+router.delete('/:id', auth_1.authMiddleware, ctrl.deleteWorkOrderHandler);
 // update start/end date: PATCH /api/work-orders/:id
 // protect date edits and record who changed them
 router.patch('/:id', auth_1.authMiddleware, ctrl.updateWorkOrderDates);

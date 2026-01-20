@@ -197,7 +197,29 @@ class _InboxScreenState extends State<InboxScreen> {
       }
 
       // show simple notification if new assignments arrived
-      final List<dynamic> filtered = (next is List) ? next : [];
+      List<dynamic> filtered = (next is List) ? next : [];
+      // Filter out assignments that belong to DAILY work orders so mobile task list excludes daily WOs
+      try {
+        filtered = filtered.where((a) {
+          try {
+            final awo = (a is Map) ? (a['wo'] ?? a['workorder'] ?? a['wo_id'] ?? {}) : {};
+            String? wt;
+            if (awo is Map) {
+              wt = (awo['work_type'] ?? awo['type_work'] ?? (awo['raw'] != null ? (awo['raw']['work_type'] ?? awo['raw']['type_work']) : null))?.toString();
+            }
+            if ((wt == null || wt.toString().isEmpty) && a is Map) {
+              wt = (a['work_type'] ?? a['type_work'])?.toString();
+            }
+            if (wt == null) return true; // keep when unknown
+            final up = wt.toString().toUpperCase();
+            // exclude anything that mentions DAILY
+            if (up.contains('DAILY')) return false;
+            return true;
+          } catch (e) {
+            return true;
+          }
+        }).toList();
+      } catch (_) {}
       if (filtered.length > assignments.length) {
         final newCount = filtered.length - assignments.length;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -534,10 +556,28 @@ class _InboxScreenState extends State<InboxScreen> {
       final res = await api.get('/work-orders?q=&page=1&pageSize=1000');
       final rows = res is Map ? (res['data'] ?? res) : res;
       final list = (rows is List) ? rows : [];
-      // filter for DEPLOYED or IN_PROGRESS
+      // filter for DEPLOYED or IN_PROGRESS, and exclude DAILY work orders
       final filtered = list.where((w) {
         final s = (w is Map) ? ((w['status'] ?? w['raw']?['status']) ?? '') : '';
         final ss = s.toString().toUpperCase().replaceAll('-', '_');
+
+        // Try several fields to detect DAILY-type work orders
+        String wtRaw = '';
+        try {
+          if (w is Map) {
+            wtRaw = (w['type'] ?? w['work_order_type'] ?? w['wo_type'] ?? w['type_name'] ?? w['raw']?['type'] ?? w['raw']?['work_type'] ?? w['raw']?['work_order_type'] ?? '')?.toString() ?? '';
+          }
+        } catch (_) { wtRaw = ''; }
+        final wtUp = wtRaw.toUpperCase();
+
+        // Also detect daily by doc_no prefix (DC-...), or presence of checklist_template in raw
+        final docNo = (w is Map) ? (w['doc_no'] ?? w['id'] ?? '')?.toString() ?? '' : '';
+        final hasChecklist = (w is Map) ? ((w['raw']?['checklist_template'] != null) || (w['raw']?['checklist'] != null)) : false;
+
+        if (wtUp.contains('DAILY')) return false;
+        if (docNo.toUpperCase().startsWith('DC-')) return false;
+        if (hasChecklist) return false;
+
         return ss == 'DEPLOYED' || ss == 'IN_PROGRESS';
       }).toList();
 
@@ -599,10 +639,23 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
-  Future<void> _approvePending(String id) async {
+  Future<void> _approvePending(String id, [dynamic item]) async {
     try {
       final api = ApiClient(baseUrl: API_BASE, token: _token);
-      await api.post('/realisasi/$id/approve', {});
+      // Determine startTime to send: prefer explicit fields from pending item, then submittedAt, else now
+      String startTimeVal;
+      try {
+        if (item != null) {
+          startTimeVal = (item['start_date'] ?? item['start'] ?? item['startTime'] ?? item['scheduledAt'] ?? item['submittedAt'] ?? '').toString();
+        } else {
+          startTimeVal = '';
+        }
+      } catch (_) {
+        startTimeVal = '';
+      }
+      if (startTimeVal.trim().isEmpty) startTimeVal = DateTime.now().toUtc().toIso8601String();
+      final body = {'startTime': startTimeVal};
+      await api.post('/realisasi/$id/approve', body);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Realisasi approved')));
       // remove the approved item from the local pending list immediately
       setState(() {
@@ -843,7 +896,7 @@ class _InboxScreenState extends State<InboxScreen> {
                         actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Approve'))],
                       ),
                     );
-                    if (confirmed == true) await _approvePending(it['id'].toString());
+                    if (confirmed == true) await _approvePending(it['id'].toString(), it);
                   }, child: const Text('Approve')),
                   )
                 ])

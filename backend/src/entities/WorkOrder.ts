@@ -50,4 +50,6 @@ export class WorkOrder {
 
   // @UpdateDateColumn({ name: 'updated_at' })
   // updated_at!: Date;
+  @Column({ type: 'timestamptz', name: 'deleted_at', nullable: true })
+  deleted_at?: Date;
 }

@@ -110,6 +110,7 @@ export default function Nav(){
           <span className="nav-link">Daily Checklist</span>
           <ul className="sub-menu">
             <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+            <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li>
           </ul>
         </li>
 

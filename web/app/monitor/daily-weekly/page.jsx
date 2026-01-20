@@ -15,6 +15,7 @@ import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import apiClient from '../../../lib/api-client'
 import IconButton from '@mui/material/IconButton'
+import Link from 'next/link'
 import Tooltip from '@mui/material/Tooltip'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -26,16 +27,15 @@ import Divider from '@mui/material/Divider'
 import Avatar from '@mui/material/Avatar'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloseIcon from '@mui/icons-material/Close'
+import SortByAlphaIcon from '@mui/icons-material/SortByAlpha'
 
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
-import SpeedIcon from '@mui/icons-material/Speed'
+import RefreshIcon from '@mui/icons-material/Refresh'
+// SpeedIcon removed — auto-scroll UI hidden
 import Stack from '@mui/material/Stack'
-import Select from '@mui/material/Select'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
 
 function getMonday(d){
   const dt = new Date(d)
@@ -116,6 +116,18 @@ export default function WeeklyMonitoring(){
   const autoRef = useRef({interval: null})
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [speed, setSpeed] = useState('normal') // options: slow, normal, fast
+  // pagination + auto-advance for alternative view
+  const [usePagedView, setUsePagedView] = useState(true)
+  const [rowsPerPage, setRowsPerPage] = useState(12)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [autoPage, setAutoPage] = useState(false)
+  const autoPageRef = useRef(null)
+  const AUTO_PAGE_MS = 10000
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const autoRefreshRef = useRef(null)
+  const AUTO_REFRESH_MS = 60000
+  const [sortBy, setSortBy] = useState('alat')
+  const [sortDir, setSortDir] = useState('asc')
 
   // start auto-scroll hook
   useAutoScroll(containerRef, autoScroll, speed)
@@ -144,6 +156,33 @@ export default function WeeklyMonitoring(){
 
   useEffect(()=>{ loadSites(); load(); }, [])
 
+  // clamp currentPage when data or rowsPerPage change
+  useEffect(()=>{
+    if (!usePagedView) return;
+    const total = Array.isArray(data?.alats) ? data.alats.length : 0
+    const pages = Math.max(1, Math.ceil(total / rowsPerPage))
+    setCurrentPage(p => Math.min(Math.max(1, p), pages))
+  }, [data, rowsPerPage, usePagedView])
+
+  // auto-advance page effect
+  useEffect(()=>{
+    if (!usePagedView) return;
+    if (autoPage) {
+      // clear existing
+      if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null }
+      autoPageRef.current = setInterval(()=>{
+        try{
+          const total = Array.isArray(data?.alats) ? data.alats.length : 0
+          const pages = Math.max(1, Math.ceil(total / rowsPerPage))
+          setCurrentPage(p => (p >= pages ? 1 : p + 1))
+        }catch(e){}
+      }, AUTO_PAGE_MS)
+    } else {
+      if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null }
+    }
+    return ()=>{ if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null } }
+  }, [autoPage, usePagedView, data, rowsPerPage])
+
   async function loadSites(){
     try{
       const res = await apiClient('/master/sites')
@@ -164,6 +203,18 @@ export default function WeeklyMonitoring(){
     finally{ setLoading(false) }
   }
 
+  // auto-refresh effect: reload data every AUTO_REFRESH_MS when enabled
+  useEffect(()=>{
+    if (!autoRefresh) {
+      if (autoRefreshRef.current) { clearInterval(autoRefreshRef.current); autoRefreshRef.current = null }
+      return
+    }
+    // clear existing and set new interval
+    if (autoRefreshRef.current) { clearInterval(autoRefreshRef.current); autoRefreshRef.current = null }
+    autoRefreshRef.current = setInterval(()=>{ try{ load() }catch(e){} }, AUTO_REFRESH_MS)
+    return ()=>{ if (autoRefreshRef.current) { clearInterval(autoRefreshRef.current); autoRefreshRef.current = null } }
+  }, [autoRefresh, siteId, weekStart])
+
   return (
     <Box sx={{p:2}}>
       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:2, position:'sticky', top:0, backgroundColor:'background.paper', zIndex:9, py:1}}>
@@ -179,26 +230,6 @@ export default function WeeklyMonitoring(){
           <TextField size="small" label="Week Start" type="date" value={weekStart} onChange={e=>setWeekStart(e.target.value)} InputLabelProps={{shrink:true}} />
           <Button variant="contained" onClick={load}>Refresh</Button>
           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ml:1}}>
-            <Tooltip title={autoScroll? 'Pause auto-scroll' : 'Start auto-scroll'}>
-              <IconButton size="small" onClick={()=> setAutoScroll(v=>!v)}>
-                {autoScroll ? <PauseIcon/> : <PlayArrowIcon/>}
-              </IconButton>
-            </Tooltip>
-
-            <FormControl size="small" sx={{minWidth:110}}>
-              <InputLabel id="speed-label"><SpeedIcon fontSize="small" sx={{mr:0.5}}/>Speed</InputLabel>
-              <Select
-                labelId="speed-label"
-                value={speed}
-                label="Speed"
-                onChange={e=> setSpeed(e.target.value)}
-              >
-                <MenuItem value="slow">Slow</MenuItem>
-                <MenuItem value="normal">Normal</MenuItem>
-                <MenuItem value="fast">Fast</MenuItem>
-              </Select>
-            </FormControl>
-
             <Tooltip title={isFullscreen? 'Exit fullscreen' : 'Enter fullscreen'}>
               <IconButton size="small" onClick={async ()=>{
                 try{
@@ -217,6 +248,35 @@ export default function WeeklyMonitoring(){
                 {isFullscreen? <FullscreenExitIcon/> : <FullscreenIcon/>}
               </IconButton>
             </Tooltip>
+            <Tooltip title={usePagedView ? (autoPage ? 'Pause auto-advance' : 'Start auto-advance') : 'Enable paged view to use auto-advance'}>
+              <span>
+                <IconButton size="small" onClick={()=>{ setAutoPage(v=>!v) }}>
+                  {autoPage ? <PauseIcon/> : <PlayArrowIcon/>}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={autoRefresh ? 'Auto-refresh: ON (1m)' : 'Auto-refresh: OFF'}>
+              <span>
+                <IconButton size="small" onClick={()=>{ setAutoRefresh(v=>!v) }} sx={{color: autoRefresh ? 'inherit' : 'action.active'}}>
+                  <RefreshIcon fontSize="small" sx={{ transform: autoRefresh ? 'none' : 'none' }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <TextField
+              size="small"
+              label="Rows"
+              type="number"
+              value={rowsPerPage}
+              onChange={e=>{
+                const v = Number(e.target.value)
+                const next = Number.isNaN(v) ? 1 : Math.max(1, Math.floor(v))
+                setRowsPerPage(next)
+                setCurrentPage(1)
+              }}
+              InputProps={{ inputProps: { min: 1, step: 1 } }}
+              sx={{width:100}}
+            />
+            {/* List view disabled — always using paged view */}
           </Stack>
         </Box>
       </Box>
@@ -226,7 +286,24 @@ export default function WeeklyMonitoring(){
         {!loading && !data && <Typography>No data</Typography>}
         {!loading && data && (
           <Box>
-          
+            {/* compute paged subset when using paged view */}
+            {
+              (()=>{
+                if (!usePagedView) return null
+                const total = Array.isArray(data.alats) ? data.alats.length : 0
+                const pages = Math.max(1, Math.ceil(total / rowsPerPage))
+                return (
+                  <Box sx={{display:'flex', alignItems:'center', gap:1, mb:1}}>
+                    <Button size="small" onClick={()=> setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage<=1}>Prev</Button>
+                    <Typography variant="body2">Page {currentPage} / {pages} • {total} items</Typography>
+                    <Button size="small" onClick={()=> setCurrentPage(p => Math.min(p+1, pages))} disabled={currentPage>=pages}>Next</Button>
+                    <Button size="small" onClick={()=> setCurrentPage(1)}>First</Button>
+                    <Button size="small" onClick={()=> setCurrentPage(pages)}>Last</Button>
+                    <Button size="small" onClick={()=> setAutoPage(v=>!v)} startIcon={autoPage? <PauseIcon/> : <PlayArrowIcon/>}>{autoPage? 'Pause' : 'Auto'}</Button>
+                  </Box>
+                )
+              })()
+            }
             <Table size="small">
               <TableHead>
                 <TableRow sx={{'& th': {borderBottom: '2px solid', borderColor: (theme)=>theme.palette.divider}}}>
@@ -242,7 +319,17 @@ export default function WeeklyMonitoring(){
                       py:1.2,
                       boxShadow: (theme)=>`0 1px 0 ${theme.palette.divider} inset`
                     }}
-                  >Alat</TableCell>
+                  >
+                    <Box sx={{display:'flex', alignItems:'center', gap:1}}>
+                      <Typography>Alat</Typography>
+                      <IconButton size="small" onClick={()=>{
+                        if (sortBy === 'alat') setSortDir(d=> d === 'asc' ? 'desc' : 'asc')
+                        else { setSortBy('alat'); setSortDir('asc') }
+                      }} sx={{color: (theme)=> theme.palette.primary.contrastText}}>
+                        <SortByAlphaIcon fontSize="small" sx={{ transform: sortBy === 'alat' && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
                   {data.days.map(d=> (
                     <TableCell
                       key={d}
@@ -259,72 +346,122 @@ export default function WeeklyMonitoring(){
                         borderLeft: (theme)=>`1px solid ${theme.palette.divider}`
                       }}
                     >
-                      <Box sx={{display:'flex',flexDirection:'column',alignItems:'center',gap:0.25}}>
-                        <Typography variant="caption" sx={{opacity:0.95,fontWeight:700}}>{weekdayName(d)}</Typography>
-                        <Typography variant="body2">{d}</Typography>
-                      </Box>
+                        <Box sx={{display:'flex',flexDirection:'column',alignItems:'center',gap:0.25}}>
+                          <Box sx={{display:'flex',alignItems:'center',gap:0.5}}>
+                            <Typography variant="caption" sx={{opacity:0.95,fontWeight:700}}>{weekdayName(d)}</Typography>
+                            <IconButton size="small" onClick={()=>{
+                              if (sortBy === `date:${d}`) setSortDir(s=> s === 'asc' ? 'desc' : 'asc')
+                              else { setSortBy(`date:${d}`); setSortDir('asc') }
+                            }} sx={{color: (theme)=> theme.palette.primary.contrastText}}>
+                              <SortByAlphaIcon fontSize="small" sx={{ transform: sortBy === `date:${d}` && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
+                            </IconButton>
+                          </Box>
+                          <Typography variant="body2">{d}</Typography>
+                        </Box>
                     </TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.alats.map((a, idx)=> (
-                  <TableRow key={a.id} sx={{ backgroundColor: (theme) => idx % 2 ? theme.palette.action.hover : 'inherit' }}>
-                    <TableCell sx={{fontWeight:600, minWidth:220}}>{a.nama} {a.kode ? `(${a.kode})` : ''}</TableCell>
-                    {data.days.map(d=> {
-                      const s = a.statuses[d]
-                      // Determine status: DONE if checked today, MISS if date passed and not checked, OPEN if date is in future
-                      const todayStr = today // YYYY-MM-DD
-                      let statusLabel = 'OPEN'
-                      let color = 'default'
-                      if (s && s.done) {
-                        statusLabel = 'DONE'
-                        // if checklist contains any false answers, mark as warning instead of success
-                        color = (s.has_false ? 'warning' : 'success')
-                      } else if (d < todayStr) {
-                        statusLabel = 'MISS'
-                        color = 'error'
-                      } else {
-                        statusLabel = 'OPEN'
-                        color = 'default'
+                {(() => {
+                  const all = Array.isArray(data.alats) ? data.alats : [];
+                  // apply sorting
+                  let sorted = [...all];
+                  if (sortBy === 'alat') {
+                    sorted.sort((x, y) => {
+                      const aName = String(x?.nama || x?.name || '').toLowerCase();
+                      const bName = String(y?.nama || y?.name || '').toLowerCase();
+                      if (aName < bName) return sortDir === 'asc' ? -1 : 1;
+                      if (aName > bName) return sortDir === 'asc' ? 1 : -1;
+                      return 0;
+                    })
+                  } else if (typeof sortBy === 'string' && sortBy.startsWith('date:')) {
+                    const key = sortBy.slice(5)
+                    sorted.sort((x, y) => {
+                      const sx = x?.statuses?.[key]
+                      const sy = y?.statuses?.[key]
+                      const rank = (s) => {
+                        if (s && s.done) return 0
+                        if (key < today) return 2 // missed
+                        return 1 // open/not yet done
                       }
+                      const rx = rank(sx), ry = rank(sy)
+                      if (rx !== ry) return sortDir === 'asc' ? (rx - ry) : (ry - rx)
+                      // tie-break by alat name
+                      const aName = String(x?.nama || x?.name || '').toLowerCase();
+                      const bName = String(y?.nama || y?.name || '').toLowerCase();
+                      if (aName < bName) return -1
+                      if (aName > bName) return 1
+                      return 0
+                    })
+                  }
+                  let rowsToRender = sorted;
+                  if (usePagedView) {
+                    const pages = Math.max(1, Math.ceil(all.length / rowsPerPage));
+                    const p = Math.min(Math.max(1, currentPage), pages);
+                    const start = (p-1)*rowsPerPage;
+                    rowsToRender = sorted.slice(start, start + rowsPerPage);
+                  }
+                  return rowsToRender.map((a, idx) => {
+                    return (
+                        <TableRow key={a.id} sx={{ backgroundColor: (theme) => idx % 2 ? theme.palette.action.hover : 'inherit' }}>
+                          <TableCell sx={{fontWeight:600, minWidth:220}}>{a.nama} {a.kode ? `(${a.kode})` : ''}</TableCell>
+                        {data.days.map(d => {
+                          const s = a.statuses[d];
+                          const todayStr = today; // YYYY-MM-DD
+                          let statusLabel = 'OPEN';
+                          let color = 'default';
+                          if (s && s.done) {
+                            statusLabel = 'DONE';
+                            // Orange (warning) jika ada catatan/notes, atau ada item yang false
+                            if (s.notes || s.catatan || s.has_false) {
+                              color = 'warning';
+                            } else {
+                              color = 'success';
+                            }
+                          } else if (d < todayStr) {
+                            statusLabel = 'MISS';
+                            color = 'error';
+                          } else {
+                            statusLabel = 'OPEN';
+                            color = 'default';
+                          }
 
-                      const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? 'Missed (no checklist)' : (statusLabel === 'OPEN' ? 'Not yet due' : ''))
+                          const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? 'Missed (no checklist)' : (statusLabel === 'OPEN' ? 'Not yet due' : ''));
+                          const chipSx = statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {};
 
-                      const chipSx = statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {}
-
-                      return (
-                        <TableCell key={d} align="center" sx={{py:1}}>
-                          <Tooltip title={tip} arrow>
-                            <span>
-                              <Chip
-                                label={statusLabel}
-                                color={color === 'default' ? undefined : color}
-                                size="medium"
-                                sx={chipSx}
-                                onClick={async ()=>{
-                                  if (statusLabel !== 'DONE') return
-                                  // fetch checklist detail by id
-                                  if (!s || !s.checklist_id) return
-                                  const id = s.checklist_id
-                                  try{
-                                    setDetailLoading(true)
-                                    setDetailOpen(true)
-                                    const res = await apiClient(`/checklists/${id}`)
-                                    // API may return { checklist, items } or { data: { checklist, items } }
-                                    const payload = res?.data || res
-                                    setDetailData(payload)
-                                  }catch(e){ console.error('load detail', e); setDetailData({ error: e?.message || String(e) }) }
-                                  finally{ setDetailLoading(false) }
-                                }}
-                              />
-                            </span>
-                          </Tooltip>
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                ))}
+                          return (
+                            <TableCell key={d} align="center" sx={{py:1}}>
+                              <Tooltip title={tip} arrow>
+                                <span>
+                                  <Chip
+                                    label={statusLabel}
+                                    color={color === 'default' ? undefined : color}
+                                    size="medium"
+                                    sx={chipSx}
+                                    onClick={async () => {
+                                      if (statusLabel !== 'DONE') return;
+                                      if (!s || !s.checklist_id) return;
+                                      const id = s.checklist_id;
+                                      try{
+                                        setDetailLoading(true);
+                                        setDetailOpen(true);
+                                        const res = await apiClient(`/checklists/${id}`);
+                                        const payload = res?.data || res;
+                                        setDetailData(payload);
+                                      }catch(e){ console.error('load detail', e); setDetailData({ error: e?.message || String(e) }) }
+                                      finally{ setDetailLoading(false); }
+                                    }}
+                                  />
+                                </span>
+                              </Tooltip>
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })
+                })()}
               </TableBody>
             </Table>
           </Box>
