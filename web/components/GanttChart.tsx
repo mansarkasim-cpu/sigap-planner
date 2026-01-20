@@ -270,6 +270,54 @@ function displayRealisasi(raw?: string | null, fallback = 'Belum direalisasi') {
   return formatUtcDisplay(raw);
 }
 
+function normalizeDateLike(val: any) {
+  if (val == null) return null;
+  if (typeof val === 'number') return new Date(val).toISOString();
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (/^\d+$/.test(s)) {
+      // numeric string ms
+      const n = Number(s);
+      return new Date(n).toISOString();
+    }
+    return s;
+  }
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch (e) {}
+  return null;
+}
+
+function extractRealisasi(wo: any) {
+  // try multiple common shapes for realisasi start/end
+  const candidates: Array<{ s?: any; e?: any }> = [];
+  try {
+    const r = wo?.realisasi;
+    if (r) {
+      candidates.push({ s: r.actualStart ?? r.actual_start ?? r.start ?? r.start_time, e: r.actualEnd ?? r.actual_end ?? r.end ?? r.end_time });
+      if (Array.isArray(r.items) && r.items.length > 0) {
+        candidates.push({ s: r.items[0].start ?? r.items[0].actualStart ?? r.items[0].actual_start, e: r.items[0].end ?? r.items[0].actualEnd ?? r.items[0].actual_end });
+      }
+    }
+  } catch (e) {}
+  try {
+    const raw = wo?.raw ?? {};
+    // common raw shapes
+    candidates.push({ s: raw.realisasi_start ?? raw.realisasiStart ?? raw.actualStart ?? raw.actual_start ?? raw.start_realisasi, e: raw.realisasi_end ?? raw.realisasiEnd ?? raw.actualEnd ?? raw.actual_end ?? raw.end_realisasi });
+    candidates.push({ s: raw.realisasi?.[0]?.start ?? raw.realisasi?.[0]?.actualStart, e: raw.realisasi?.[0]?.end ?? raw.realisasi?.[0]?.actualEnd });
+    candidates.push({ s: raw.realisasi_items?.[0]?.start ?? raw.realisasi_items?.[0]?.actualStart, e: raw.realisasi_items?.[0]?.end ?? raw.realisasi_items?.[0]?.actualEnd });
+    candidates.push({ s: raw.actual_start ?? raw.start_actual ?? raw.started_at ?? raw.startedAt, e: raw.actual_end ?? raw.end_actual ?? raw.ended_at ?? raw.endedAt });
+  } catch (e) {}
+
+  for (const c of candidates) {
+    const s = normalizeDateLike(c.s);
+    const e = normalizeDateLike(c.e);
+    if (s || e) return { s, e };
+  }
+  return { s: null, e: null };
+}
+
 
 export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const [items, setItems] = useState<WO[]>([]);
@@ -362,6 +410,12 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
               try {
                 const res = await apiClient(`/work-orders/${encodeURIComponent(String(id))}`);
                 wo = res?.data ?? res;
+                try {
+                  const rr = await apiClient(`/work-orders/${encodeURIComponent(String(id))}/realisasi`);
+                  (wo as any).realisasi = rr?.data ?? rr;
+                } catch (e) {
+                  (wo as any).realisasi = (wo as any).realisasi ?? null;
+                }
               } catch (e) { wo = undefined; }
             }
             if (wo) {
@@ -645,6 +699,12 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       try {
         const res = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}`);
         const woDetail = res?.data ?? res;
+        try {
+          const rr = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}/realisasi`);
+          (woDetail as any).realisasi = rr?.data ?? rr;
+        } catch (e) {
+          (woDetail as any).realisasi = (woDetail as any).realisasi ?? null;
+        }
         try {
           const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}/tasks`);
           const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
@@ -1252,6 +1312,12 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                           // fetch full details to ensure start_date/end_date and realisasi are present
                           const res = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}`);
                           const woDetail = res?.data ?? res;
+                          try {
+                            const rr = await apiClient(`/work-orders/${encodeURIComponent(String(w.id))}/realisasi`);
+                            (woDetail as any).realisasi = rr?.data ?? rr;
+                          } catch (e) {
+                            (woDetail as any).realisasi = (woDetail as any).realisasi ?? null;
+                          }
                           console.debug('[Gantt] open details (click) payload:', woDetail || w);
                           setSelected(woDetail || w);
                         } catch (e) {
@@ -1375,16 +1441,20 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                 )}
               </div>
               <div style={{ color: '#666', fontSize: 13 }}>
-                Realisasi Start: {displayRealisasi(
-                  // try unified `realisasi` summary first, otherwise common raw shapes
-                  selected.realisasi?.actualStart ?? selected.realisasi?.items?.[0]?.start ?? selected.raw?.realisasi?.actualStart ?? (Array.isArray(selected.raw?.realisasi) ? selected.raw.realisasi[0]?.start : null)
-                )}
+                Realisasi Start: {(() => {
+                  const ex = extractRealisasi(selected);
+                  const fallback = normalizeDateLike(selected.start_date ?? selected.raw?.start_date ?? selected.raw?.date_start ?? selected.raw?.start_downtime ?? selected.raw?.started_at ?? null);
+                  const display = ex.s ?? fallback;
+                  return displayRealisasi(display, '-');
+                })()}
               </div>
               <div style={{ color: '#666', fontSize: 13 }}>
-                Realisasi End: {displayRealisasi(
-                  selected.realisasi?.actualEnd ?? selected.realisasi?.items?.[0]?.end ?? selected.raw?.realisasi?.actualEnd ?? (Array.isArray(selected.raw?.realisasi) ? selected.raw.realisasi[0]?.end : null),
-                  '-'
-                )}
+                Realisasi End: {(() => {
+                  const ex = extractRealisasi(selected);
+                  const fallback = normalizeDateLike(selected.end_date ?? selected.raw?.end_date ?? selected.raw?.date_end ?? selected.raw?.up_date ?? selected.raw?.ended_at ?? null);
+                  const display = ex.e ?? fallback;
+                  return displayRealisasi(display, '-');
+                })()}
               </div>
               <div style={{ marginTop: 8 }}>{renderStatusBadge((selected as any).status ?? selected.raw?.status ?? 'PREPARATION')}</div>
               {typeof (selected as any).progress === 'number' && (
@@ -1560,7 +1630,10 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
               Task - {taskModal.wo.doc_no ?? taskModal.wo.id}
               <div style={{ color: '#666', fontSize: 13 }}>{taskModal.wo.description}</div>
               <div style={{ color: '#666', fontSize: 13, marginTop: 6 }}>Start: {formatUtcDisplay(taskModal.wo.start_date)} &nbsp; End: {formatUtcDisplay(taskModal.wo.end_date)}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>Realisasi Start: {displayRealisasi(taskModal.wo.realisasi?.actualStart ?? taskModal.wo.realisasi?.items?.[0]?.start)} • Realisasi End: {displayRealisasi(taskModal.wo.realisasi?.actualEnd ?? taskModal.wo.realisasi?.items?.[0]?.end, '-')}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>{(() => {
+                const ex = extractRealisasi(taskModal.wo);
+                return `Realisasi Start: ${displayRealisasi(ex.s)} • Realisasi End: ${displayRealisasi(ex.e, '-')}`;
+              })()}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {currentUser === undefined ? (
