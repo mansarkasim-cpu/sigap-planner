@@ -350,30 +350,25 @@ async function getWorkOrdersPaginated(opts) {
         .take(pageSize);
     // inside getWorkOrdersPaginated after fetching rows...  
     const [rows, total] = await qb.getManyAndCount();
-    // Return date fields as-stored in the database. If TypeORM returned a Date
-    // object, format it as SQL-like 'YYYY-MM-DD HH:mm:ss' using server-local
-    // components so the frontend sees the same wall-clock values as in DB.
+    // Return date fields as-stored in the database. Normalize to ISO UTC strings
+    // so frontend always receives timezone-independent timestamps.
     function formatDateToDisplay(val) {
         if (val == null)
             return null;
-        if (typeof val === 'string') {
-            // try to parse string to Date, if fails return original
-            const dt = new Date(val);
-            if (isNaN(dt.getTime()))
-                return val;
-            val = dt;
+        try {
+            if (typeof val === 'string') {
+                const dt = new Date(val);
+                if (isNaN(dt.getTime()))
+                    return null;
+                return dt.toISOString();
+            }
+            const d = val instanceof Date ? val : new Date(val);
+            if (isNaN(d.getTime())) return null;
+            return d.toISOString();
         }
-        const d = new Date(val);
-        if (isNaN(d.getTime()))
+        catch (e) {
             return null;
-        const pad = (n) => String(n).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        const mm = pad(d.getMonth() + 1);
-        const dd = pad(d.getDate());
-        const hh = pad(d.getHours());
-        const mi = pad(d.getMinutes());
-        // Format: dd-mm-yyyy HH24:mm
-        return `${dd}-${mm}-${yyyy} ${hh}:${mi}`;
+        }
     }
     const serialized = rows.map(r => ({
         ...r,
