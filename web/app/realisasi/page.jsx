@@ -274,23 +274,45 @@ export default function Page() {
     let min = null
     let max = null
     for (const r of rows) {
-      const s = r.start ?? r.start_time ?? r.startTime ?? null
-      const e = r.end ?? r.end_time ?? r.endTime ?? null
+        const s = r.start ?? r.start_time ?? r.startTime ?? null
+        const e = r.end ?? r.end_time ?? r.endTime ?? null
       try {
-        if (s) {
-          const ds = new Date(s)
-          if (!isNaN(ds.getTime())) {
-            if (min === null || ds.getTime() < min.getTime()) min = ds
+          if (s) {
+            // if naive SQL datetime (YYYY-MM-DD[ HH:MM:SS]) without timezone,
+            // interpret as local wall-clock to match displayed values
+            const ss = String(s).trim();
+            const naiveSqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+            const m = naiveSqlRx.exec(ss);
+            let ds;
+            if (m && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(ss)) {
+              const y = Number(m[1]); const mo = Number(m[2]) - 1; const d0 = Number(m[3]);
+              const hh = Number(m[4] || '0'); const mi = Number(m[5] || '0'); const ssn = Number(m[6] || '0');
+              ds = new Date(y, mo, d0, hh, mi, ssn);
+            } else {
+              ds = new Date(s);
+            }
+            if (!isNaN(ds.getTime())) {
+              if (min === null || ds.getTime() < min.getTime()) min = ds
+            }
           }
-        }
       } catch (_) {}
       try {
-        if (e) {
-          const de = new Date(e)
-          if (!isNaN(de.getTime())) {
-            if (max === null || de.getTime() > max.getTime()) max = de
+          if (e) {
+            const es = String(e).trim();
+            const naiveSqlRx2 = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+            const m2 = naiveSqlRx2.exec(es);
+            let de;
+            if (m2 && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(es)) {
+              const y = Number(m2[1]); const mo = Number(m2[2]) - 1; const d0 = Number(m2[3]);
+              const hh = Number(m2[4] || '0'); const mi = Number(m2[5] || '0'); const ssn = Number(m2[6] || '0');
+              de = new Date(y, mo, d0, hh, mi, ssn);
+            } else {
+              de = new Date(e);
+            }
+            if (!isNaN(de.getTime())) {
+              if (max === null || de.getTime() > max.getTime()) max = de
+            }
           }
-        }
       } catch (_) {}
     }
     return { minStart: min, maxEnd: max }
