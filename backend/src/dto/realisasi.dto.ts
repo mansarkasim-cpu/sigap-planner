@@ -86,10 +86,16 @@ export async function createRealisasi(req: Request, res: Response) {
   if (!resolvedStartCreate) {
     try {
       const aRepo = assignmentRepo();
-      const maybeA = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: (task as any).id }).andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id }).orderBy('a.created_at','DESC').getOne();
-      if (maybeA && (maybeA as any).startedAt) resolvedStartCreate = (maybeA as any).startedAt;
+      // prefer the earliest (minimum) non-null started_at for this task/workorder
+      const row: any = await aRepo.createQueryBuilder('a')
+        .select('MIN(a.started_at)', 'min_start')
+        .where('a.task_id = :tid', { tid: (task as any).id })
+        .andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id })
+        .andWhere('a.started_at IS NOT NULL')
+        .getRawOne();
+      if (row && row.min_start) resolvedStartCreate = new Date(row.min_start);
     } catch (e) {
-      // ignore
+      // ignore lookup errors
     }
   }
   if (!resolvedStartCreate) {
@@ -178,12 +184,13 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   if (!resolvedPendingStart) {
     try {
       const aRepo = assignmentRepo();
-      const maybeA = await aRepo.createQueryBuilder('a')
+      const row: any = await aRepo.createQueryBuilder('a')
+        .select('MIN(a.started_at)', 'min_start')
         .where('a.task_id = :tid', { tid: (task as any).id })
         .andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id })
-        .orderBy('a.created_at','DESC')
-        .getOne();
-      if (maybeA && (maybeA as any).startedAt) resolvedPendingStart = (maybeA as any).startedAt;
+        .andWhere('a.started_at IS NOT NULL')
+        .getRawOne();
+      if (row && row.min_start) resolvedPendingStart = new Date(row.min_start);
     } catch (e) {
       // ignore lookup errors
     }

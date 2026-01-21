@@ -19,6 +19,9 @@ export class MasterSite {
   @Column({ type: 'text', nullable: true })
   location?: string;
 
+  @Column({ length: 64, nullable: true })
+  timezone?: string;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   created_at!: Date;
 

@@ -2,6 +2,7 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../lib/api-client';
+import { parseToUtcDate, formatUtcToZone, toInputDatetime } from '../lib/date-utils';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
@@ -57,86 +58,18 @@ const gutter = 12;
 const minBarWidthPx = 4;
 
 function isoToMs(val?: string | null) {
-  if (!val) return null;
-  const s = String(val).trim();
-  // Handle dd-MM-yyyy or dd-MM-yyyy HH:mm(:ss)
-  const dmy = s.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}:\d{2})(?::(\d{2}))?)?$/);
-  if (dmy) {
-    const dd = dmy[1];
-    const mm = dmy[2];
-    const yyyy = dmy[3];
-    const time = dmy[4] || '00:00';
-    const sec = dmy[5] || '00';
-    const iso = `${yyyy}-${mm}-${dd}T${time}:${sec}`;
-    const n = Date.parse(iso);
-    if (!isNaN(n)) return n;
-    // fallthrough to other heuristics if parse failed
-  }
-  // If string is date-only (YYYY-MM-DD), parse as local midnight to avoid UTC offset issues
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const d = new Date(`${s}T00:00:00`);
-    const n = d.getTime();
-    return isNaN(n) ? null : n;
-  }
-  // If string is datetime without timezone (e.g. "YYYY-MM-DDTHH:mm:ss" or "YYYY-MM-DD HH:mm:ss"),
-  // parse components and treat them as backend-local time. Many backends send naive datetimes
-  // (no TZ) — assume backend uses UTC+8 and subtract that offset to get UTC ms.
-  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) && !/[Z+-]\d{2}:?\d{2}$/.test(s) && !/Z$/.test(s)) {
-    // normalize separator to T
-    const norm = s.replace(' ', 'T');
-    const m = norm.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/);
-    if (m) {
-      const year = parseInt(m[1], 10);
-      const month = parseInt(m[2], 10) - 1;
-      const day = parseInt(m[3], 10);
-      const hour = parseInt(m[4], 10);
-      const minute = parseInt(m[5], 10);
-      const second = m[6] ? parseInt(m[6], 10) : 0;
-      const ms = m[7] ? Math.round(Number('0.' + m[7]) * 1000) : 0;
-      // Adjust this offset if your backend uses a different timezone
-      const BACKEND_TZ_OFFSET_HOURS = 8;
-      const nUtc = Date.UTC(year, month, day, hour, minute, second, ms) - (BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-      return isNaN(nUtc) ? null : nUtc;
-    }
-  }
-  // If string is an ISO datetime with an explicit timezone (Z or +HH:mm/-HH:mm),
-  // parse components and construct a local Date so the displayed clock time
-  // matches the server-provided wall-clock time in the gantt (avoid automatic
-  // UTC shifting by Date.parse). This ensures chart positions match modal display.
-  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(:\d{2}(\.\d+)?)?[Zz+-]\d{2}:?\d{2}$/.test(s) || /Z$/.test(s)) {
-    const norm = s.replace(' ', 'T');
-    const m = norm.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?([Zz]|[+-]\d{2}:?\d{2})$/);
-    if (m) {
-      const year = parseInt(m[1], 10);
-      const month = parseInt(m[2], 10) - 1;
-      const day = parseInt(m[3], 10);
-      const hour = parseInt(m[4], 10);
-      const minute = parseInt(m[5], 10);
-      const second = m[6] ? parseInt(m[6], 10) : 0;
-      const ms = m[7] ? Math.round(Number('0.' + m[7]) * 1000) : 0;
-      const dLocal = new Date(year, month, day, hour, minute, second, ms);
-      return isNaN(dLocal.getTime()) ? null : dLocal.getTime();
-    }
-  }
-  const n = Date.parse(s);
-  return isNaN(n) ? null : n;
+  const d = parseToUtcDate(val);
+  return d ? d.getTime() : null;
 }
 function niceTime(ms: number | null) {
   if (!ms) return '-';
   const d = new Date(ms);
   return d.toLocaleString();
 }
-// Format ms to dd/mm/yyyy HH24:mi using browser local timezone
+// Format ms to dd/mm/yyyy HH24:mi using default site timezone (Asia/Jakarta)
 function formatDdMmYyyyHHMM(ms: number | null) {
   if (!ms) return '-';
-  const d = new Date(ms);
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  const dd = pad(d.getDate());
-  const mm = pad(d.getMonth() + 1);
-  const yyyy = d.getFullYear();
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+  return formatUtcToZone(ms);
 }
 function dateInputToDayStart(dateStr: string) {
   return new Date(`${dateStr}T00:00:00`);
@@ -260,34 +193,7 @@ function renderStatusBadge(s: any) {
 
 function formatUtcDisplay(raw?: string | null) {
   if (!raw) return '-';
-  const s = String(raw).trim();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  // SQL / ISO-style: YYYY-MM-DD[ HH:MM(:SS)?]
-  const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-  const m = sqlRx.exec(s);
-  if (m) {
-    const [, yyyy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
-    // construct a Date in browser local timezone from components
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  // Common backend format: DD-MM-YYYY or DD-MM-YYYY HH:mm(:ss)
-  const dmyRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-  const m2 = dmyRx.exec(s);
-  if (m2) {
-    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m2 as any;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss));
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  const parsed = new Date(s);
-  if (isNaN(parsed.getTime())) return '-';
-  // If the original string included an explicit timezone (Z or +HH:mm/-HH:mm),
-  // present the timestamp using UTC components to preserve the server-provided clock time.
-  if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
-    return `${pad(parsed.getUTCDate())}/${pad(parsed.getUTCMonth() + 1)}/${parsed.getUTCFullYear()} ${pad(parsed.getUTCHours())}:${pad(parsed.getUTCMinutes())}`;
-  }
-  // Otherwise treat the parsed Date as local time
-  return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  return formatUtcToZone(raw);
 }
 
 function displayRealisasi(raw?: string | null, fallback = 'Belum direalisasi') {
@@ -296,22 +202,8 @@ function displayRealisasi(raw?: string | null, fallback = 'Belum direalisasi') {
 }
 
 function normalizeDateLike(val: any) {
-  if (val == null) return null;
-  if (typeof val === 'number') return new Date(val).toISOString();
-  if (typeof val === 'string') {
-    const s = val.trim();
-    if (/^\d+$/.test(s)) {
-      // numeric string ms
-      const n = Number(s);
-      return new Date(n).toISOString();
-    }
-    return s;
-  }
-  try {
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d.toISOString();
-  } catch (e) {}
-  return null;
+  const d = parseToUtcDate(val);
+  return d ? d.toISOString() : null;
 }
 
 function extractRealisasi(wo: any) {
@@ -596,20 +488,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     }
   }
 
-  function toInputDatetime(iso?: string | null) {
-    if (!iso) return '';
-    const s = String(iso).trim();
-    const rx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const m = rx.exec(s);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    if (m) {
-      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
-      return `${yyyy}-${mm}-${dd}T${pad(Number(hh))}:${pad(Number(mi))}`;
-    }
-    const parsed = new Date(s);
-    if (isNaN(parsed.getTime())) return '';
-    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
-  }
+  // use shared `toInputDatetime` from web/lib/date-utils
 
   async function saveEdit(id: string, start_date?: string | null, end_date?: string | null) {
     setEditLoading(true);
@@ -660,32 +539,6 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
           return String(v);
         })().toLowerCase().trim();
         const pad = (n: number) => String(n).padStart(2, '0');
-        function parseToUtcDate(val?: string | null): Date | null {
-          if (!val) return null;
-          const s = String(val).trim();
-          const BACKEND_TZ_OFFSET_HOURS = 0;
-          // ISO / SQL: YYYY-MM-DD [HH:mm(:ss)?]
-          const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          const m = sqlRx.exec(s);
-          if (m) {
-            const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
-            const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
-            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-          // Common backend format: DD-MM-YYYY or DD/MM/YYYY [HH:mm(:ss)?]
-          const dmyRx = /^(\d{2})[-\/](\d{2})[-\/](\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          const m2 = dmyRx.exec(s);
-          if (m2) {
-            const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = m2 as any;
-            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
-            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-          const parsed = new Date(s);
-          if (!isNaN(parsed.getTime())) {
-            return new Date(parsed.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-          return null;
-        }
 
         const sdUtc = parseToUtcDate(String(w.start_date));
         if (!sdUtc) {
@@ -834,11 +687,10 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   function clampBarWidth(x1: number, x2: number) { return Math.max(minBarWidthPx, x2 - x1); }
 
   function msToInputDatetime(ms: number) {
-    // produce backend-local naive datetime string similar to other inputs: YYYY-MM-DDTHH:MM
-    const BACKEND_TZ_OFFSET_HOURS = 8;
-    const d = new Date(ms + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    // produce datetime-local value in client timezone using shared util
+    try {
+      return toInputDatetime(new Date(ms));
+    } catch (e) { return ''; }
   }
 
   const tickStepMs = 30 * 60 * 1000;
@@ -1465,22 +1317,26 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   selected.end_date ?? selected.raw?.end_date ?? selected.raw?.end_date_sql ?? selected.raw?.up_date ?? null
                 )}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>
-                Realisasi Start: {(() => {
-                  const ex = extractRealisasi(selected);
-                  const fallback = normalizeDateLike(selected.start_date ?? selected.raw?.start_date ?? selected.raw?.date_start ?? selected.raw?.start_downtime ?? selected.raw?.started_at ?? null);
-                  const display = ex.s ?? fallback;
-                  return displayRealisasi(display, '-');
-                })()}
-              </div>
-              <div style={{ color: '#666', fontSize: 13 }}>
-                Realisasi End: {(() => {
-                  const ex = extractRealisasi(selected);
-                  const fallback = normalizeDateLike(selected.end_date ?? selected.raw?.end_date ?? selected.raw?.date_end ?? selected.raw?.up_date ?? selected.raw?.ended_at ?? null);
-                  const display = ex.e ?? fallback;
-                  return displayRealisasi(display, '-');
-                })()}
-              </div>
+              {normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') === 'COMPLETED' && (
+                <>
+                  <div style={{ color: '#666', fontSize: 13 }}>
+                    Realisasi Start: {(() => {
+                      const ex = extractRealisasi(selected);
+                      const fallback = normalizeDateLike(selected.start_date ?? selected.raw?.start_date ?? selected.raw?.date_start ?? selected.raw?.start_downtime ?? selected.raw?.started_at ?? null);
+                      const display = ex.s ?? fallback;
+                      return displayRealisasi(display, '-');
+                    })()}
+                  </div>
+                  <div style={{ color: '#666', fontSize: 13 }}>
+                    Realisasi End: {(() => {
+                      const ex = extractRealisasi(selected);
+                      const fallback = normalizeDateLike(selected.end_date ?? selected.raw?.end_date ?? selected.raw?.date_end ?? selected.raw?.up_date ?? selected.raw?.ended_at ?? null);
+                      const display = ex.e ?? fallback;
+                      return displayRealisasi(display, '-');
+                    })()}
+                  </div>
+                </>
+              )}
               <div style={{ marginTop: 8 }}>{renderStatusBadge((selected as any).status ?? selected.raw?.status ?? 'PREPARATION')}</div>
               {typeof (selected as any).progress === 'number' && (
                 <Box sx={{ mt: 1 }}>

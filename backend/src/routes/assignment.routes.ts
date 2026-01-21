@@ -294,14 +294,24 @@ router.get('/assignments/for-group', authMiddleware, async (req: Request, res: R
 router.patch('/assignments/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const { status } = req.body || {};
+    const { status, startTime } = req.body || {};
     const repo = AppDataSource.getRepository(Assignment);
     const a = await repo.findOne({ where: { id }, relations: ['wo'] as any });
     if (!a) return res.status(404).json({ code: 'NOT_FOUND', message: 'Assignment not found' });
     if (status) a.status = status;
     // if marking IN_PROGRESS, set startedAt if not already set
     if (status === 'IN_PROGRESS' && !a.startedAt) {
-      (a as any).startedAt = new Date();
+      if (startTime) {
+        try {
+          const parsed = new Date(startTime.toString());
+          if (!isNaN(parsed.getTime())) (a as any).startedAt = parsed;
+          else (a as any).startedAt = new Date();
+        } catch (_) {
+          (a as any).startedAt = new Date();
+        }
+      } else {
+        (a as any).startedAt = new Date();
+      }
     }
     const saved = await repo.save(a as any);
 
@@ -312,6 +322,7 @@ router.patch('/assignments/:id', authMiddleware, async (req: Request, res: Respo
         const wo = await woRepo.findOneBy({ id: (a.wo as any).id } as any);
         if (wo) {
           (wo as any).status = 'IN_PROGRESS';
+          // do NOT modify work order start_date here — only update workorder status
           await woRepo.save(wo as any);
         }
       }

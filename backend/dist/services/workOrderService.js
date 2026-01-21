@@ -350,11 +350,13 @@ async function getWorkOrdersPaginated(opts) {
         .take(pageSize);
     // inside getWorkOrdersPaginated after fetching rows...  
     const [rows, total] = await qb.getManyAndCount();
-    // Return date fields as-stored in the database. Normalize to ISO UTC strings
-    // so frontend always receives timezone-independent timestamps.
+    // Return date fields as-stored in the database. If TypeORM returned a Date
+    // object, format it as SQL-like 'YYYY-MM-DD HH:mm:ss' using server-local
+    // components so the frontend sees the same wall-clock values as in DB.
     function formatDateToDisplay(val) {
         if (val == null)
             return null;
+        // Try to coerce to Date and return ISO UTC string. If parsing fails, return null.
         try {
             if (typeof val === 'string') {
                 const dt = new Date(val);
@@ -363,7 +365,8 @@ async function getWorkOrdersPaginated(opts) {
                 return dt.toISOString();
             }
             const d = val instanceof Date ? val : new Date(val);
-            if (isNaN(d.getTime())) return null;
+            if (isNaN(d.getTime()))
+                return null;
             return d.toISOString();
         }
         catch (e) {
@@ -959,6 +962,11 @@ async function updateWorkOrderDates(id, payload) {
     }
     if (payload.end_date !== undefined) {
         existing.end_date = payload.end_date;
+        // IMPORTANT: Do not automatically change work order status when frontend edits dates.
+        // Previously we set `existing.status = 'COMPLETED'` here which caused unexpected
+        // state transitions when a user merely adjusted dates. Status transitions should
+        // be performed explicitly via dedicated endpoints (e.g. deploy/complete) or
+        // business logic that validates tasks/realisasi — avoid implicit side-effects.
         changed = true;
     }
     const saved = await repo.save(existing);
@@ -1001,10 +1009,14 @@ async function getWorkOrderDateHistory(workOrderId) {
     return rows.map(r => ({
         id: r.id,
         work_order_id: r.work_order_id,
-        old_start: (r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.old_start) : null),
-        old_end: (r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.old_end) : null),
-        new_start: (r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.new_start) : null),
-        new_end: (r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime())) return null; return dt.toISOString(); })(r.new_end) : null),
+        old_start: (r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.old_start) : null),
+        old_end: (r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.old_end) : null),
+        new_start: (r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.new_start) : null),
+        new_end: (r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.new_end) : null),
         note: r.note ?? null,
         changed_by: r.changed_by ?? null,
         changed_at: r.changed_at ? (new Date(r.changed_at)).toISOString() : null,

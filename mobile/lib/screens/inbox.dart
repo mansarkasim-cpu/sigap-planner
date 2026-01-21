@@ -5,6 +5,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import '../config.dart';
+import '../utils/date_utils.dart';
+import '../services/local_db.dart';
 import 'wo_detail.dart';
 import '../services/retry_uploader.dart';
 import '../widgets/app_drawer.dart';
@@ -20,6 +22,7 @@ class _InboxScreenState extends State<InboxScreen> {
   String? _token;
   bool loading = false;
   List<dynamic> assignments = [];
+  Map<String, String> assignmentStarts = {};
   Map<String, dynamic> tasksById = {};
   // lead-shift specific
   bool isLeadShift = false;
@@ -226,7 +229,23 @@ class _InboxScreenState extends State<InboxScreen> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You have $newCount new assignment(s)')));
         });
       }
-      setState(() { assignments = filtered; tasksById = nextTasksMap; });
+      // Load locally stored assignment start times (swipe timestamps) and cache them
+      Map<String, String> found = {};
+      try {
+        await LocalDB.instance.init();
+        for (final a in filtered) {
+          try {
+            final aid = (a is Map) ? (a['id'] ?? a['_id'] ?? '')?.toString() ?? '' : a.toString();
+            if (aid.isEmpty) continue;
+            final dt = await LocalDB.instance.getAssignmentStart(aid);
+            if (dt != null) found[aid] = dt.toIso8601String();
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('failed to load local assignment starts: $e');
+      }
+
+      setState(() { assignments = filtered; tasksById = nextTasksMap; assignmentStarts = {...assignmentStarts, ...found}; });
 
       // Ensure task-level assignment lists match WO Detail by fetching /work-orders/{woId}/tasks
       try {
@@ -691,6 +710,39 @@ class _InboxScreenState extends State<InboxScreen> {
         final title = (w is Map) ? (w['doc_no'] ?? w['id'] ?? 'WO') : 'WO';
         final prog = (w is Map) ? (w['progress'] ?? 0) : 0;
         final start = (w is Map) ? (w['start_date'] ?? w['raw']?['start_date'] ?? w['start'] ?? '') : '';
+        // prefer assignment swipe-start when assignment is IN_PROGRESS
+        String? finalStart = (start != null && start.toString().isNotEmpty) ? start.toString() : null;
+        bool finalIsSwiped = false;
+        try {
+          final wid = (w is Map) ? ((w['id'] ?? w['doc_no'] ?? '')?.toString() ?? '') : '';
+          if (wid.isNotEmpty) {
+            for (final a in assignments) {
+              try {
+                final awo = (a is Map) ? (a['wo'] ?? a['workorder'] ?? a['wo_id'] ?? {}) : {};
+                String awid = '';
+                if (awo is Map) awid = (awo['id'] ?? awo['doc_no'] ?? '')?.toString() ?? '';
+                else awid = awo.toString();
+                if (awid.isEmpty) continue;
+                if (awid != wid) continue;
+                final s = (a is Map) ? ((a['status'] ?? '')?.toString() ?? '') : '';
+                final su = s.toString().toUpperCase();
+                if (su.contains('IN_PROGRESS')) {
+                  final aid = (a is Map) ? (a['id'] ?? a['_id'] ?? '')?.toString() ?? '' : '';
+                  String? candidate = null;
+                  if (aid.isNotEmpty && assignmentStarts.containsKey(aid)) {
+                    candidate = assignmentStarts[aid];
+                    finalIsSwiped = true;
+                  }
+                  if (candidate == null) candidate = (a is Map) ? (a['start_date'] ?? a['start'] ?? a['startTime'] ?? a['start_time'])?.toString() : null;
+                  if (candidate != null && candidate.isNotEmpty) {
+                    finalStart = candidate;
+                    break;
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
         final end = (w is Map) ? (w['end_date'] ?? w['raw']?['end_date'] ?? w['end'] ?? '') : '';
         final desc = (w is Map) ? (w['description'] ?? w['raw']?['description'] ?? '') : '';
         final asset = (w is Map) ? (w['asset_name'] ?? w['asset'] ?? w['raw']?['asset_name'] ?? '') : '';
@@ -727,9 +779,9 @@ class _InboxScreenState extends State<InboxScreen> {
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Expanded(
                   child: Row(children: [
-                    if (start != null && start.toString().isNotEmpty) ...[const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(_formatUtcDisplay(start), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
+                    if (finalStart != null && finalStart.toString().isNotEmpty) ...[const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text('${formatUtcDisplay(finalStart, extractTimezone(w))}${finalIsSwiped ? ' (swiped)' : ''}', style: finalIsSwiped ? const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600) : const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
                     const SizedBox(width: 12),
-                    if (end != null && end.toString().isNotEmpty) ...[const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(_formatUtcDisplay(end), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
+                    if (end != null && end.toString().isNotEmpty) ...[const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(formatUtcDisplay(end, extractTimezone(w)), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
                   ]),
                 ),
                 Row(children: [
@@ -769,8 +821,8 @@ class _InboxScreenState extends State<InboxScreen> {
                                   const SizedBox(height: 8),
                                   if(desc.isNotEmpty) Text('Description: $desc'),
                                   if(woType != null && woType.toString().isNotEmpty) Text('Type: $woType'),
-                                  Text('Start: ${_formatUtcDisplay(start)}'),
-                                  Text('End: ${_formatUtcDisplay(end)}'),
+                                  Text('Start: ${formatUtcDisplay(finalStart, extractTimezone(w))}${finalIsSwiped ? ' (swiped)' : ''}'),
+                                  Text('End: ${formatUtcDisplay(end, extractTimezone(w))}'),
                                   if(asset.toString().isNotEmpty) Text('Asset: $asset'),
                                   if(techName.toString().isNotEmpty) Text('Technician: $techName'),
                                   if(location.toString().isNotEmpty) Text('Location: $location'),
@@ -877,9 +929,9 @@ class _InboxScreenState extends State<InboxScreen> {
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Expanded(
                   child: Row(children: [
-                    if (start != null && start.toString().isNotEmpty) ...[const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(_formatUtcDisplay(start), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
+                    if (start != null && start.toString().isNotEmpty) ...[const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(formatUtcDisplay(start, extractTimezone(it)), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
                     const SizedBox(width: 12),
-                    if (end != null && end.toString().isNotEmpty) ...[const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(_formatUtcDisplay(end), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
+                    if (end != null && end.toString().isNotEmpty) ...[const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), Flexible(child: Text(formatUtcDisplay(end, extractTimezone(it)), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))],
                   ]),
                 ),
                 Row(children: [
@@ -948,31 +1000,7 @@ class _InboxScreenState extends State<InboxScreen> {
     return Image.network(base + path, width: width, height: height, fit: fit);
   }
 
-  String _formatUtcDisplay(dynamic raw) {
-    if (raw == null) return '-';
-    final s = raw.toString().trim();
-    final sqlRx = RegExp(r'^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?\$');
-    final m = sqlRx.firstMatch(s);
-    DateTime? dt;
-    if (m != null) {
-      final yy = int.parse(m.group(1)!);
-      final mm = int.parse(m.group(2)!);
-      final dd = int.parse(m.group(3)!);
-      final hh = m.group(4) != null ? int.parse(m.group(4)!) : 0;
-      final mi = m.group(5) != null ? int.parse(m.group(5)!) : 0;
-      final ss = m.group(6) != null ? int.parse(m.group(6)!) : 0;
-      dt = DateTime.utc(yy, mm, dd, hh, mi, ss);
-    } else {
-      try {
-        dt = DateTime.parse(s);
-      } catch (_) {
-        return '-';
-      }
-    }
-    final dtUtc = dt.toUtc();
-    String pad(int n) => n.toString().padLeft(2, '0');
-    return '${pad(dtUtc.day)}/${pad(dtUtc.month)}/${dtUtc.year} ${pad(dtUtc.hour)}:${pad(dtUtc.minute)}';
-  }
+  // use shared utils in ../utils/date_utils.dart
 
   // Resolve a human-friendly assignee display name from an assignment or raw assignee value.
   // Uses the `assigneeNames` cache when possible and tolerates multiple API shapes.
@@ -1141,9 +1169,9 @@ class _InboxScreenState extends State<InboxScreen> {
               // Use Wrap so these meta fields can wrap on narrow screens instead of overflowing
               Wrap(spacing: 12, runSpacing: 6, children: [
                 if (startField != null && startField.toString().isNotEmpty)
-                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(_formatUtcDisplay(startField), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
+                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(formatUtcDisplay(startField, extractTimezone(wo)), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
                 if (endField != null && endField.toString().isNotEmpty)
-                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(_formatUtcDisplay(endField), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
+                  Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.event_busy, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(formatUtcDisplay(endField, extractTimezone(wo)), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
                 if (locationField != null && locationField.toString().isNotEmpty)
                   Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.location_on, size: 14, color: Colors.grey), const SizedBox(width: 6), ConstrainedBox(constraints: BoxConstraints(maxWidth: 200), child: Text(locationField.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis))]),
               ]),

@@ -1,11 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import apiClient from '../../lib/api-client'
+import { formatUtcToZone } from '../../lib/date-utils'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
+import CircularProgress from '@mui/material/CircularProgress'
 import TextField from '@mui/material/TextField'
 import Stack from '@mui/material/Stack'
 import Pagination from '@mui/material/Pagination'
@@ -13,15 +15,22 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
+import Chip from '@mui/material/Chip'
+import Avatar from '@mui/material/Avatar'
+import Grid from '@mui/material/Grid'
+import Paper from '@mui/material/Paper'
+import IconButton from '@mui/material/IconButton'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 
-function formatDateDisplay(s) {
+function getSiteTimezone(wo) {
+  if (!wo) return undefined
+  return wo.site?.timezone || wo.siteTimezone || wo.raw?.site?.timezone || undefined
+}
+
+function formatDateDisplay(s, tz) {
   if (!s) return '-'
-  const m = String(s).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
-  if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`
   try {
-    const d = new Date(s)
-    const pad = (n) => (n < 10 ? '0' + n : n)
-    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    return formatUtcToZone(s, tz)
   } catch (e) {
     return String(s)
   }
@@ -55,6 +64,7 @@ export default function Page() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [expanded, setExpanded] = useState({})
+  const [loadingDetails, setLoadingDetails] = useState({})
 
   useEffect(() => { load(); }, [page, pageSize])
 
@@ -101,6 +111,7 @@ export default function Page() {
   }
 
   async function loadDetails(woId) {
+    setLoadingDetails(prev => ({ ...prev, [woId]: true }))
     try {
       const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}/tasks`)
       const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? [])
@@ -117,6 +128,8 @@ export default function Page() {
     } catch (e) {
       console.error('load details', e)
       setExpanded(prev => ({ ...prev, [woId]: { tasks: [], relByTask: {} } }))
+    } finally {
+      setLoadingDetails(prev => ({ ...prev, [woId]: false }))
     }
   }
 
@@ -150,20 +163,36 @@ export default function Page() {
             <CardContent>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <Typography variant="h6">{wo.doc_no || wo.id}</Typography>
-                  <Typography variant="body2" color="textSecondary">Start: {formatDateDisplay(wo.start_date || wo.raw?.start_date)}</Typography>
-                  <Typography variant="body2" color="textSecondary">End: {formatDateDisplay(wo.end_date || wo.raw?.end_date)}</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>{wo.asset_name || wo.raw?.asset_name || wo.raw?.alat?.nama || wo.raw?.alat?.name || '—'}</Typography>
+                  <Typography variant="subtitle2" color="textSecondary">WO: {wo.doc_no || wo.id}</Typography>
+                  {
+                    (() => {
+                      const tz = getSiteTimezone(wo)
+                      const range = expanded[wo.id] ? getRealisasiRange(expanded, wo.id) : { minStart: null, maxEnd: null }
+                      const hdrStart = range.minStart ? formatDateDisplay(range.minStart.toISOString(), tz) : formatDateDisplay(wo.start_date || wo.raw?.start_date, tz)
+                      const hdrEnd = range.maxEnd ? formatDateDisplay(range.maxEnd.toISOString(), tz) : formatDateDisplay(wo.end_date || wo.raw?.end_date, tz)
+                      return (
+                        <>
+                          <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 700 }}>⏱️ Start: {hdrStart}</Typography>
+                          <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 700 }}>🏁 End: {hdrEnd}</Typography>
+                        </>
+                      )
+                    })()
+                  }
                 </div>
                 <div>
-                  <Button size="small" onClick={async () => {
-                    if (!expanded[wo.id]) {
-                      await loadDetails(wo.id)
-                    } else {
-                      setExpanded(prev => ({ ...prev, [wo.id]: null }))
-                    }
-                  }}>
-                    {expanded[wo.id] ? 'Hide' : 'View Realisasi'}
-                  </Button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Chip label={`Tasks: ${expanded[wo.id] ? (expanded[wo.id].tasks?.length ?? 0) : (wo.tasks_count ?? wo.task_count ?? '-')}`} size="small" />
+                    <Button variant={expanded[wo.id] ? 'outlined' : 'contained'} color="primary" size="small" startIcon={!expanded[wo.id] ? <VisibilityIcon /> : null} onClick={async () => {
+                      if (!expanded[wo.id]) {
+                        await loadDetails(wo.id)
+                      } else {
+                        setExpanded(prev => ({ ...prev, [wo.id]: null }))
+                      }
+                    }}>
+                      {loadingDetails[wo.id] ? <CircularProgress size={18} /> : (expanded[wo.id] ? 'Hide Details' : 'View Realisasi')}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -172,30 +201,49 @@ export default function Page() {
                   <Typography variant="subtitle1">Tasks & Realisasi</Typography>
                   {expanded[wo.id].tasks && expanded[wo.id].tasks.length > 0 ? (
                     expanded[wo.id].tasks.map((t) => (
-                      <Box key={t.id || t.external_id} sx={{ borderTop: '1px solid #eee', pt: 1, mt: 1 }}>
-                        <Typography variant="subtitle2">{t.name || t.task_name || 'Task'}</Typography>
-                        <div style={{ fontSize: 13, color: '#666' }}>Task ID: {t.id || t.external_id || ''}</div>
-                        <div style={{ marginTop: 8 }}>
+                      <Paper key={t.id || t.external_id} variant="outlined" sx={{ p: 1, mt: 1 }}>
+                        <Grid container spacing={1} alignItems="center">
+                          <Grid item xs={12} sm={8}>
+                            <Typography variant="subtitle2">{t.name || t.task_name || 'Task'}</Typography>
+                            <div style={{ fontSize: 13, color: '#666' }}>Task ID: {t.id || t.external_id || ''}</div>
+                          </Grid>
+                          <Grid item xs={12} sm={4} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Chip label={`${(expanded[wo.id].relByTask && expanded[wo.id].relByTask[t.id] ? expanded[wo.id].relByTask[t.id].length : 0)} entries`} size="small" />
+                          </Grid>
+                        </Grid>
+                        <Box mt={1}>
                           {(expanded[wo.id].relByTask && expanded[wo.id].relByTask[t.id]) ? (
                             expanded[wo.id].relByTask[t.id].map((r) => (
-                              <Box key={r.id} sx={{ mb: 1, p: 1, border: '1px dashed #ddd', borderRadius: 1 }}>
-                                <div><strong>Start:</strong> {formatDateDisplay(r.start)} &nbsp; <strong>End:</strong> {formatDateDisplay(r.end)}</div>
-                                <div><strong>Teknisi:</strong> {r.user ? ((r.user.nipp ? r.user.nipp + ' • ' : '') + (r.user.name || r.user.email || r.user.id)) : '-'}</div>
-                                {r.notes ? <div><strong>Keterangan:</strong> {r.notes}</div> : null}
-                                {r.photoUrl ? (
-                                  <div style={{ marginTop: 6 }}>
+                              <Paper key={r.id} variant="outlined" sx={{ mb: 1, p: 1, display: 'flex', gap: 2 }}>
+                                <Box sx={{ width: 120, height: 120 }}>
+                                  {r.photoUrl ? (
                                     <a href={resolveMediaUrl(r.photoUrl)} target="_blank" rel="noreferrer">
-                                      <img src={resolveMediaUrl(r.photoUrl)} alt="photo" style={{ width: 120, height: 'auto', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
+                                      <img src={resolveMediaUrl(r.photoUrl)} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
                                     </a>
-                                  </div>
-                                ) : null}
-                              </Box>
+                                  ) : (
+                                    <Box sx={{ width: '100%', height: '100%', bgcolor: '#f5f5f5', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>No photo</Box>
+                                  )}
+                                </Box>
+                                <Box sx={{ flex: 1 }}>
+                                  <Stack direction="row" spacing={1} alignItems="center">
+                                    <Chip label={`Start: ${formatDateDisplay(r.start, getSiteTimezone(wo))}`} size="small" />
+                                    <Chip label={`End: ${formatDateDisplay(r.end, getSiteTimezone(wo))}`} size="small" />
+                                    <Chip label={r.user ? ((r.user.nipp ? r.user.nipp + ' • ' : '') + (r.user.name || r.user.email || r.user.id)) : '-'} size="small" avatar={r.user ? <Avatar alt={r.user.name || r.user.id}>{(r.user.name || r.user.email || '').charAt(0)}</Avatar> : undefined} />
+                                  </Stack>
+                                  {r.notes ? <Typography sx={{ mt: 1 }}>{r.notes}</Typography> : null}
+                                  {r.photoUrl ? (
+                                    <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                                      <img src={resolveMediaUrl(r.photoUrl)} alt="thumb" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
+                                    </Box>
+                                  ) : null}
+                                </Box>
+                              </Paper>
                             ))
                           ) : (
                             <div style={{ color: '#666' }}>No realisasi entries for this task.</div>
                           )}
-                        </div>
-                      </Box>
+                        </Box>
+                      </Paper>
                     ))
                   ) : (
                     <div style={{ color: '#666' }}>No tasks found for this work order.</div>
@@ -218,3 +266,32 @@ export default function Page() {
     </main>
   )
 }
+
+  function getRealisasiRange(expandedState, woId) {
+    const entry = expandedState[woId]
+    if (!entry || !entry.relByTask) return { minStart: null, maxEnd: null }
+    const rows = Object.values(entry.relByTask).flat()
+    let min = null
+    let max = null
+    for (const r of rows) {
+      const s = r.start ?? r.start_time ?? r.startTime ?? null
+      const e = r.end ?? r.end_time ?? r.endTime ?? null
+      try {
+        if (s) {
+          const ds = new Date(s)
+          if (!isNaN(ds.getTime())) {
+            if (min === null || ds.getTime() < min.getTime()) min = ds
+          }
+        }
+      } catch (_) {}
+      try {
+        if (e) {
+          const de = new Date(e)
+          if (!isNaN(de.getTime())) {
+            if (max === null || de.getTime() > max.getTime()) max = de
+          }
+        }
+      } catch (_) {}
+    }
+    return { minStart: min, maxEnd: max }
+  }

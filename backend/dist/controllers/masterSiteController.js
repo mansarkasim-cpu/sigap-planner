@@ -50,6 +50,7 @@ async function createSite(req, res) {
             code: payload.code,
             name: String(payload.name).trim(),
             location: payload.location,
+            timezone: payload.timezone ?? null,
             hub: payload.hub_id ? { id: payload.hub_id } : undefined,
         });
         const saved = await repo.save(ent);
@@ -73,6 +74,9 @@ async function updateSite(req, res) {
             update.hub = payload.hub_id ? { id: payload.hub_id } : null;
             // remove raw hub_id so TypeORM doesn't try to set a non-existent property
             delete update.hub_id;
+        }
+        if (payload.timezone !== undefined) {
+            update.timezone = payload.timezone ?? null;
         }
         await repo.update({ id }, update);
         const row = await repo.findOne({ where: { id }, relations: ['hub'] });
