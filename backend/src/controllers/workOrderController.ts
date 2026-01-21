@@ -384,13 +384,27 @@ function serializeWorkOrder(wo: any) {
   if (!wo) return wo;
   const out = { ...wo };
   try {
-    // If TypeORM returns Date objects, convert to ISO strings
-    out.start_date = wo.start_date ? (new Date(wo.start_date)).toISOString() : null;
+    // Preserve naive SQL datetime strings (YYYY-MM-DD HH:mm:ss) as-is so
+    // frontend can decide how to render them. Only convert true Date objects
+    // or ISO strings that already include timezone information.
+    if (!wo.start_date) {
+      out.start_date = null;
+    } else if (typeof wo.start_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.start_date.trim())) {
+      out.start_date = String(wo.start_date).trim();
+    } else {
+      out.start_date = (new Date(wo.start_date)).toISOString();
+    }
   } catch (e) {
     out.start_date = null;
   }
   try {
-    out.end_date = wo.end_date ? (new Date(wo.end_date)).toISOString() : null;
+    if (!wo.end_date) {
+      out.end_date = null;
+    } else if (typeof wo.end_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.end_date.trim())) {
+      out.end_date = String(wo.end_date).trim();
+    } else {
+      out.end_date = (new Date(wo.end_date)).toISOString();
+    }
   } catch (e) {
     out.end_date = null;
   }
