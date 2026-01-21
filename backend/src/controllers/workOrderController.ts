@@ -48,7 +48,11 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
 
     return res.json({
-      data: rows.map(r => ({ ...r, status: (r as any).status ?? 'NEW' })),
+      data: rows.map(r => {
+        const s = serializeWorkOrder(r);
+        s.status = (r as any).status ?? 'NEW';
+        return s;
+      }),
       meta: { page, pageSize, total },
     });
   } catch (err) {
@@ -60,7 +64,13 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
 export async function listWorkOrders(req: Request, res: Response) {
   try {
     const rows = await service.getAllWorkOrders();
-    return res.json(rows);
+    // preserve SQL datetime formatting when returning lists
+    const out = Array.isArray(rows) ? rows.map(r => {
+      const s = serializeWorkOrder(r);
+      s.status = (r as any).status ?? 'NEW';
+      return s;
+    }) : rows;
+    return res.json(out);
   } catch (err) {
     console.error('listWorkOrders error', err);
     return res.status(500).json({ message: 'Failed to load work orders' });
