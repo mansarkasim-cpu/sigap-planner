@@ -48,7 +48,11 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
 
     return res.json({
-      data: rows.map(r => ({ ...r, status: (r as any).status ?? 'NEW' })),
+      data: rows.map(r => {
+        const s = serializeWorkOrder(r);
+        s.status = (r as any).status ?? 'NEW';
+        return s;
+      }),
       meta: { page, pageSize, total },
     });
   } catch (err) {
@@ -60,7 +64,13 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
 export async function listWorkOrders(req: Request, res: Response) {
   try {
     const rows = await service.getAllWorkOrders();
-    return res.json(rows);
+    // preserve SQL datetime formatting when returning lists
+    const out = Array.isArray(rows) ? rows.map(r => {
+      const s = serializeWorkOrder(r);
+      s.status = (r as any).status ?? 'NEW';
+      return s;
+    }) : rows;
+    return res.json(out);
   } catch (err) {
     console.error('listWorkOrders error', err);
     return res.status(500).json({ message: 'Failed to load work orders' });
@@ -392,7 +402,11 @@ function serializeWorkOrder(wo: any) {
     } else if (typeof wo.start_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.start_date.trim())) {
       out.start_date = String(wo.start_date).trim();
     } else {
-      out.start_date = (new Date(wo.start_date)).toISOString();
+      // Format Date objects as SQL-like naive datetime using server-local components
+      // so the wall-clock value stored in DB (timestamp without timezone) is preserved.
+      const dt = new Date(wo.start_date);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      out.start_date = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
     }
   } catch (e) {
     out.start_date = null;
@@ -403,7 +417,9 @@ function serializeWorkOrder(wo: any) {
     } else if (typeof wo.end_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.end_date.trim())) {
       out.end_date = String(wo.end_date).trim();
     } else {
-      out.end_date = (new Date(wo.end_date)).toISOString();
+      const dt = new Date(wo.end_date);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      out.end_date = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
     }
   } catch (e) {
     out.end_date = null;
