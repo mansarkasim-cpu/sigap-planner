@@ -402,7 +402,10 @@ function serializeWorkOrder(wo: any) {
     } else if (typeof wo.start_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.start_date.trim())) {
       out.start_date = String(wo.start_date).trim();
     } else {
-      out.start_date = (new Date(wo.start_date)).toISOString();
+      // Format Date objects as SQL-like naive datetime in UTC: 'YYYY-MM-DD HH:mm:SS'
+      const dt = new Date(wo.start_date);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      out.start_date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())} ${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}:${pad(dt.getUTCSeconds())}`;
     }
   } catch (e) {
     out.start_date = null;
@@ -413,7 +416,9 @@ function serializeWorkOrder(wo: any) {
     } else if (typeof wo.end_date === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(wo.end_date.trim())) {
       out.end_date = String(wo.end_date).trim();
     } else {
-      out.end_date = (new Date(wo.end_date)).toISOString();
+      const dt = new Date(wo.end_date);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      out.end_date = `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())} ${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}:${pad(dt.getUTCSeconds())}`;
     }
   } catch (e) {
     out.end_date = null;
