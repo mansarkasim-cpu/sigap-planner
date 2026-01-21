@@ -70,16 +70,24 @@ async function weeklyChecklistStatus(req, res) {
         const itemsByChecklist = {};
         if (checklistIds.length > 0) {
             const itemRepo = ormconfig_1.AppDataSource.getRepository(DailyChecklistItem_1.DailyChecklistItem);
-            const items = await itemRepo.createQueryBuilder('it')
-                .leftJoinAndSelect('it.question', 'question')
+            // Use raw query to ensure we get all columns including answer_text
+            const rawItems = await itemRepo.createQueryBuilder('it')
+                .select('it.id', 'id')
+                .addSelect('it.daily_checklist_id', 'daily_checklist_id')
+                .addSelect('it.answer_text', 'answer_text')
+                .addSelect('it.answer_number', 'answer_number')
                 .where('it.daily_checklist_id IN (:...ids)', { ids: checklistIds })
-                .getMany();
-            for (const it of items) {
-                const cid = it.daily_checklist_id ?? it.daily_checklist?.id ?? null;
+                .getRawMany();
+            for (const it of rawItems) {
+                const cid = it.daily_checklist_id;
                 if (!cid)
                     continue;
                 itemsByChecklist[cid] = itemsByChecklist[cid] || [];
                 itemsByChecklist[cid].push(it);
+            }
+            console.debug('weeklyChecklistStatus loaded items count=', rawItems.length, 'grouped into', Object.keys(itemsByChecklist).length, 'checklists');
+            if (rawItems.length > 0) {
+                console.debug('weeklyChecklistStatus sample items 0-2=', rawItems.slice(0, 3));
             }
         }
         // map checklists per alat per day, include has_false flag when any boolean question is false
@@ -95,26 +103,38 @@ async function weeklyChecklistStatus(req, res) {
             const cid = c.id;
             let hasFalse = false;
             const its = itemsByChecklist[cid] || [];
-            for (const it of its) {
+            if (its.length > 0) {
+                console.debug(`checking checklist ${cid} with ${its.length} items`);
+            }
+            for (let idx = 0; idx < its.length; idx++) {
+                const it = its[idx];
                 try {
-                    const q = it.question || {};
-                    const qtype = (q.input_type || '').toString();
-                    const ansText = it.answer_text ? String(it.answer_text).trim().toLowerCase() : '';
+                    // Handle both raw query format and ORM object format
+                    const ansText = (it.answer_text !== undefined && it.answer_text !== null)
+                        ? String(it.answer_text).trim().toLowerCase()
+                        : '';
                     const ansNum = it.answer_number;
-                    if (qtype === 'boolean') {
-                        if (ansText === 'false' || ansText === '0' || ansText === 'no' || ansText === 'n') {
-                            hasFalse = true;
-                            break;
-                        }
-                        if (ansNum !== undefined && ansNum !== null && Number(ansNum) === 0) {
-                            hasFalse = true;
-                            break;
-                        }
+                    if (ansText) {
+                        console.debug(`  checklist ${cid} item ${idx}: answer_text="${ansText}"`);
+                    }
+                    // Check if answer is "false" (direct string match) or 0 (number)
+                    if (ansText === 'false' || ansText === '0' || ansText === 'no' || ansText === 'n') {
+                        console.debug(`  checklist ${cid} item ${idx}: FOUND FALSE! ansText="${ansText}"`);
+                        hasFalse = true;
+                        break;
+                    }
+                    if (ansNum !== undefined && ansNum !== null && Number(ansNum) === 0) {
+                        console.debug(`  checklist ${cid} item ${idx}: FOUND FALSE! ansNum=${ansNum}`);
+                        hasFalse = true;
+                        break;
                     }
                 }
                 catch (e) {
-                    // ignore parsing errors per-item
+                    console.error(`  checklist ${cid} item ${idx} error:`, e);
                 }
+            }
+            if (its.length > 0) {
+                console.debug(`checklist ${cid} final result: hasFalse=${hasFalse}`);
             }
             // if multiple entries per day, keep latest
             const existing = map[aid][d];

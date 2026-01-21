@@ -36,6 +36,10 @@ __decorate([
     __metadata("design:type", String)
 ], MasterSite.prototype, "location", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ length: 64, nullable: true }),
+    __metadata("design:type", String)
+], MasterSite.prototype, "timezone", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
 ], MasterSite.prototype, "created_at", void 0);

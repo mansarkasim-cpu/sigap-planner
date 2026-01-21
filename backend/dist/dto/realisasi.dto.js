@@ -115,9 +115,14 @@ async function createRealisasi(req, res) {
     if (!resolvedStartCreate) {
         try {
             const aRepo = assignmentRepo();
-            const maybeA = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: task.id }).andWhere('a.wo_id = :wo', { wo: task.workOrder?.id }).orderBy('a.created_at', 'DESC').getOne();
-            if (maybeA && maybeA.startedAt)
-                resolvedStartCreate = maybeA.startedAt;
+            const row = await aRepo.createQueryBuilder('a')
+                .select('MIN(a.started_at)', 'min_start')
+                .where('a.task_id = :tid', { tid: task.id })
+                .andWhere('a.wo_id = :wo', { wo: task.workOrder?.id })
+                .andWhere('a.started_at IS NOT NULL')
+                .getRawOne();
+            if (row && row.min_start)
+                resolvedStartCreate = new Date(row.min_start);
         }
         catch (e) {
             // ignore
@@ -218,13 +223,14 @@ async function submitPendingRealisasi(req, res) {
     if (!resolvedPendingStart) {
         try {
             const aRepo = assignmentRepo();
-            const maybeA = await aRepo.createQueryBuilder('a')
+            const row = await aRepo.createQueryBuilder('a')
+                .select('MIN(a.started_at)', 'min_start')
                 .where('a.task_id = :tid', { tid: task.id })
                 .andWhere('a.wo_id = :wo', { wo: task.workOrder?.id })
-                .orderBy('a.created_at', 'DESC')
-                .getOne();
-            if (maybeA && maybeA.startedAt)
-                resolvedPendingStart = maybeA.startedAt;
+                .andWhere('a.started_at IS NOT NULL')
+                .getRawOne();
+            if (row && row.min_start)
+                resolvedPendingStart = new Date(row.min_start);
         }
         catch (e) {
             // ignore lookup errors
@@ -406,7 +412,7 @@ async function approvePendingRealisasi(req, res) {
         if (bodyStart)
             resolvedStart = new Date(bodyStart);
     }
-    catch (_a) { }
+    catch (_) { }
     // set start/end times from pending — try multiple fallbacks (pending -> assignment task+wo -> task-only -> wo-only)
     if (!resolvedStart)
         resolvedStart = pending.startTime || null;

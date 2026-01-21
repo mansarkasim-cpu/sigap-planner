@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import apiClient from '../lib/api-client';
+import { parseToUtcDate, formatUtcToZone, toInputDatetime } from '../lib/date-utils';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
@@ -67,31 +68,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
   // format stored dates (possibly SQL 'YYYY-MM-DD HH:mm:ss' without timezone)
   function formatUtcDisplay(raw?: string | null) {
     if (!raw) return '-';
-    const s = String(raw).trim();
-    // If stored as SQL-like 'YYYY-MM-DD HH:mm:ss' return the same local datetime
-    const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const usRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const ddHyphenRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const m = sqlRx.exec(s);
-    if (m) {
-      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
-      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
-    }
-    const mu = usRx.exec(s);
-    if (mu) {
-      const [, mm, dd, yyyy, hh = '00', mi = '00'] = mu as any;
-      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
-    }
-    const md = ddHyphenRx.exec(s);
-    if (md) {
-      const [, dd, mm, yyyy, hh = '00', mi = '00'] = md as any;
-      return `${pad(Number(dd))}/${pad(Number(mm))}/${yyyy} ${pad(Number(hh))}:${pad(Number(mi))}`;
-    }
-    // fallback: parse ISO and show local components (best-effort)
-    const parsed = new Date(s);
-    if (isNaN(parsed.getTime())) return '-';
-    return `${pad(parsed.getDate())}/${pad(parsed.getMonth() + 1)}/${parsed.getFullYear()} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+    return formatUtcToZone(raw);
   }
 
   function resolveStartDate(w: WorkOrder) {
@@ -304,62 +281,6 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         // determine assignment date/time from workorder start_date (must exist)
         // parse stored start_date robustly and interpret SQL datetimes without timezone as UTC
         const pad = (n: number) => String(n).padStart(2, '0');
-        function parseToUtcDate(val?: string | null): Date | null {
-          if (!val) return null;
-          const s = String(val).trim();
-          const sqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          const hyphenDdRx = /^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          const slashRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-          let m: RegExpExecArray | null = null;
-
-          // YYYY-MM-DD[ HH:MM(:SS)]
-          m = sqlRx.exec(s);
-          if (m) {
-            const [, yy, mm, dd, hh = '00', mi = '00', ss = '00'] = m as any;
-            const BASE = new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss)));
-            const BACKEND_TZ_OFFSET_HOURS = 0;
-            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-
-          // DD-MM-YYYY[ HH:MM]
-          m = hyphenDdRx.exec(s);
-          if (m) {
-            const [, dd, mm, yyyy, hh = '00', mi = '00'] = m as any;
-            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), 0));
-            const BACKEND_TZ_OFFSET_HOURS = 0;
-            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-
-          // MM/DD/YYYY or DD/MM/YYYY with slashes — disambiguate by values
-          m = slashRx.exec(s);
-          if (m) {
-            const [, a, b, yyyy, hh = '00', mi = '00'] = m as any;
-            const na = Number(a);
-            const nb = Number(b);
-            let dd = na;
-            let mm = nb;
-            // If first segment > 12, it's day-first (DD/MM/YYYY)
-            if (na > 12) {
-              dd = na; mm = nb;
-            } else if (nb > 12) {
-              // second segment > 12 -> first is month
-              dd = nb; mm = na;
-            } else {
-              // both <=12; prefer MM/DD (common for 'date_doc'), but either is ambiguous.
-              mm = na; dd = nb;
-            }
-            const BASE = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), 0));
-            const BACKEND_TZ_OFFSET_HOURS = 0;
-            return new Date(BASE.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-
-          const parsed = new Date(s);
-          if (!isNaN(parsed.getTime())) {
-            const BACKEND_TZ_OFFSET_HOURS = 0;
-            return new Date(parsed.getTime() + BACKEND_TZ_OFFSET_HOURS * 60 * 60 * 1000);
-          }
-          return null;
-        }
 
         const sdUtc = parseToUtcDate(String(w.start_date));
         if (!sdUtc) {
@@ -512,20 +433,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     }
   }
 
-  function toInputDatetime(iso?: string | null) {
-    if (!iso) return '';
-    const s = String(iso).trim();
-    const rx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
-    const m = rx.exec(s);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    if (m) {
-      const [, yyyy, mm, dd, hh = '00', mi = '00'] = m as any;
-      return `${yyyy}-${mm}-${dd}T${pad(Number(hh))}:${pad(Number(mi))}`;
-    }
-    const parsed = new Date(s);
-    if (isNaN(parsed.getTime())) return '';
-    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
-  }
+  // use shared `toInputDatetime` from web/lib/date-utils
 
   function parseDdMMyyyyToIso(input?: string | null) {
     if (!input) return null;

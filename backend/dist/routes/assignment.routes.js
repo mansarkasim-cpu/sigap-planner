@@ -308,7 +308,7 @@ router.get('/assignments/for-group', auth_1.authMiddleware, async (req, res) => 
 router.patch('/assignments/:id', auth_1.authMiddleware, async (req, res) => {
     try {
         const id = req.params.id;
-        const { status } = req.body || {};
+        const { status, startTime } = req.body || {};
         const repo = ormconfig_1.AppDataSource.getRepository(Assignment_1.Assignment);
         const a = await repo.findOne({ where: { id }, relations: ['wo'] });
         if (!a)
@@ -317,7 +317,21 @@ router.patch('/assignments/:id', auth_1.authMiddleware, async (req, res) => {
             a.status = status;
         // if marking IN_PROGRESS, set startedAt if not already set
         if (status === 'IN_PROGRESS' && !a.startedAt) {
-            a.startedAt = new Date();
+            if (startTime) {
+                try {
+                    const parsed = new Date(startTime.toString());
+                    if (!isNaN(parsed.getTime()))
+                        a.startedAt = parsed;
+                    else
+                        a.startedAt = new Date();
+                }
+                catch (_a) {
+                    a.startedAt = new Date();
+                }
+            }
+            else {
+                a.startedAt = new Date();
+            }
         }
         const saved = await repo.save(a);
         // If assignment moved to IN_PROGRESS, also update the related WorkOrder status
@@ -327,6 +341,7 @@ router.patch('/assignments/:id', auth_1.authMiddleware, async (req, res) => {
                 const wo = await woRepo.findOneBy({ id: a.wo.id });
                 if (wo) {
                     wo.status = 'IN_PROGRESS';
+                    // do NOT modify workorder.start_date here — only update workorder status
                     await woRepo.save(wo);
                 }
             }

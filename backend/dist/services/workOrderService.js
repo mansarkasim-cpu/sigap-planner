@@ -356,24 +356,22 @@ async function getWorkOrdersPaginated(opts) {
     function formatDateToDisplay(val) {
         if (val == null)
             return null;
-        if (typeof val === 'string') {
-            // try to parse string to Date, if fails return original
-            const dt = new Date(val);
-            if (isNaN(dt.getTime()))
-                return val;
-            val = dt;
+        // Try to coerce to Date and return ISO UTC string. If parsing fails, return null.
+        try {
+            if (typeof val === 'string') {
+                const dt = new Date(val);
+                if (isNaN(dt.getTime()))
+                    return null;
+                return dt.toISOString();
+            }
+            const d = val instanceof Date ? val : new Date(val);
+            if (isNaN(d.getTime()))
+                return null;
+            return d.toISOString();
         }
-        const d = new Date(val);
-        if (isNaN(d.getTime()))
+        catch (e) {
             return null;
-        const pad = (n) => String(n).padStart(2, '0');
-        const yyyy = d.getFullYear();
-        const mm = pad(d.getMonth() + 1);
-        const dd = pad(d.getDate());
-        const hh = pad(d.getHours());
-        const mi = pad(d.getMinutes());
-        // Format: dd-mm-yyyy HH24:mm
-        return `${dd}-${mm}-${yyyy} ${hh}:${mi}`;
+        }
     }
     const serialized = rows.map(r => ({
         ...r,
@@ -964,6 +962,11 @@ async function updateWorkOrderDates(id, payload) {
     }
     if (payload.end_date !== undefined) {
         existing.end_date = payload.end_date;
+        // IMPORTANT: Do not automatically change work order status when frontend edits dates.
+        // Previously we set `existing.status = 'COMPLETED'` here which caused unexpected
+        // state transitions when a user merely adjusted dates. Status transitions should
+        // be performed explicitly via dedicated endpoints (e.g. deploy/complete) or
+        // business logic that validates tasks/realisasi — avoid implicit side-effects.
         changed = true;
     }
     const saved = await repo.save(existing);
@@ -1006,14 +1009,14 @@ async function getWorkOrderDateHistory(workOrderId) {
     return rows.map(r => ({
         id: r.id,
         work_order_id: r.work_order_id,
-        old_start: r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.old_start) : null,
-        old_end: r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.old_end) : null,
-        new_start: r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.new_start) : null,
-        new_end: r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
-            return null; const pad = (n) => String(n).padStart(2, '0'); return `${pad(dt.getDate())}-${pad(dt.getMonth() + 1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`; })(r.new_end) : null,
+        old_start: (r.old_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.old_start) : null),
+        old_end: (r.old_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.old_end) : null),
+        new_start: (r.new_start ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.new_start) : null),
+        new_end: (r.new_end ? (function (v) { const dt = new Date(v); if (isNaN(dt.getTime()))
+            return null; return dt.toISOString(); })(r.new_end) : null),
         note: r.note ?? null,
         changed_by: r.changed_by ?? null,
         changed_at: r.changed_at ? (new Date(r.changed_at)).toISOString() : null,

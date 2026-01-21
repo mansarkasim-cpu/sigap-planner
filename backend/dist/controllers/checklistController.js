@@ -32,6 +32,28 @@ const DailyChecklist_1 = require("../entities/DailyChecklist");
 const MasterChecklistQuestion_1 = require("../entities/MasterChecklistQuestion");
 const DailyChecklistItem_1 = require("../entities/DailyChecklistItem");
 const User_1 = require("../entities/User");
+const WorkOrder_1 = require("../entities/WorkOrder");
+const woService = __importStar(require("../services/workOrderService"));
+// determine uploads directory consistently with app startup logic
+function resolveUploadsDir() {
+    const UPLOADS_DIR_ENV = process.env.UPLOADS_DIR || '';
+    const cwd = process.cwd();
+    const candidates = [
+        UPLOADS_DIR_ENV,
+        path.join(cwd, 'uploads'),
+        path.join(cwd, 'backend', 'uploads'),
+        path.join(__dirname, '..', 'uploads'),
+        path.join(cwd, 'upload'),
+        path.join(__dirname, '..', 'upload'),
+    ].map(p => (p || '').toString());
+    const found = candidates.find(p => p && fs.existsSync(p));
+    const finalDir = found || (UPLOADS_DIR_ENV || path.join(cwd, 'uploads'));
+    try {
+        fs.mkdirSync(finalDir, { recursive: true });
+    }
+    catch (e) { /* ignore */ }
+    return finalDir;
+}
 function isLikelyLocalPath(p) {
     if (!p)
         return false;
@@ -133,7 +155,8 @@ async function submitChecklist(req, res) {
                         const buf = Buffer.from(it.evidence_photo_base64, 'base64');
                         const filename = `checklist_${Date.now()}_${(0, uuid_1.v4)()}.jpg`;
                         // Save under backend/uploads as requested
-                        const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename);
+                        const uploadsDir = resolveUploadsDir();
+                        const filepath = path.resolve(uploadsDir, filename);
                         fs.mkdirSync(path.dirname(filepath), { recursive: true });
                         fs.writeFileSync(filepath, buf);
                         try {
@@ -222,7 +245,8 @@ async function submitChecklist(req, res) {
                         try {
                             const buf = Buffer.from(it.evidence_photo_base64, 'base64');
                             const filename = `checklist_${Date.now()}_${(0, uuid_1.v4)()}.jpg`;
-                            const filepath = path.resolve(process.cwd(), 'backend', 'uploads', filename);
+                            const uploadsDir = resolveUploadsDir();
+                            const filepath = path.resolve(uploadsDir, filename);
                             fs.mkdirSync(path.dirname(filepath), { recursive: true });
                             fs.writeFileSync(filepath, buf);
                             try {
@@ -263,6 +287,38 @@ async function submitChecklist(req, res) {
                 });
                 const savedItem = await itemRepo.save(item);
                 createdItems.push(savedItem);
+            }
+            // After saving checklist, try to associate with a DAILY WorkOrder and set its start_date to performed_at - 15 minutes
+            try {
+                const performed = savedDc.performed_at ? new Date(savedDc.performed_at) : new Date();
+                const start = new Date(performed.getTime() - (15 * 60 * 1000));
+                try {
+                    const woRepo = tx.getRepository(WorkOrder_1.WorkOrder);
+                    // try to find a DAILY work order for the same asset that is currently deployed/in progress
+                    const aidStr = String(alat_id);
+                    const candidate = await woRepo.createQueryBuilder('wo')
+                        .where("(wo.work_type ILIKE '%DAILY%' OR wo.type_work ILIKE '%DAILY%')")
+                        .andWhere("(wo.asset_id = :aid OR (wo.raw->>'asset_id') = :aidStr OR (wo.raw->'asset'->>'id') = :aidStr)", { aid: alat_id, aidStr })
+                        .andWhere("wo.status IN ('DEPLOYED','IN_PROGRESS')")
+                        .orderBy('wo.created_at', 'DESC')
+                        .limit(1)
+                        .getOne();
+                    if (candidate) {
+                        try {
+                            const changedBy = (user) ? { id: user.id ?? null, nipp: user.nipp ?? null, name: user.name ?? null, email: user.email ?? null } : null;
+                            await woService.updateWorkOrderDates(candidate.id, { start_date: start, changedBy });
+                        }
+                        catch (e) {
+                            console.warn('failed to update workorder start_date from checklist', e);
+                        }
+                    }
+                }
+                catch (e) {
+                    console.warn('failed to lookup candidate workorder to update start_date', e);
+                }
+            }
+            catch (e) {
+                // ignore failures here
             }
             return res.status(201).json({ message: 'created', data: { checklist: savedDc, items: createdItems } });
         });

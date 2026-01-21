@@ -52,7 +52,7 @@ export default function SitesPage(){
 
   useEffect(()=>{ load(); loadHubs(); },[]);
 
-  function openCreate(){ setEditing({ name:'', code:'', hub_id: null, location:'' }); setModalOpen(true); }
+  function openCreate(){ setEditing({ name:'', code:'', hub_id: null, location:'', timezone: '' }); setModalOpen(true); }
   function openEdit(r){ setEditing({...r, hub_id: r.hub ? r.hub.id : null}); setModalOpen(true); }
 
   async function save(){ if(!editing || !editing.name) return alert('Name required'); try{ if(editing.id){ await apiClient(`/master/sites/${editing.id}`, { method:'PATCH', body: editing }); } else { await apiClient('/master/sites', { method:'POST', body: editing }); } setModalOpen(false); setEditing(null); await load(); }catch(err){ alert(err?.body?.message||err?.message||'Save failed'); } }
@@ -79,7 +79,7 @@ export default function SitesPage(){
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow><TableCell>ID</TableCell><TableCell>Code</TableCell><TableCell>Name</TableCell><TableCell>Hub</TableCell><TableCell>Location</TableCell><TableCell align="right">Action</TableCell></TableRow>
+              <TableRow><TableCell>ID</TableCell><TableCell>Code</TableCell><TableCell>Name</TableCell><TableCell>Hub</TableCell><TableCell>Timezone</TableCell><TableCell align="right">Action</TableCell></TableRow>
             </TableHead>
             <TableBody>
               {rows.map(r=> (
@@ -88,7 +88,7 @@ export default function SitesPage(){
                   <TableCell>{r.code||'-'}</TableCell>
                   <TableCell>{r.name}</TableCell>
                   <TableCell>{r.hub ? r.hub.name : '-'}</TableCell>
-                  <TableCell>{r.location||'-'}</TableCell>
+                  <TableCell>{(function(t){ if(!t) return '-'; if(t==='Asia/Jakarta') return 'WIB (Asia/Jakarta)'; if(t==='Asia/Makassar') return 'WITA (Asia/Makassar)'; if(t==='Asia/Jayapura') return 'WIT (Asia/Jayapura)'; return t; })(r.timezone)}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="Edit"><IconButton size="small" onClick={()=>openEdit(r)}><EditIcon fontSize="small"/></IconButton></Tooltip>
                     <Tooltip title="Delete"><IconButton size="small" color="error" onClick={()=>remove(r.id)}><DeleteIcon fontSize="small"/></IconButton></Tooltip>
@@ -119,7 +119,7 @@ export default function SitesPage(){
       <Dialog open={modalOpen} onClose={()=>{ setModalOpen(false); setEditing(null); }} fullWidth>
         <DialogTitle>{editing?.id? 'Edit Site' : 'Create Site'}</DialogTitle>
         <DialogContent>
-          <Box sx={{ display:'grid', gap:2, mt:1 }}>
+            <Box sx={{ display:'grid', gap:2, mt:1 }}>
             <TextField label="Code" size="small" value={editing?.code||''} onChange={e=>setEditing({...editing, code: e.target.value})} />
             <TextField label="Name" size="small" value={editing?.name||''} onChange={e=>setEditing({...editing, name: e.target.value})} />
             <Select size="small" value={editing?.hub_id ?? ''} onChange={e=>setEditing({...editing, hub_id: e.target.value || null})}>
@@ -127,6 +127,12 @@ export default function SitesPage(){
               {hubs.map(h=> <MenuItem key={h.id} value={h.id}>{h.name}</MenuItem>)}
             </Select>
             <TextField label="Location" size="small" value={editing?.location||''} onChange={e=>setEditing({...editing, location: e.target.value})} />
+            <Select size="small" value={editing?.timezone||''} onChange={e=>setEditing({...editing, timezone: e.target.value || null})}>
+              <MenuItem value=""><em>None</em></MenuItem>
+              <MenuItem value="Asia/Jakarta">WIB (Asia/Jakarta)</MenuItem>
+              <MenuItem value="Asia/Makassar">WITA (Asia/Makassar)</MenuItem>
+              <MenuItem value="Asia/Jayapura">WIT (Asia/Jayapura)</MenuItem>
+            </Select>
           </Box>
         </DialogContent>
         <DialogActions>

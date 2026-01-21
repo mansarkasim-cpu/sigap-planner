@@ -8,6 +8,7 @@ import '../services/local_db.dart';
 import 'dart:convert';
 import '../services/api.dart';
 import '../widgets/app_drawer.dart';
+import '../utils/date_utils.dart';
 
 class WODetailScreen extends StatefulWidget {
   final String woId;
@@ -30,6 +31,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   List<dynamic> tasks = [];
   Map<String, dynamic>? assignmentDetail;
   String? assignmentStatus;
+  String? assignmentStart;
   String? _techId;
   bool _isLead = false;
   late AnimationController _swipeController;
@@ -145,8 +147,25 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           if (tid.isNotEmpty) {
             setState(() {
               _selectedTaskId = tid;
-              assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
+                assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
+                // prefer explicit start fields from assignment if available
+                try {
+                final s = (found['start_date'] ?? found['start_time'] ?? found['start'] ?? found['startTime']);
+                if (s != null) {
+                  try {
+                    final dt = DateTime.parse(s.toString());
+                    assignmentStart = dt.toUtc().toIso8601String();
+                  } catch (_) {
+                    assignmentStart = s.toString();
+                  }
+                }
+              } catch (_) {}
             });
+              // also try LocalDB stored start time (swipe timestamp)
+              try {
+                final localStart = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+                if (localStart != null) setState(() { assignmentStart = localStart.toUtc().toIso8601String(); });
+              } catch (_) {}
             return;
           }
         }
@@ -198,6 +217,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       if (res is Map && res.containsKey('data')) payload = res['data'];
       setState(() {
         woDetail = (payload is Map) ? Map<String, dynamic>.from(payload) : null;
+        _keterangan = payload['keterangan'] ?? '';
       });
     } catch (e) {
       debugPrint('load detail error: $e');
@@ -218,12 +238,21 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       // include startTime (when work started) and endTime (now)
       DateTime? startTime;
       try {
-        startTime =
-            await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+        if (assignmentStart != null && assignmentStart!.isNotEmpty) {
+          try {
+            startTime = DateTime.parse(assignmentStart!).toUtc();
+          } catch (_) {
+            startTime = null;
+          }
+        }
+        if (startTime == null) {
+          final dt = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+          if (dt != null) startTime = dt.toUtc();
+        }
       } catch (_) {
         startTime = null;
       }
-      final endTime = DateTime.now();
+      final endTime = DateTime.now().toUtc();
       final body = {
         'assignmentId': widget.assignmentId,
         'taskId': (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString(),
@@ -537,9 +566,11 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   Future<void> _startWork() async {
     final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
     try {
+      // record swipe time (UTC) and send to server so it can be used as realisasi start
+      final swipeTime = DateTime.now().toUtc();
       await api.patch(
           '/assignments/${Uri.encodeComponent(widget.assignmentId)}',
-          {'status': 'IN_PROGRESS'});
+          {'status': 'IN_PROGRESS', 'startTime': swipeTime.toIso8601String()});
       // also set workorder status to IN_PROGRESS
       try {
         await api.patch('/work-orders/${Uri.encodeComponent(widget.woId)}',
@@ -556,8 +587,16 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       // record start time locally for this assignment
       try {
         await LocalDB.instance.init();
-        await LocalDB.instance
-            .setAssignmentStart(widget.assignmentId, DateTime.now());
+        await LocalDB.instance.setAssignmentStart(widget.assignmentId, swipeTime);
+        setState(() { assignmentStart = swipeTime.toIso8601String(); });
+        if (kDebugMode) {
+          try {
+            final check = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+            debugPrint('WODetail debug: after setAssignmentStart local value=$check');
+          } catch (e) {
+            debugPrint('WODetail debug: after setAssignmentStart read failed: $e');
+          }
+        }
       } catch (e) {
         debugPrint('setAssignmentStart failed: $e');
       }
@@ -800,32 +839,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
     }
   }
 
-  String _formatUtcDisplay(dynamic raw) {
-    if (raw == null) return '-';
-    final s = raw.toString().trim();
-    final sqlRx = RegExp(
-        r'^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?\$');
-    final m = sqlRx.firstMatch(s);
-    DateTime? dt;
-    if (m != null) {
-      final yy = int.parse(m.group(1)!);
-      final mm = int.parse(m.group(2)!);
-      final dd = int.parse(m.group(3)!);
-      final hh = m.group(4) != null ? int.parse(m.group(4)!) : 0;
-      final mi = m.group(5) != null ? int.parse(m.group(5)!) : 0;
-      final ss = m.group(6) != null ? int.parse(m.group(6)!) : 0;
-      dt = DateTime.utc(yy, mm, dd, hh, mi, ss);
-    } else {
-      try {
-        dt = DateTime.parse(s);
-      } catch (_) {
-        return '-';
-      }
-    }
-    final dtUtc = dt.toUtc();
-    String pad(int n) => n.toString().padLeft(2, '0');
-    return '${pad(dtUtc.day)}/${pad(dtUtc.month)}/${dtUtc.year} ${pad(dtUtc.hour)}:${pad(dtUtc.minute)}';
-  }
+  // use shared date_utils
 
   List<Map<String, String>> _extractAttachments() {
     final List<Map<String, String>> out = [];
@@ -1128,9 +1142,17 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                             Text('Asset: ${woDetail?['asset_name'] ?? '-'}',
                                 style: const TextStyle(fontSize: 14)),
                             const SizedBox(height: 6),
-                            Text(
-                                'Start: ${_formatUtcDisplay(woDetail?['start_date'])}',
-                                style: const TextStyle(color: Colors.grey)),
+                            // debug: why is '(swiped)' not appearing?
+                            (() {
+                              final bool isInProgress = ((assignmentStatus != null && assignmentStatus!.toString().toUpperCase().contains("IN_PROGRESS")) || (((woDetail?['status'] ?? woDetail?['raw']?['status'])?.toString() ?? '').toUpperCase().contains("IN_PROGRESS")));
+                              if (kDebugMode) {
+                                debugPrint('WODetail debug: assignmentStart=${assignmentStart ?? '<null>'} assignmentStatus=${assignmentStatus ?? '<null>'} woStatus=${(woDetail?['status'] ?? woDetail?['raw']?['status']) ?? '<null>'} isInProgress=$isInProgress');
+                              }
+                              return Text(
+                                'Start: ${formatUtcDisplay((isInProgress && assignmentStart != null) ? assignmentStart : woDetail?['start_date'], extractTimezone(woDetail))}${(isInProgress && assignmentStart != null) ? ' (swiped)' : ''}',
+                                style: (isInProgress && assignmentStart != null) ? const TextStyle(color: Colors.green, fontWeight: FontWeight.w600) : const TextStyle(color: Colors.grey),
+                              );
+                            })(),
                             const SizedBox(height: 6),
                             Text(
                                 'Location: ${woDetail?['vendor_cabang'] ?? woDetail?['raw']?['vendor_cabang'] ?? woDetail?['raw']?['site'] ?? '-'}',
