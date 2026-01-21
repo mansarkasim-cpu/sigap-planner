@@ -58,8 +58,27 @@ const gutter = 12;
 const minBarWidthPx = 4;
 
 function isoToMs(val?: string | null) {
-  const d = parseToUtcDate(val);
-  return d ? d.getTime() : null;
+  if (!val) return null;
+  // If naive SQL datetime (YYYY-MM-DD or YYYY-MM-DD HH:mm:ss) without timezone,
+  // interpret it as local wall-clock time so it lines up with local dayStartMs.
+  const s = String(val).trim();
+  const naiveSqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+  const m = naiveSqlRx.exec(s);
+  if (m && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    try {
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      const hh = Number(m[4] || '0');
+      const mi = Number(m[5] || '0');
+      const ss = Number(m[6] || '0');
+      return new Date(y, mo, d, hh, mi, ss).getTime();
+    } catch (e) {
+      // fallback to parseToUtcDate
+    }
+  }
+  const dd = parseToUtcDate(val);
+  return dd ? dd.getTime() : null;
 }
 function niceTime(ms: number | null) {
   if (!ms) return '-';
