@@ -23,6 +23,9 @@ router.post('/import', upload.single('file'), importCtrl.importUsersFromFile);
 // PATCH /api/users/:id
 router.patch('/:id', ctrl.updateUser);
 
+// POST /api/users/:id/reset-password
+router.post('/:id/reset-password', ctrl.resetPassword);
+
 // DELETE /api/users/:id
 router.delete('/:id', ctrl.deleteUser);
 

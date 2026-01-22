@@ -59,7 +59,7 @@ export async function getUserById(req: Request, res: Response) {
 
 export async function createUser(req: Request, res: Response) {
   try {
-    const { name, email, password, role, site, nipp } = req.body || {};
+    const { name, email, role, site, nipp } = req.body || {};
     if (!name || !nipp) return res.status(400).json({ message: 'name and nipp required' });
 
     // validate nipp format (numeric, <=15)
@@ -103,10 +103,8 @@ export async function updateUser(req: Request, res: Response) {
 
     u.name = name ?? u.name;
     u.email = email ?? u.email;
-    if (password !== undefined) {
-      // hash provided password
-      u.password = password ? await bcrypt.hash(String(password), 10) : undefined;
-    }
+    // Do NOT modify password on user update here. Password changes
+    // should be performed via a dedicated endpoint or admin action.
     u.role = role ?? u.role;
     u.site = site ?? u.site;
     u.nipp = nipp ?? u.nipp;
@@ -129,6 +127,25 @@ export async function deleteUser(req: Request, res: Response) {
   } catch (err) {
     console.error('deleteUser error', err);
     return res.status(500).json({ message: 'Failed to delete user' });
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ message: 'password required' });
+
+    const u = await repo().findOneBy({ id });
+    if (!u) return res.status(404).json({ message: 'User not found' });
+
+    const hashed = await bcrypt.hash(String(password), 10);
+    u.password = hashed;
+    const saved = await repo().save(u);
+    return res.json({ message: 'password reset', data: { id: saved.id } });
+  } catch (err: any) {
+    console.error('resetPassword error', err);
+    return res.status(500).json({ message: 'Failed to reset password', detail: err.message || err });
   }
 }
 

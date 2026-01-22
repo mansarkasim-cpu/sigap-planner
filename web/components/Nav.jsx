@@ -70,8 +70,8 @@ export default function Nav(){
             }catch(e){/* ignore */}
           }
         }
-        // show master menu for admin or planner
-        if (mounted) setShowMaster(isAdminRole(raw) || hasRole(raw, 'planner'))
+        // show master menu for admin only
+        if (mounted) setShowMaster(isAdminRole(raw))
       }catch(e){ if (mounted) setIsAdmin(false) }
     }
     loadRole()

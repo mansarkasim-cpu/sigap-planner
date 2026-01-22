@@ -27,6 +27,7 @@ import Tooltip from '@mui/material/Tooltip';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import LockResetIcon from '@mui/icons-material/LockReset';
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
@@ -35,7 +36,7 @@ export default function UsersPage() {
   const [roles, setRoles] = useState([]);
   const [sites, setSites] = useState([]);
   // fixed role options
-  const ROLE_OPTIONS = ['admin', 'planner', 'lead_shift', 'technician'];
+  const ROLE_OPTIONS = ['admin', 'planner', 'technician'];
   const combinedRoles = Array.from(new Set([...(ROLE_OPTIONS || []), ...(roles || [])]));
   const [roleFilter, setRoleFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
@@ -46,6 +47,10 @@ export default function UsersPage() {
 
   const [editing, setEditing] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUser, setResetUser] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
 
   async function load() {
     setLoading(true); setError(null);
@@ -72,18 +77,24 @@ export default function UsersPage() {
         setTotal(null);
       }
 
-      // derive role and site lists from fetched users
+      // derive role list from fetched users
       const rset = Array.from(new Set((data?.data || data || []).map(r => r.role).filter(Boolean)));
-      const sset = Array.from(new Set((data?.data || data || []).map(r => r.site).filter(Boolean)));
       setRoles(rset);
-      setSites(sset);
     } catch (err) {
       console.error('load users', err);
       setError(err?.message || 'Failed to load users');
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [roleFilter, siteFilter, nameQ, page, pageSize]);
+  async function loadRefs() {
+    try {
+      const s = await apiClient('/master/sites');
+      if (Array.isArray(s)) setSites(s.map(si => si.name));
+      else setSites([]);
+    } catch (e) { console.error('load master sites', e); }
+  }
+
+  useEffect(() => { load(); loadRefs(); }, [roleFilter, siteFilter, nameQ, page, pageSize]);
 
   function openCreate() { setEditing({ name:'', email:'', role:'technician', site:'', nipp:'', password: '' }); setModalOpen(true); }
   function openEdit(u) { setEditing(u); setModalOpen(true); }
@@ -190,6 +201,11 @@ export default function UsersPage() {
                           <EditIcon fontSize="small"/>
                         </IconButton>
                       </Tooltip>
+                      <Tooltip title="Reset Password">
+                        <IconButton size="small" onClick={()=>{ setResetUser(u); setResetOpen(true); setResetPassword(''); setResetPasswordConfirm(''); }}>
+                          <LockResetIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Delete">
                         <IconButton size="small" color="error" onClick={()=>remove(u.id)}>
                           <DeleteIcon fontSize="small"/>
@@ -237,9 +253,11 @@ export default function UsersPage() {
             <Grid item xs={12} md={6}>
               <TextField label="Email" fullWidth size="small" value={editing?.email||''} onChange={e=>setEditing({...editing, email: e.target.value})} />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label="Password" type="password" fullWidth size="small" value={editing?.password||''} onChange={e=>setEditing({...editing, password: e.target.value})} />
-            </Grid>
+            {!editing?.id && (
+              <Grid item xs={12} md={6}>
+                <TextField label="Password" type="password" fullWidth size="small" value={editing?.password||''} onChange={e=>setEditing({...editing, password: e.target.value})} />
+              </Grid>
+            )}
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Role</InputLabel>
@@ -249,13 +267,42 @@ export default function UsersPage() {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField label="Site" fullWidth size="small" value={editing?.site||''} onChange={e=>setEditing({...editing, site: e.target.value})} />
+              <FormControl fullWidth size="small">
+                <InputLabel>Site</InputLabel>
+                <Select label="Site" value={editing?.site||''} onChange={e=>setEditing({...editing, site: e.target.value})}>
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {sites.map(s => (<MenuItem key={s} value={s}>{s}</MenuItem>))}
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={()=>{ setModalOpen(false); setEditing(null); }}>Cancel</Button>
           <Button variant="contained" onClick={save}>{editing?.id ? 'Save' : 'Create'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resetOpen} onClose={()=>{ setResetOpen(false); setResetUser(null); setResetPassword(''); setResetPasswordConfirm(''); }} fullWidth maxWidth="xs">
+        <DialogTitle>Reset Password</DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
+            <Box>Reset password for <strong>{resetUser?.name || resetUser?.email || ''}</strong></Box>
+            <TextField label="New password" type="password" fullWidth size="small" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} />
+            <TextField label="Confirm password" type="password" fullWidth size="small" value={resetPasswordConfirm} onChange={e=>setResetPasswordConfirm(e.target.value)} />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setResetOpen(false); setResetUser(null); }}>Cancel</Button>
+          <Button variant="contained" onClick={async ()=>{
+            if (!resetPassword) return alert('Password required');
+            if (resetPassword !== resetPasswordConfirm) return alert('Password confirmation does not match');
+            try {
+              await apiClient(`/users/${encodeURIComponent(resetUser.id)}/reset-password`, { method: 'POST', body: { password: resetPassword } });
+              alert('Password reset');
+              setResetOpen(false); setResetUser(null); setResetPassword(''); setResetPasswordConfirm('');
+            } catch (err) { alert(err?.body?.message || err?.message || 'Reset failed'); }
+          }}>Reset</Button>
         </DialogActions>
       </Dialog>
     </Box>
