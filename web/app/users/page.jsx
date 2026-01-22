@@ -72,18 +72,24 @@ export default function UsersPage() {
         setTotal(null);
       }
 
-      // derive role and site lists from fetched users
+      // derive role list from fetched users
       const rset = Array.from(new Set((data?.data || data || []).map(r => r.role).filter(Boolean)));
-      const sset = Array.from(new Set((data?.data || data || []).map(r => r.site).filter(Boolean)));
       setRoles(rset);
-      setSites(sset);
     } catch (err) {
       console.error('load users', err);
       setError(err?.message || 'Failed to load users');
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [roleFilter, siteFilter, nameQ, page, pageSize]);
+  async function loadRefs() {
+    try {
+      const s = await apiClient('/master/sites');
+      if (Array.isArray(s)) setSites(s.map(si => si.name));
+      else setSites([]);
+    } catch (e) { console.error('load master sites', e); }
+  }
+
+  useEffect(() => { load(); loadRefs(); }, [roleFilter, siteFilter, nameQ, page, pageSize]);
 
   function openCreate() { setEditing({ name:'', email:'', role:'technician', site:'', nipp:'', password: '' }); setModalOpen(true); }
   function openEdit(u) { setEditing(u); setModalOpen(true); }
@@ -249,7 +255,13 @@ export default function UsersPage() {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
-              <TextField label="Site" fullWidth size="small" value={editing?.site||''} onChange={e=>setEditing({...editing, site: e.target.value})} />
+              <FormControl fullWidth size="small">
+                <InputLabel>Site</InputLabel>
+                <Select label="Site" value={editing?.site||''} onChange={e=>setEditing({...editing, site: e.target.value})}>
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {sites.map(s => (<MenuItem key={s} value={s}>{s}</MenuItem>))}
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
         </DialogContent>
