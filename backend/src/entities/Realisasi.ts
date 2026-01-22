@@ -16,6 +16,9 @@ export class Realisasi {
   @Column({ name: 'photo_url', type: "varchar", length: 1000, nullable: true })
   photoUrl?: string | null;
 
+  @Column({ name: 'photo_urls', type: 'jsonb', nullable: true })
+  photoUrls?: string[] | null;
+
   @Column({ name: 'signature_url', type: "varchar", length: 1000, nullable: true })
   signatureUrl?: string | null;
 

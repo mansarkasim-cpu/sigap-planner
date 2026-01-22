@@ -92,7 +92,8 @@ class LocalDB {
 
   Future<void> saveChecklist({required String assignmentId, required String taskId, required Uint8List photoBytes, bool checked = true}) async {
     await init();
-    final id = '${assignmentId}_$taskId';
+    // Allow multiple photos per task by giving each saved row a unique id
+    final id = '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
     final filename = 'realisasi_${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
     final path = await _savePhotoToFile(photoBytes, filename);
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -108,16 +109,17 @@ class LocalDB {
 
   Future<void> removeChecklist({required String assignmentId, required String taskId}) async {
     await init();
-    final id = '${assignmentId}_$taskId';
-    // delete photo file if present
-    final rec = (await _db!.query('checklist', where: 'id = ?', whereArgs: [id]));
-    if (rec.isNotEmpty) {
-      final pth = rec.first['photoPath'] as String?;
-      if (pth != null && pth.isNotEmpty) {
-        try { final f = File(pth); if (await f.exists()) await f.delete(); } catch (_) {}
+    // Remove all checklist entries for this assignment+task (delete multiple photos)
+    await _db!.transaction((txn) async {
+      final recs = await txn.query('checklist', where: 'assignmentId = ? AND taskId = ?', whereArgs: [assignmentId, taskId]);
+      for (final r in recs) {
+        final pth = r['photoPath'] as String?;
+        if (pth != null && pth.isNotEmpty) {
+          try { final f = File(pth); if (await f.exists()) await f.delete(); } catch (_) {}
+        }
       }
-    }
-    await _db!.delete('checklist', where: 'id = ?', whereArgs: [id]);
+      await txn.delete('checklist', where: 'assignmentId = ? AND taskId = ?', whereArgs: [assignmentId, taskId]);
+    });
   }
 
   Future<List<Map<String, dynamic>>> getChecklistForAssignment(String assignmentId) async {

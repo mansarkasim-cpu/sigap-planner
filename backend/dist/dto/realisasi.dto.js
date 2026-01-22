@@ -115,6 +115,7 @@ async function createRealisasi(req, res) {
     if (!resolvedStartCreate) {
         try {
             const aRepo = assignmentRepo();
+            // prefer the earliest (minimum) non-null started_at for this task/workorder
             const row = await aRepo.createQueryBuilder('a')
                 .select('MIN(a.started_at)', 'min_start')
                 .where('a.task_id = :tid', { tid: task.id })
@@ -125,7 +126,7 @@ async function createRealisasi(req, res) {
                 resolvedStartCreate = new Date(row.min_start);
         }
         catch (e) {
-            // ignore
+            // ignore lookup errors
         }
     }
     if (!resolvedStartCreate) {

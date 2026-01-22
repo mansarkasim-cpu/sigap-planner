@@ -11,8 +11,7 @@ class LocalDB {
   Future<void> init() async {}
 
   Future<void> saveChecklist({required String assignmentId, required String taskId, required Uint8List photoBytes, bool checked = true}) async {
-    final id = '${assignmentId}_${taskId}';
-    _checklists.removeWhere((r) => r['id'] == id);
+    final id = '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
     _checklists.add({
       'id': id,
       'assignmentId': assignmentId,
@@ -25,8 +24,7 @@ class LocalDB {
   }
 
   Future<void> removeChecklist({required String assignmentId, required String taskId}) async {
-    final id = '${assignmentId}_${taskId}';
-    _checklists.removeWhere((r) => r['id'] == id);
+    _checklists.removeWhere((r) => r['assignmentId'] == assignmentId && r['taskId'] == taskId);
   }
 
   Future<List<Map<String, dynamic>>> getChecklistForAssignment(String assignmentId) async {

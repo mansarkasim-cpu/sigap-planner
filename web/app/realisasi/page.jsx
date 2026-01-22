@@ -213,32 +213,57 @@ export default function Page() {
                         </Grid>
                         <Box mt={1}>
                           {(expanded[wo.id].relByTask && expanded[wo.id].relByTask[t.id]) ? (
-                            expanded[wo.id].relByTask[t.id].map((r) => (
-                              <Paper key={r.id} variant="outlined" sx={{ mb: 1, p: 1, display: 'flex', gap: 2 }}>
-                                <Box sx={{ width: 120, height: 120 }}>
-                                  {r.photoUrl ? (
-                                    <a href={resolveMediaUrl(r.photoUrl)} target="_blank" rel="noreferrer">
-                                      <img src={resolveMediaUrl(r.photoUrl)} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
-                                    </a>
-                                  ) : (
-                                    <Box sx={{ width: '100%', height: '100%', bgcolor: '#f5f5f5', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>No photo</Box>
-                                  )}
-                                </Box>
-                                <Box sx={{ flex: 1 }}>
-                                  <Stack direction="row" spacing={1} alignItems="center">
-                                    <Chip label={`Start: ${formatDateDisplay(r.start, getSiteTimezone(wo))}`} size="small" />
-                                    <Chip label={`End: ${formatDateDisplay(r.end, getSiteTimezone(wo))}`} size="small" />
-                                    <Chip label={r.user ? ((r.user.nipp ? r.user.nipp + ' • ' : '') + (r.user.name || r.user.email || r.user.id)) : '-'} size="small" avatar={r.user ? <Avatar alt={r.user.name || r.user.id}>{(r.user.name || r.user.email || '').charAt(0)}</Avatar> : undefined} />
-                                  </Stack>
-                                  {r.notes ? <Typography sx={{ mt: 1 }}>{r.notes}</Typography> : null}
-                                  {r.photoUrl ? (
-                                    <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                                      <img src={resolveMediaUrl(r.photoUrl)} alt="thumb" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
+                            (() => {
+                              const seenPhotos = new Set();
+                              return expanded[wo.id].relByTask[t.id].map((r) => {
+                                // Support multiple photos per realisasi. Accept several field names for compatibility.
+                                const rawPhotos = [];
+                                if (Array.isArray(r.photos) && r.photos.length) rawPhotos.push(...r.photos);
+                                if (Array.isArray(r.photoUrls) && r.photoUrls.length) rawPhotos.push(...r.photoUrls);
+                                if (Array.isArray(r.photo_urls) && r.photo_urls.length) rawPhotos.push(...r.photo_urls);
+                                if (r.photoUrl && typeof r.photoUrl === 'string') rawPhotos.push(r.photoUrl);
+                                if (r.photo && typeof r.photo === 'string') rawPhotos.push(r.photo);
+                                // normalize and resolve URLs
+                                const photos = rawPhotos.map(p => p && resolveMediaUrl(p)).filter(Boolean);
+                                // find photos not yet shown for this task
+                                const newPhotos = photos.filter(p => !seenPhotos.has(p));
+                                // mark displayed photos as seen so duplicates across entries are suppressed
+                                newPhotos.forEach(p => seenPhotos.add(p));
+
+                                // render a 2-column grid: left reserved for photo (120px), right for details
+                                return (
+                                  <Paper key={r.id} variant="outlined" sx={{ mb: 1, p: 1, display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 2 }}>
+                                    <Box sx={{ width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {newPhotos && newPhotos.length > 0 ? (
+                                        newPhotos.length === 1 ? (
+                                          <a href={newPhotos[0]} target="_blank" rel="noreferrer">
+                                            <img src={newPhotos[0]} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
+                                          </a>
+                                        ) : (
+                                          <Box sx={{ display: 'flex', gap: 0.5, width: '100%', height: '100%' }}>
+                                            {newPhotos.map((p, idx) => (
+                                              <a key={idx} href={p} target="_blank" rel="noreferrer" style={{ width: `${100 / newPhotos.length}%`, display: 'block' }}>
+                                                <img src={p} alt={`photo-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" />
+                                              </a>
+                                            ))}
+                                          </Box>
+                                        )
+                                      ) : null}
                                     </Box>
-                                  ) : null}
-                                </Box>
-                              </Paper>
-                            ))
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                          <Chip label={`Start: ${formatDateDisplay(r.start, getSiteTimezone(wo))}`} size="small" />
+                                          <Chip label={`End: ${formatDateDisplay(r.end, getSiteTimezone(wo))}`} size="small" />
+                                        </Stack>
+                                        <Chip label={r.user ? ((r.user.nipp ? r.user.nipp + ' • ' : '') + (r.user.name || r.user.email || r.user.id)) : '-'} size="small" avatar={r.user ? <Avatar alt={r.user.name || r.user.id}>{(r.user.name || r.user.email || '').charAt(0)}</Avatar> : undefined} />
+                                      </Box>
+                                      {r.notes ? <Typography sx={{ mt: 1 }}>{r.notes}</Typography> : null}
+                                    </Box>
+                                  </Paper>
+                                )
+                              })
+                            })()
                           ) : (
                             <div style={{ color: '#666' }}>No realisasi entries for this task.</div>
                           )}

@@ -1595,7 +1595,6 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                                                 bytes: taskPhotoBytes[taskId]),
                                             child: Container(
                                               width: 80,
-                                              height: 60,
                                               margin: const EdgeInsets.only(
                                                   right: 8),
                                               decoration: BoxDecoration(
