@@ -175,7 +175,7 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   // if client provided uploaded URLs (from presign + PUT), accept them
   if ((dto as any).photoUrls && Array.isArray((dto as any).photoUrls)) {
     photoUrlsArr = (dto as any).photoUrls.filter(Boolean).map((s: any) => String(s));
-    if (!photoUrl && photoUrlsArr.length) photoUrl = photoUrlsArr[0];
+    if (!photoUrl && photoUrlsArr && photoUrlsArr.length) photoUrl = photoUrlsArr[0];
   }
   if (dto.signatureBase64) {
     const buf = Buffer.from(dto.signatureBase64, "base64");
