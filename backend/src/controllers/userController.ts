@@ -59,7 +59,7 @@ export async function getUserById(req: Request, res: Response) {
 
 export async function createUser(req: Request, res: Response) {
   try {
-    const { name, email, password, role, site, nipp } = req.body || {};
+    const { name, email, role, site, nipp } = req.body || {};
     if (!name || !nipp) return res.status(400).json({ message: 'name and nipp required' });
 
     // validate nipp format (numeric, <=15)
@@ -103,10 +103,8 @@ export async function updateUser(req: Request, res: Response) {
 
     u.name = name ?? u.name;
     u.email = email ?? u.email;
-    if (password !== undefined) {
-      // hash provided password
-      u.password = password ? await bcrypt.hash(String(password), 10) : undefined;
-    }
+    // Do NOT modify password on user update here. Password changes
+    // should be performed via a dedicated endpoint or admin action.
     u.role = role ?? u.role;
     u.site = site ?? u.site;
     u.nipp = nipp ?? u.nipp;
