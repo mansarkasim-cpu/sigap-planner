@@ -315,4 +315,70 @@ router.delete('/tasks/:id/assign/:assignId', authMiddleware, async (req: Request
   }
 });
 
+// DELETE /api/tasks/:id
+router.delete('/tasks/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id;
+    const taskRepo = AppDataSource.getRepository(Task);
+    const aRepo = AppDataSource.getRepository(TaskAssignment);
+
+    const task = await taskRepo.findOne({ where: { id: taskId } as any, relations: ['assignments', 'workOrder'] as any });
+    if (!task) return res.status(404).json({ message: 'Not found' });
+
+    // prevent deletion when realisasi exists for this task
+    try {
+      const realRows = await AppDataSource.query('SELECT id FROM realisasi WHERE task_id = $1 LIMIT 1', [taskId]);
+      if (realRows && realRows.length > 0) return res.status(400).json({ message: 'Cannot delete task with realisasi' });
+    } catch (e) {
+      console.warn('failed to check realisasi for task delete', e);
+    }
+
+    // remove assignments first
+    try {
+      if (Array.isArray(task.assignments) && task.assignments.length > 0) {
+        await aRepo.remove(task.assignments as any);
+      }
+    } catch (e) {
+      console.warn('failed to remove assignments before deleting task', e);
+    }
+
+    // finally remove task
+    await taskRepo.remove(task as any);
+
+    // update related workorder status similar to assignment deletion logic
+    try {
+      const woId = task.workOrder?.id;
+      if (woId) {
+        const tasks = await taskRepo.createQueryBuilder('t')
+          .leftJoinAndSelect('t.assignments', 'a')
+          .where('t.workOrder = :wo', { wo: woId })
+          .getMany();
+        const total = tasks.length;
+        const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
+        const woRepo = AppDataSource.getRepository(WorkOrder);
+        const wo = await woRepo.findOneBy({ id: woId } as any);
+        if (wo) {
+          if (total === 0) {
+            wo.status = 'NEW';
+          } else if (assignedCount === 0) {
+            wo.status = 'NEW';
+          } else if (assignedCount < total) {
+            wo.status = 'ASSIGNED';
+          } else if (assignedCount === total) {
+            wo.status = 'READY_TO_DEPLOY';
+          }
+          if (wo.status) await woRepo.save(wo);
+        }
+      }
+    } catch (e) {
+      console.warn('post-delete task workorder status update failed', e);
+    }
+
+    return res.json({ message: 'deleted' });
+  } catch (err) {
+    console.error('delete task', err);
+    return res.status(500).json({ message: 'Failed to delete task' });
+  }
+});
+
 export default router;

@@ -29,6 +29,9 @@ import Tooltip from '@mui/material/Tooltip';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 
 export type Activity = {
   id?: string;
@@ -121,6 +124,16 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
   const [currentUser, setCurrentUser] = useState<any | null>(undefined);
   const [editStartInput, setEditStartInput] = useState<string>('');
   const [editEndInput, setEditEndInput] = useState<string>('');
+
+  // Snackbar / Toast state
+  const [snackOpen, setSnackOpen] = useState(false);
+  const [snackMsg, setSnackMsg] = useState('');
+  const [snackSeverity, setSnackSeverity] = useState<'success'|'info'|'warning'|'error'>('info');
+  function showToast(message: string, severity: 'success'|'info'|'warning'|'error' = 'info') {
+    setSnackMsg(String(message || ''));
+    setSnackSeverity(severity);
+    setSnackOpen(true);
+  }
 
   async function load(p = page, query = q, location = locationFilter, date = dateFilter) {
     setLoading(true);
@@ -255,7 +268,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     console.debug('workorder:', w);
     // Require start_date on work order. If missing, prompt user to fill dates first.
     if (!w.start_date) {
-      alert('Work Order belum memiliki Start Date. Isi Start Date dan End Date terlebih dahulu.');
+      showToast('Work Order belum memiliki Start Date. Isi Start Date dan End Date terlebih dahulu.', 'warning');
       setEditing(w);
       return;
     }
@@ -284,7 +297,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
         const sdUtc = parseToUtcDate(String(w.start_date));
         if (!sdUtc) {
-          alert('Start Date tidak valid. Isi Start Date yang benar terlebih dahulu.');
+          showToast('Start Date tidak valid. Isi Start Date yang benar terlebih dahulu.', 'error');
           setEditing(w);
           return;
         }
@@ -427,7 +440,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       setEditing(null);
     } catch (err: any) {
       console.error('save edit', err);
-      alert('Gagal menyimpan: ' + (err?.body?.message || err?.message));
+      showToast('Gagal menyimpan: ' + (err?.body?.message || err?.message), 'error');
     } finally {
       setEditLoading(false);
     }
@@ -504,7 +517,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       load(page, q);
     } catch (e) {
       console.error('deploy failed', e);
-      alert('Deploy gagal: ' + (e?.message || e));
+      showToast('Deploy gagal: ' + (e?.message || e), 'error');
     }
   }
 
@@ -519,7 +532,45 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       load(page, q);
     } catch (e) {
       console.error('undeploy failed', e);
-      alert('Undeploy gagal: ' + (e?.message || e));
+      showToast('Undeploy gagal: ' + (e?.message || e), 'error');
+    }
+  }
+
+  async function handleDeleteWorkOrder(woId: string) {
+    if (!confirm('Hapus Work Order ini? Data terkait (tasks, assignments) mungkin juga terhapus. Lanjutkan?')) return;
+    try {
+      await apiClient(`/work-orders/${encodeURIComponent(woId)}`, { method: 'DELETE' });
+      // close modal if open and matches
+      if (modalRow && modalRow.id === woId) setModalRow(null);
+      // refresh list
+      await load(page, q);
+      showToast('Work Order dihapus', 'success');
+    } catch (err: any) {
+      console.error('delete workorder failed', err);
+      showToast('Hapus Work Order gagal: ' + (err?.body?.message || err?.message || err), 'error');
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!taskId) { showToast('Task id tidak tersedia', 'error'); return; }
+    if (String(taskId).startsWith('raw-')) { showToast('Task mentah (raw) tidak dapat dihapus melalui UI', 'warning'); return; }
+    if (!confirm('Hapus Task ini? Aksi tidak dapat dibatalkan. Lanjutkan?')) return;
+    try {
+      await apiClient(`/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      // refresh tasks for current workorder modal
+      try {
+        const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}/tasks`);
+        const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+        setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), tasks } } as any));
+      } catch (e) {
+        console.warn('refresh tasks after delete failed', e);
+      }
+      // also refresh list
+      await load(page, q);
+      showToast('Task dihapus', 'success');
+    } catch (err: any) {
+      console.error('delete task failed', err);
+      showToast('Hapus Task gagal: ' + (err?.body?.message || err?.message || err), 'error');
     }
   }
 
@@ -659,6 +710,11 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                             </IconButton>
                           </Tooltip>
                         )}
+                        <Tooltip title="Hapus Work Order">
+                          <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                       <div style={{ color: '#666', fontSize: 12 }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</div>
                     </Box>
@@ -720,6 +776,11 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                   </IconButton>
                                 </Tooltip>
                               )}
+                              <Tooltip title="Hapus Work Order">
+                                <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
+                                  <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
                             </Box>
                         </TableCell>
                       </TableRow>
@@ -888,7 +949,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                         } catch (err) {
                                           try {
                                             await apiClient(`/tasks/${encodeURIComponent(act.id)}/assign/${encodeURIComponent(asgn.id)}`, { method: 'DELETE' });
-                                          } catch (e) { console.error('unassign failed', e); alert('Unassign failed'); return; }
+                                          } catch (e) { console.error('unassign failed', e); showToast('Unassign failed', 'error'); return; }
                                         }
                                         try {
                                           const woRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}`);
@@ -903,6 +964,20 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                 ))}
                               </div>
                             )}
+                              <div style={{ marginTop: 8 }}>
+                                {currentUser ? (
+                                  <button onClick={async () => {
+                                    const tid = act.id ?? act.task_id ?? String(idx);
+                                    if (!tid) { showToast('Task id tidak tersedia', 'error'); return; }
+                                    if (hasRealisasi) {
+                                      if (!confirm('Task ini memiliki realisasi. Menghapus task akan menghapus data realisasi terkait. Lanjutkan?')) return;
+                                    } else {
+                                      if (!confirm('Hapus Task ini? Aksi tidak dapat dibatalkan. Lanjutkan?')) return;
+                                    }
+                                    await handleDeleteTask(tid);
+                                  }} style={{ background: 'transparent', border: 'none', color: '#c00', cursor: 'pointer' }}>Hapus Task</button>
+                                ) : null}
+                              </div>
                         </td>
                         <td style={{ padding: 12, verticalAlign: 'top', textAlign: 'right' }}>{(act.duration_min ?? act.task_duration) ?? '-'}</td>
                         {shouldShowAssignColumn(taskModal.wo as any) ? (
@@ -954,13 +1029,13 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                   <>
                                     <Button size="small" variant="contained" onClick={async () => {
                                       const ass = selectedAssignees[taskKey] || [];
-                                      if (!ass || ass.length === 0) { alert('Pilih minimal 1 teknisi'); return; }
+                                      if (!ass || ass.length === 0) { showToast('Pilih minimal 1 teknisi', 'warning'); return; }
                                       try {
                                         const unique = Array.from(new Set(ass));
                                         for (const uid of unique) {
                                           await apiClient(`/tasks/${encodeURIComponent(act.id ?? act.task_id ?? String(idx))}/assign`, { method: 'POST', body: { userId: uid, assignedBy: currentUser?.id } } as any);
                                         }
-                                        alert('Assignment created');
+                                        showToast('Assignment created', 'success');
                                         try {
                                           const woRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}`);
                                           const woDetail = woRes?.data ?? woRes;
@@ -971,7 +1046,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                         load(page, q);
                                       } catch (err) {
                                         console.error('assign error', err);
-                                        alert(err?.body?.message || err?.message || 'Assignment failed');
+                                        showToast(err?.body?.message || err?.message || 'Assignment failed', 'error');
                                       }
                                     }}>Assign</Button>
                                     <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
@@ -1107,8 +1182,8 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
             }
 
             // basic validation: ensure input matches expected pattern
-            if (editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { alert('Start date tidak valid'); return; }
-            if (editEndInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editEndInput)) { alert('End date tidak valid'); return; }
+            if (editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { showToast('Start date tidak valid', 'warning'); return; }
+            if (editEndInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editEndInput)) { showToast('End date tidak valid', 'warning'); return; }
 
             const sSql = datetimeLocalToSql(editStartInput || null);
             const eSql = datetimeLocalToSql(editEndInput || null);
@@ -1116,6 +1191,11 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           }} disabled={editLoading}>{editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
         </DialogActions>
       </Dialog>
+      <Snackbar open={snackOpen} autoHideDuration={4000} onClose={() => setSnackOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={() => setSnackOpen(false)} severity={snackSeverity} sx={{ width: '100%' }}>
+          {snackMsg}
+        </Alert>
+      </Snackbar>
     </div>
   );
 }
