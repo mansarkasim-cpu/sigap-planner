@@ -291,7 +291,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         const assignDate = `${sdUtc.getUTCFullYear()}-${pad(sdUtc.getUTCMonth() + 1)}-${pad(sdUtc.getUTCDate())}`;
         const assignTime = `${pad(sdUtc.getUTCHours())}:${pad(sdUtc.getUTCMinutes())}`;
         console.debug('[openTaskModal] assignDate/time (local)', { assignDate, assignTime, raw: w.start_date });
-        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&time=${encodeURIComponent(assignTime)}` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
+        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&time=${encodeURIComponent(assignTime)}&timeIsLocal=1` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
         console.debug(schedUrl);
 
         try {

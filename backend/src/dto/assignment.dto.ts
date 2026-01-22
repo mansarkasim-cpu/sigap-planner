@@ -1,4 +1,5 @@
 import { IsUUID, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsArray } from "class-validator";
 
 export class RealisasiCreateDTO {
   @IsUUID()
@@ -26,4 +27,9 @@ export class RealisasiCreateDTO {
 
   @IsOptional()
   result?: any;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  photoUrls?: string[];
 }

@@ -69,6 +69,14 @@ export async function createRealisasi(req: Request, res: Response) {
     const uploadsPath = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`;
     realisasi.photoUrl = uploadsPath;
   }
+  // accept array of uploaded photo URLs from client
+  if ((dto as any).photoUrls && Array.isArray((dto as any).photoUrls)) {
+    const arr = (dto as any).photoUrls.filter(Boolean).map((s: any) => String(s));
+    if (arr.length) {
+      realisasi.photoUrls = arr;
+      if (!realisasi.photoUrl) realisasi.photoUrl = arr[0];
+    }
+  }
   if (dto.signatureBase64) {
     const buf = Buffer.from(dto.signatureBase64, "base64");
     const filename = `sig_${uuidv4()}.png`;
@@ -153,6 +161,7 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   // save photo to disk and create pending record
   let photoUrl: string | undefined;
   let signatureUrl: string | undefined;
+  let photoUrlsArr: string[] | undefined;
   if (dto.photoBase64) {
     const buf = Buffer.from(dto.photoBase64, "base64");
     const filename = `pending_photo_${uuidv4()}.jpg`;
@@ -162,6 +171,11 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
     try { fs.chmodSync(filepath, 0o644); } catch (e) { console.error('chmod failed:', e); }
     const baseForUploads = process.env.S3_PUBLIC_BASE || `${req.protocol}://${req.get('host')}`;
     photoUrl = baseForUploads.endsWith('/') ? `${baseForUploads}uploads/${filename}` : `${baseForUploads}/uploads/${filename}`;
+  }
+  // if client provided uploaded URLs (from presign + PUT), accept them
+  if ((dto as any).photoUrls && Array.isArray((dto as any).photoUrls)) {
+    photoUrlsArr = (dto as any).photoUrls.filter(Boolean).map((s: any) => String(s));
+    if (!photoUrl && photoUrlsArr.length) photoUrl = photoUrlsArr[0];
   }
   if (dto.signatureBase64) {
     const buf = Buffer.from(dto.signatureBase64, "base64");
@@ -178,6 +192,7 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   pending.task = task as any;
   pending.notes = dto.notes || null;
   pending.photoUrl = photoUrl || null;
+  pending.photoUrls = photoUrlsArr || null;
   pending.signatureUrl = signatureUrl || null;
   // accept optional start/end times from client; if startTime missing, fallback to assignment.startedAt if available
   let resolvedPendingStart: Date | null = dto.startTime ? new Date(dto.startTime) : null;
@@ -216,7 +231,7 @@ export async function listPendingRealisasi(req: Request, res: Response) {
   try { console.debug('listPendingRealisasi: userId=', user?.id, 'role=', user?.role); } catch (_) {}
   if (isAdmin) {
     rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['task', 'task.workOrder'] as any });
-    return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
+    return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
   }
 
   // Otherwise, allow users who are recorded as shift group leaders to see pending items
@@ -257,7 +272,7 @@ export async function listPendingRealisasi(req: Request, res: Response) {
         if ((assigneeId && membersSet.has(assigneeId)) || (submitterId && membersSet.has(submitterId))) filtered.push(r);
       } catch (_) { }
     }
-    return res.json((filtered.length ? filtered : rows).map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, submittedAt: r.submittedAt, status: r.status })));
+    return res.json((filtered.length ? filtered : rows).map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
   } catch (e) {
     console.error('listPendingRealisasi error for leader fallback', e);
     return res.status(500).json({ message: 'Failed to list pending realisasi' });
@@ -322,15 +337,14 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   realisasi.task = pending.task as any;
   realisasi.notes = pending.notes || null;
   realisasi.photoUrl = pending.photoUrl || null;
+  realisasi.photoUrls = (pending as any).photoUrls ?? null;
+  if (!realisasi.photoUrl && Array.isArray((pending as any).photoUrls) && (pending as any).photoUrls.length) {
+    realisasi.photoUrl = (pending as any).photoUrls[0];
+  }
   realisasi.signatureUrl = pending.signatureUrl || null;
-  // allow client to explicitly provide startTime in approve request body
-  let resolvedStart: Date | null = null;
-  try {
-    const bodyStart = (req as any).body?.startTime || (req as any).body?.start_time;
-    if (bodyStart) resolvedStart = new Date(bodyStart);
-  } catch (_) {}
-  // set start/end times from pending — try multiple fallbacks (pending -> assignment task+wo -> task-only -> wo-only)
-  if (!resolvedStart) resolvedStart = pending.startTime || null;
+  // Prefer start/end times from the pending_realisasi record.
+  // Do NOT accept client-provided startTime when approving; use pending values first.
+  let resolvedStart: Date | null = pending.startTime || null;
   if (!resolvedStart) {
     try {
       const aRepo = assignmentRepo();
@@ -362,12 +376,41 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
       // ignore lookup errors
     }
   }
-  // final fallback: allow auto-fill with now if explicitly enabled by env var
+  // final fallback: if pending has no startTime, fall back to assignment.startedAt or env flag (preserve previous behavior)
   if (!resolvedStart) {
-    if (process.env.ALLOW_APPROVE_WITHOUT_START === 'true') {
-      resolvedStart = new Date();
-    } else {
-      return res.status(400).json({ message: 'startTime required: pending item has no startTime and no assignment.startedAt available' });
+    try {
+      const aRepo = assignmentRepo();
+      let maybeA: any = null;
+      if (pending.task?.id && pending.task?.workOrder?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.task_id = :tid', { tid: pending.task?.id })
+          .andWhere('a.wo_id = :wo', { wo: pending.task?.workOrder?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      if ((!maybeA || !maybeA.startedAt) && pending.task?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.task_id = :tid', { tid: pending.task?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      if ((!maybeA || !maybeA.startedAt) && pending.task?.workOrder?.id) {
+        maybeA = await aRepo.createQueryBuilder('a')
+          .where('a.wo_id = :wo', { wo: pending.task?.workOrder?.id })
+          .orderBy('a.created_at','DESC')
+          .getOne();
+      }
+      if (maybeA && (maybeA as any).startedAt) resolvedStart = (maybeA as any).startedAt;
+    } catch (e) {
+      // ignore lookup errors
+    }
+
+    if (!resolvedStart) {
+      if (process.env.ALLOW_APPROVE_WITHOUT_START === 'true') {
+        resolvedStart = new Date();
+      } else {
+        return res.status(400).json({ message: 'startTime required: pending item has no startTime and no assignment.startedAt available' });
+      }
     }
   }
   realisasi.startTime = resolvedStart;
@@ -395,7 +438,8 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   } catch (e) {
     console.warn('Failed to persist assignment.startedAt fallback', e);
   }
-  realisasi.endTime = pending.endTime || new Date();
+  // Prefer pending endTime; if missing, fall back to pending.startTime or now
+  realisasi.endTime = pending.endTime || pending.startTime || new Date();
   await realisasiRepo().save(realisasi);
 
   // mark assignment complete

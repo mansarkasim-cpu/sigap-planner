@@ -477,28 +477,8 @@ export async function deployWorkOrder(req: Request, res: Response) {
         const taskName = (t as any).name ?? '';
         // pick first assigned user for this task (if any)
         const assigns = (t as any).assignments || [];
-        // additionally, gather any personils from workorder raw.labours that may represent assigned technicians
+        // Do NOT use workorder.raw.labours to derive assignments — ignore that data
         const extraAssignees: string[] = [];
-        try {
-          const raw = (wo as any).raw;
-          if (raw && Array.isArray(raw.labours)) {
-            for (const lab of raw.labours) {
-              try {
-                const personils = lab?.personils ?? [];
-                if (Array.isArray(personils)) {
-                  for (const p of personils) {
-                    try {
-                      // try personil.nip or personil.personil?.nip
-                      const pp: any = p as any;
-                      const nip = pp['nipp'] ?? pp['nip'] ?? (pp['personil'] ? pp['personil']['nip'] : null);
-                      if (nip) extraAssignees.push(String(nip));
-                    } catch (e) {}
-                  }
-                }
-              } catch (e) {}
-            }
-          }
-        } catch (e) {}
         if (assigns.length > 0 || extraAssignees.length > 0) {
           // create one assignment record per TaskAssignment.user (support multiple technicians per task)
           // collect assignee ids from Task.assignments (UUIDs) and from extraAssignees (nipp strings which we'll try to resolve)
@@ -509,20 +489,32 @@ export async function deployWorkOrder(req: Request, res: Response) {
           // resolve extraAssignees (nipp) to user UUIDs when possible
           // we'll resolve extraAssignees (nipp values) to user UUIDs below
           // process Task.assignments first
+          // Prefetch existing assignments for this workorder+task to avoid race/duplications
+          const existingRows = await assignmentRepo.createQueryBuilder('a')
+            .where('a.wo_id = :wo AND a.task_id = :task', { wo: id, task: taskId })
+            .getMany();
+          const existingAssigneeSet = new Set((existingRows || []).map(r => (r.assigneeId || '').toString()));
+
           for (const ta of assigns) {
             const assigneeId = ta?.user?.id ?? ta?.user_id ?? ta?.userId ?? undefined;
-            // avoid creating duplicate assignment for same wo+task+assignee
-            const exists = await assignmentRepo.createQueryBuilder('a')
-              .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-              .getOne();
-            if (exists) {
-              exists.assigneeId = assigneeId ?? exists.assigneeId;
-              exists.task_name = taskName || exists.task_name;
-              exists.status = 'DEPLOYED';
-              const saved = await assignmentRepo.save(exists as any);
-              created.push(saved as any);
-              continue;
+            const assKey = assigneeId ? String(assigneeId) : '';
+            if (existingAssigneeSet.has(assKey)) {
+              // update existing record's metadata/status if needed
+              try {
+                const exists = existingRows.find(r => (r.assigneeId || '').toString() === assKey);
+                if (exists) {
+                  exists.assigneeId = assigneeId ?? exists.assigneeId;
+                  exists.task_name = taskName || exists.task_name;
+                  exists.status = 'DEPLOYED';
+                  const saved = await assignmentRepo.save(exists as any);
+                  created.push(saved as any);
+                  continue;
+                }
+              } catch (e) {
+                // fallthrough to attempt creation below
+              }
             }
+
             const a = new Assignment();
             a.wo = wo as any;
             a.assigneeId = assigneeId;
@@ -531,6 +523,8 @@ export async function deployWorkOrder(req: Request, res: Response) {
             a.status = 'DEPLOYED';
             const saved = await assignmentRepo.save(a as any);
             created.push(saved as any);
+            // track to avoid duplicates later in this loop
+            existingAssigneeSet.add(assKey);
           }
           // now process extraAssignees (nipp values) attempting to resolve to User by nipp
           if (extraAssignees.length > 0) {
@@ -542,10 +536,7 @@ export async function deployWorkOrder(req: Request, res: Response) {
                   const u = await userRepo.findOneBy({ nipp: String(nip) } as any);
                   const assigneeId = u ? String((u as any).id) : String(nip);
                   // avoid duplicate creation when same id already created
-                  const exists = await assignmentRepo.createQueryBuilder('a')
-                    .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-                    .getOne();
-                  if (exists) continue;
+                  if (existingAssigneeSet.has(String(assigneeId))) continue;
                   const a = new Assignment();
                   a.wo = wo as any;
                   a.assigneeId = u ? String((u as any).id) : undefined;

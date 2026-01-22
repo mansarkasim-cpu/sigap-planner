@@ -325,7 +325,7 @@ router.patch('/assignments/:id', auth_1.authMiddleware, async (req, res) => {
                     else
                         a.startedAt = new Date();
                 }
-                catch (_a) {
+                catch (_) {
                     a.startedAt = new Date();
                 }
             }
@@ -341,7 +341,7 @@ router.patch('/assignments/:id', auth_1.authMiddleware, async (req, res) => {
                 const wo = await woRepo.findOneBy({ id: a.wo.id });
                 if (wo) {
                     wo.status = 'IN_PROGRESS';
-                    // do NOT modify workorder.start_date here — only update workorder status
+                    // do NOT modify work order start_date here — only update workorder status
                     await woRepo.save(wo);
                 }
             }
