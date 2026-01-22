@@ -130,6 +130,25 @@ export async function deleteUser(req: Request, res: Response) {
   }
 }
 
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ message: 'password required' });
+
+    const u = await repo().findOneBy({ id });
+    if (!u) return res.status(404).json({ message: 'User not found' });
+
+    const hashed = await bcrypt.hash(String(password), 10);
+    u.password = hashed;
+    const saved = await repo().save(u);
+    return res.json({ message: 'password reset', data: { id: saved.id } });
+  } catch (err: any) {
+    console.error('resetPassword error', err);
+    return res.status(500).json({ message: 'Failed to reset password', detail: err.message || err });
+  }
+}
+
 export async function syncUserSitesFromWorkOrders(req: Request, res: Response) {
   // Optional helper: copy vendor_cabang from work_orders.raw -> user.site by matching email/name
   // This is a best-effort helper and should be tailored for your data model.
