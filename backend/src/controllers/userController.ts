@@ -59,7 +59,7 @@ export async function getUserById(req: Request, res: Response) {
 
 export async function createUser(req: Request, res: Response) {
   try {
-    const { name, email, role, site, nipp } = req.body || {};
+    const { name, email, password, role, site, nipp } = req.body || {};
     if (!name || !nipp) return res.status(400).json({ message: 'name and nipp required' });
 
     // validate nipp format (numeric, <=15)
