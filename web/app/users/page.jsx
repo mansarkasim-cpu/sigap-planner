@@ -243,9 +243,11 @@ export default function UsersPage() {
             <Grid item xs={12} md={6}>
               <TextField label="Email" fullWidth size="small" value={editing?.email||''} onChange={e=>setEditing({...editing, email: e.target.value})} />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label="Password" type="password" fullWidth size="small" value={editing?.password||''} onChange={e=>setEditing({...editing, password: e.target.value})} />
-            </Grid>
+            {!editing?.id && (
+              <Grid item xs={12} md={6}>
+                <TextField label="Password" type="password" fullWidth size="small" value={editing?.password||''} onChange={e=>setEditing({...editing, password: e.target.value})} />
+              </Grid>
+            )}
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Role</InputLabel>
