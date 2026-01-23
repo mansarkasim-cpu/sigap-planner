@@ -407,12 +407,12 @@ export default function Page() {
                           const photos = rawPhotos.map(p => p && resolveMediaUrl(p)).filter(Boolean)
                           return (
                             <Paper key={chosen.id || 'r'} variant="outlined" sx={{ mb: 1, p: 1, display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 2 }}>
-                              <Box sx={{ width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Box sx={{ width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 1 }}>
                                 {photos && photos.length > 0 ? (
                                   photos.length === 1 ? (
-                                    <a href={photos[0]} target="_blank" rel="noreferrer"><img src={photos[0]} alt="photo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" /></a>
+                                    <a href={photos[0]} target="_blank" rel="noreferrer" style={{ display: 'block', width: '100%', height: '100%' }}><img src={photos[0]} alt="photo" style={{ width: '100%', height: '100%', maxHeight: 120, objectFit: 'cover', display: 'block', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" /></a>
                                   ) : (
-                                    <Box sx={{ display: 'flex', gap: 0.5, width: '100%', height: '100%' }}>{photos.map((p, idx) => (<a key={idx} href={p} target="_blank" rel="noreferrer" style={{ width: `${100 / photos.length}%`, display: 'block' }}><img src={p} alt={`photo-${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" /></a>))}</Box>
+                                    <Box sx={{ display: 'flex', gap: 0.5, width: '100%', height: '100%' }}>{photos.map((p, idx) => (<a key={idx} href={p} target="_blank" rel="noreferrer" style={{ width: `${100 / photos.length}%`, display: 'block', height: '100%' }}><img src={p} alt={`photo-${idx}`} style={{ width: '100%', height: '100%', maxHeight: 120, objectFit: 'cover', display: 'block', borderRadius: 6, border: '1px solid #ddd' }} loading="lazy" /></a>))}</Box>
                                   )
                                 ) : null}
                               </Box>
