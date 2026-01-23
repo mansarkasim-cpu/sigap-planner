@@ -1707,7 +1707,26 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                                 child: ElevatedButton(
                                   onPressed: (progress >= 0.999)
                                       ? () async {
-                                          await _submitRealisasi();
+                                          final confirm = await showDialog<bool>(
+                                            context: context,
+                                            builder: (c) => AlertDialog(
+                                              title: const Text('Konfirmasi Submit'),
+                                              content: const Text('Anda yakin ingin submit realisasi? Data akan dikirim untuk approval.'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(c, false),
+                                                  child: const Text('Batal'),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(c, true),
+                                                  child: const Text('Submit'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirm == true) {
+                                            await _submitRealisasi();
+                                          }
                                         }
                                       : null,
                                   child: const Text('Submit Realisasi'),
