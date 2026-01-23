@@ -826,7 +826,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'ASSIGNED' && (
-                    <button onClick={() => handleDeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#7c3aed', color: 'white', borderRadius: 6 }}>Deploy</button>
+                    <button onClick={() => { if (confirm('Deploy Work Order ini? Lanjutkan deploy?')) handleDeploy(taskModal.wo!.id); }} style={{ padding: '6px 10px', background: '#7c3aed', color: 'white', borderRadius: 6 }}>Deploy</button>
                   )}
                   {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'DEPLOYED' && (
                     <button onClick={() => handleUndeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#ef4444', color: 'white', borderRadius: 6 }}>Undeploy</button>

@@ -144,7 +144,7 @@ class LocalDB {
     return out;
   }
 
-  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath}) async {
+  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath, int? startTime, int? endTime}) async {
     await init();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db!.insert('queued_realisasi', {
@@ -153,8 +153,8 @@ class LocalDB {
       'taskId': taskId,
       'notes': notes,
       'photoPath': photoPath,
-      'startTime': null,
-      'endTime': null,
+      'startTime': startTime,
+      'endTime': endTime,
       'submitted': 0,
       'createdAt': now
     }, conflictAlgorithm: ConflictAlgorithm.replace);
