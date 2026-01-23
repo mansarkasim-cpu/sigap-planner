@@ -253,16 +253,42 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
         startTime = null;
       }
       final endTime = DateTime.now().toUtc();
+      final qTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
+
+      // Persist submission locally first (photo file + queued record) to mitigate offline.
+      await LocalDB.instance.init();
+      final qid = '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
+      String? photoPath;
+      if (bytes != null) {
+        try {
+          photoPath = await LocalDB.instance.savePhotoFile(bytes, filename: 'queued_${qid}.jpg');
+        } catch (_) {
+          photoPath = null;
+        }
+      }
+      final int? startMs = startTime?.millisecondsSinceEpoch;
+      final int endMs = endTime.millisecondsSinceEpoch;
+      try {
+        await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, taskId: qTaskId, notes: _keterangan?.trim(), photoPath: photoPath, startTime: startMs, endTime: endMs);
+      } catch (qe) {
+        debugPrint('Failed to queue local realisasi record: $qe');
+      }
+
       final body = {
         'assignmentId': widget.assignmentId,
-        'taskId': (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString(),
+        'taskId': qTaskId,
         'notes': _keterangan?.trim() ?? null,
         'photoBase64': bytes != null ? base64Encode(bytes) : null,
         'startTime': startTime?.toIso8601String(),
         'endTime': endTime.toIso8601String(),
       };
+
       // submit to lead-shift for approval (backend will reject duplicates)
       final res = await api.post('/realisasi/submit', body);
+      // mark queued record as submitted
+      try {
+        await LocalDB.instance.markRealisasiSubmitted(qid);
+      } catch (_) {}
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Realisasi submitted for approval')));
       // If current user is a lead, try to automatically approve the pending realisasi.
@@ -385,25 +411,11 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           return;
         }
 
-        // Attempt to queue the realisasi for later upload using saved checklist photo if available
+        // submission failed after queue attempt — local record already created earlier,
+        // inform the user that data is saved locally for later retry
         try {
-          await LocalDB.instance.init();
-          final saved = await LocalDB.instance.getChecklistForAssignment(widget.assignmentId);
-          Uint8List? savedBytes;
-          if (saved.isNotEmpty) {
-            final first = saved.first;
-            if (first['photoBytes'] != null) savedBytes = first['photoBytes'] as Uint8List;
-          }
-          if (savedBytes != null) {
-            final photoPath = await LocalDB.instance.savePhotoFile(savedBytes, filename: 'queued_${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-            final qid = '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
-            final qTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
-            await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, taskId: qTaskId, notes: _keterangan, photoPath: photoPath);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim, gambar disimpan dan akan dikirim ulang nanti.')));
-          }
-        } catch (qe) {
-          debugPrint('queueing failed: $qe');
-        }
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim, data disimpan secara lokal dan akan dikirim ulang nanti.')));
+        } catch (_) {}
       } catch (_) {}
     } finally {
       setState(() {
