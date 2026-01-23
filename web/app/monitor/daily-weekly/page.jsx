@@ -27,7 +27,7 @@ import Divider from '@mui/material/Divider'
 import Avatar from '@mui/material/Avatar'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloseIcon from '@mui/icons-material/Close'
-import SortByAlphaIcon from '@mui/icons-material/SortByAlpha'
+import SortIcon from '@mui/icons-material/Sort'
 
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
@@ -326,7 +326,7 @@ export default function WeeklyMonitoring(){
                         if (sortBy === 'alat') setSortDir(d=> d === 'asc' ? 'desc' : 'asc')
                         else { setSortBy('alat'); setSortDir('asc') }
                       }} sx={{color: (theme)=> theme.palette.primary.contrastText}}>
-                        <SortByAlphaIcon fontSize="small" sx={{ transform: sortBy === 'alat' && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
+                        <SortIcon fontSize="small" sx={{ transform: sortBy === 'alat' && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
                       </IconButton>
                     </Box>
                   </TableCell>
@@ -349,11 +349,11 @@ export default function WeeklyMonitoring(){
                         <Box sx={{display:'flex',flexDirection:'column',alignItems:'center',gap:0.25}}>
                           <Box sx={{display:'flex',alignItems:'center',gap:0.5}}>
                             <Typography variant="caption" sx={{opacity:0.95,fontWeight:700}}>{weekdayName(d)}</Typography>
-                            <IconButton size="small" onClick={()=>{
+                              <IconButton size="small" onClick={()=>{
                               if (sortBy === `date:${d}`) setSortDir(s=> s === 'asc' ? 'desc' : 'asc')
                               else { setSortBy(`date:${d}`); setSortDir('asc') }
                             }} sx={{color: (theme)=> theme.palette.primary.contrastText}}>
-                              <SortByAlphaIcon fontSize="small" sx={{ transform: sortBy === `date:${d}` && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
+                              <SortIcon fontSize="small" sx={{ transform: sortBy === `date:${d}` && sortDir === 'desc' ? 'rotate(180deg)' : 'none' }} />
                             </IconButton>
                           </Box>
                           <Typography variant="body2">{d}</Typography>
