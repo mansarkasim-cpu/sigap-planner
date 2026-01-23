@@ -1187,8 +1187,31 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                     }
                   }
 
+                  // compute luminance for a hex color (higher = lighter)
+                  function luminance(hex: string) {
+                    const rgb = hexToRgb(hex) || { r: 0, g: 0, b: 0 };
+                    return 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+                  }
+
+                  // helper: lighten a hex color by moving each channel toward 255 by frac (0..1)
+                  function lightenHex(hex: string, frac = 0.18) {
+                    try {
+                      const rgb = hexToRgb(hex);
+                      if (!rgb) return hex;
+                      const r = Math.max(0, Math.min(255, Math.round(rgb.r + (255 - rgb.r) * frac)));
+                      const g = Math.max(0, Math.min(255, Math.round(rgb.g + (255 - rgb.g) * frac)));
+                      const b = Math.max(0, Math.min(255, Math.round(rgb.b + (255 - rgb.b) * frac)));
+                      const toHex = (n: number) => n.toString(16).padStart(2, '0');
+                      return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+                    } catch (e) {
+                      return hex;
+                    }
+                  }
+
                   // use a darker variant of the bar color for the progress overlay
-                  const progressColor = darkenHex(color, 0.22);
+                  // For COMPLETED items we keep the progress overlay color as the base `color` (real/actual),
+                  // and ensure the planned interval is not darker than that actual color.
+                  const progressColor = (statusNorm === 'COMPLETED') ? color : darkenHex(color, 0.22);
                   const progressTextColorInside = isDark(progressColor) ? '#ffffff' : '#000000';
 
                   // determine per-status allowed interactions:
@@ -1262,10 +1285,19 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                           const px1 = msToX(ps);
                           const px2 = msToX(pe);
                           const pwidth = clampBarWidth(px1, px2);
+                          // make the planned interval slightly lighter than the actual/progress bar
+                          // make planned interval noticeably lighter than the actual/progress bar
+                          // make planned interval much lighter than the actual/progress bar
+                          let plannedFill = lightenHex(color, 0.75);
+                          const plannedStroke = darkenHex(color, 0.08);
+                          // ensure plannedFill is lighter than progressColor; if not, lighten progressColor instead
+                          if (luminance(plannedFill) <= luminance(progressColor)) {
+                            plannedFill = lightenHex(progressColor, 0.75);
+                          }
                           return (
                             <>
-                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="#f3f4f6" />
-                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="none" stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4,2" />
+                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill={plannedFill} />
+                              <rect x={px1} y={y} rx={rx} ry={rx} width={pwidth} height={rowHeight - 12} fill="none" stroke={plannedStroke} strokeWidth={1} strokeDasharray="4,2" />
                             </>
                           );
                         }
