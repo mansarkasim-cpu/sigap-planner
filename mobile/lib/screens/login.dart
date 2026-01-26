@@ -29,7 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final tech = p.getString('tech_id') ?? '';
     if (token.isNotEmpty && tech.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InboxScreen()));
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => InboxScreen()));
       });
     }
   }
@@ -39,24 +40,32 @@ class _LoginScreenState extends State<LoginScreen> {
     final nipp = _nippController.text.trim();
     final pass = _passwordController.text;
     if (base.isEmpty || nipp.isEmpty || pass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIPP and password are required')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('NIPP and password are required')));
       return;
     }
-    setState(() { loading = true; });
+    setState(() {
+      loading = true;
+    });
     try {
       final api = ApiClient(baseUrl: base);
-      final res = await api.post('/auth/login', { 'nipp': nipp, 'password': pass });
+      final res =
+          await api.post('/auth/login', {'nipp': nipp, 'password': pass});
       final token = res['accessToken'] ?? res['token'] ?? '';
       final user = res['user'] ?? {};
       final userId = (user is Map) ? (user['id'] ?? '') : '';
       final p = await SharedPreferences.getInstance();
       await p.setString('api_token', token.toString());
       await p.setString('tech_id', userId.toString());
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InboxScreen()));
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => InboxScreen()));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
-      setState(() { loading = false; });
+      setState(() {
+        loading = false;
+      });
     }
   }
 
@@ -73,23 +82,32 @@ class _LoginScreenState extends State<LoginScreen> {
               CircleAvatar(
                 radius: 48,
                 backgroundColor: color,
-                child: const Icon(Icons.build_circle, size: 48, color: Colors.white),
+                child: const Icon(Icons.build_circle,
+                    size: 48, color: Colors.white),
               ),
               const SizedBox(height: 16),
-              Text('SIGAP Technician', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text('SIGAP Technician',
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text('Sign in to see your assignments', style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+              Text('Sign in to see your assignments',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center),
               const SizedBox(height: 20),
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
                       TextField(
                         controller: _nippController,
-                        decoration: const InputDecoration(labelText: 'NIPP', prefixIcon: Icon(Icons.badge)),
+                        decoration: const InputDecoration(
+                            labelText: 'NIPP', prefixIcon: Icon(Icons.badge)),
                         keyboardType: TextInputType.number,
                       ),
                       const SizedBox(height: 12),
@@ -99,8 +117,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           labelText: 'Password',
                           prefixIcon: const Icon(Icons.lock),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         obscureText: _obscurePassword,
@@ -110,7 +131,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: loading ? null : _login,
-                          child: loading ? const SizedBox(height:20,width:20,child:CircularProgressIndicator(color: Colors.white, strokeWidth:2)) : const Text('Sign in'),
+                          child: loading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Text('Sign in'),
                         ),
                       ),
                     ],
@@ -121,7 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
               TextButton(
                 onPressed: () async {
                   // quick help text
-                  showAboutDialog(context: context, children: [const Text('Contact your administrator if you have trouble signing in.')]);
+                  showAboutDialog(context: context, children: [
+                    const Text(
+                        'Contact your administrator if you have trouble signing in.')
+                  ]);
                 },
                 child: const Text('Need help?'),
               ),

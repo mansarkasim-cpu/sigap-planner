@@ -243,36 +243,14 @@ export async function listPendingRealisasi(req: Request, res: Response) {
     try { console.debug('listPendingRealisasi: leaderCandidates=', Array.from(candidates)); } catch (_) {}
     // only consider groups where the current user is recorded as leader
     const groups = (allGroups || []).filter(g => Boolean(g.leader && candidates.has(String(g.leader))));
-    if (!groups || groups.length === 0) return res.json([]);
-
-    // collect member ids from matched groups
-    const membersSet = new Set<string>();
-    for (const g of groups) {
-      if (Array.isArray(g.members)) {
-        for (const m of g.members) membersSet.add(String(m));
-      }
+    // If user is leader of any group, return all pending items (leaders can approve any team's submissions)
+    if (groups && groups.length > 0) {
+      rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['task', 'task.workOrder'] as any });
+      return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
     }
-    if (membersSet.size === 0) return res.json([]);
 
-    // fetch pending items (will be filtered below by assignment assignee matching)
-    const qb = pendingRepo().createQueryBuilder('p')
-      .leftJoinAndSelect('p.task', 't')
-      .leftJoinAndSelect('t.workOrder', 'wo')
-      .where('p.status = :s', { s: 'PENDING' });
-
-    rows = await qb.getMany();
-    // best-effort: filter pending items by whether the submitter or the task's latest assignment assignee is in membersSet
-    const aRepo = assignmentRepo();
-    const filtered: any[] = [];
-    for (const r of rows) {
-      try {
-        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: r.task?.id }).orderBy('a.created_at','DESC').getOne();
-        const assigneeId = maybe ? String((maybe as any).assigneeId ?? '') : '';
-        const submitterId = String(r.submitterId || '');
-        if ((assigneeId && membersSet.has(assigneeId)) || (submitterId && membersSet.has(submitterId))) filtered.push(r);
-      } catch (_) { }
-    }
-    return res.json((filtered.length ? filtered : rows).map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
+    // If not leader in any group, return empty list
+    return res.json([]);
   } catch (e) {
     console.error('listPendingRealisasi error for leader fallback', e);
     return res.status(500).json({ message: 'Failed to list pending realisasi' });
@@ -297,33 +275,20 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   const isAdmin = (user?.role === 'admin') || (Array.isArray(user?.roles) && (user.roles as any[]).includes('admin'));
   try { console.debug('approvePendingRealisasi: userId=', user?.id, 'role=', user?.role, 'pendingId=', id); } catch (_) {}
   let allowed = Boolean(isAdmin);
-  // otherwise allow if the authenticated user is the leader of a shift group that contains the task's assignee (best-effort)
+  // otherwise allow if the authenticated user is recorded as a shift group leader (any group)
   if (!allowed) {
     try {
       const groupRepo = AppDataSource.getRepository(ShiftGroup);
       const allGroups = await groupRepo.find();
       const candidates = new Set<string>([String(user?.id || ''), String(user?.nipp || ''), String(user?.email || '')].filter(Boolean));
       try { console.debug('approvePendingRealisasi: leaderCandidates=', Array.from(candidates)); } catch (_) {}
-      // only consider groups where the current user is recorded as leader
+      // consider groups where the current user is recorded as leader
       const groups = (allGroups || []).filter(g => Boolean(g.leader && candidates.has(String(g.leader))));
       try { console.debug('approvePendingRealisasi: matchedGroups=', groups.map(g => ({ id: g.id, leader: g.leader, membersCount: Array.isArray(g.members) ? g.members.length : 0 }))); } catch (_) {}
       try { console.debug('approvePendingRealisasi: groupsFound=', Array.isArray(groups) ? groups.length : 0); } catch (_) {}
-      // Try to find an assignment for the pending task and use its assigneeId
-      let assigneeId = '';
-      try {
-        const aRepo = assignmentRepo();
-        const maybe = await aRepo.createQueryBuilder('a').where('a.task_id = :tid', { tid: pending.task?.id }).orderBy('a.created_at','DESC').getOne();
-        assigneeId = maybe ? String((maybe as any).assigneeId ?? '') : '';
-        try { console.debug('approvePendingRealisasi: found assignment assigneeId=', assigneeId); } catch (_) {}
-      } catch (e) { assigneeId = ''; }
-      // allow if either the assignment assignee OR the pending submitter is in the leader's group members
-      const submitterId = String(pending.submitterId || '');
-      if (assigneeId || submitterId) {
-        for (const g of groups) {
-          const members = Array.isArray(g.members) ? g.members.map(String) : [];
-          try { console.debug('approvePendingRealisasi: checking group id=', (g as any).id, 'members=', members.length); } catch (_) {}
-          if ((assigneeId && members.includes(assigneeId)) || (submitterId && members.includes(submitterId))) { allowed = true; break; }
-        }
+      // If the user is leader of any group, allow approving any pending realisasi
+      if (Array.isArray(groups) && groups.length > 0) {
+        allowed = true;
       }
     } catch (e) {
       // ignore lookup errors and keep allowed=false

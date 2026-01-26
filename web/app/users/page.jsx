@@ -56,7 +56,12 @@ export default function UsersPage() {
     setLoading(true); setError(null);
     try {
       const params = new URLSearchParams();
-      if (nameQ) params.set('q', nameQ);
+      if (nameQ) {
+        params.set('q', nameQ);
+        // only send `nipp` when the input looks like a NIPP (digits only)
+        const t = String(nameQ || '').trim();
+        if (/^\d+$/.test(t)) params.set('nipp', t);
+      }
       if (roleFilter) params.set('role', roleFilter);
       if (siteFilter) params.set('site', siteFilter);
       params.set('page', String(page));
@@ -104,10 +109,13 @@ export default function UsersPage() {
     try {
       if (!editing.name || !editing.nipp) return alert('Name and NIPP are required');
       if (!editing.id && !editing.password) return alert('Password is required for new users');
+      const payload = { ...editing };
+      // treat empty email as omitted (optional)
+      if (payload.email === '' || payload.email == null) delete payload.email;
       if (editing.id) {
-        await apiClient(`/users/${encodeURIComponent(editing.id)}`, { method: 'PATCH', body: editing });
+        await apiClient(`/users/${encodeURIComponent(editing.id)}`, { method: 'PATCH', body: payload });
       } else {
-        await apiClient('/users', { method: 'POST', body: editing });
+        await apiClient('/users', { method: 'POST', body: payload });
       }
       setModalOpen(false);
       setEditing(null);
@@ -145,7 +153,7 @@ export default function UsersPage() {
       <Paper sx={{ p:2, mb:2 }} elevation={1}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={5}>
-            <TextField fullWidth placeholder="Search name or email" value={nameQ} onChange={e=>setNameQ(e.target.value)} size="small" />
+            <TextField fullWidth placeholder="Search name, email or NIPP" value={nameQ} onChange={e=>setNameQ(e.target.value)} size="small" />
           </Grid>
           <Grid item xs={6} md={3}>
             <FormControl fullWidth size="small">

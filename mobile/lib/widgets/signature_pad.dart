@@ -45,7 +45,8 @@ class _SignaturePadState extends State<SignaturePad> {
 
     // save to local file
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'signature_${DateTime.now().millisecondsSinceEpoch}.png'));
+    final file = File(p.join(
+        dir.path, 'signature_${DateTime.now().millisecondsSinceEpoch}.png'));
     await file.writeAsBytes(bytes);
 
     widget.onSave(bytes);
@@ -121,5 +122,6 @@ class _SignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => oldDelegate.points != points;
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) =>
+      oldDelegate.points != points;
 }

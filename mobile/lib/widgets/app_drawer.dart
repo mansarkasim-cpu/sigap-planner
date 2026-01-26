@@ -34,81 +34,132 @@ class _AppDrawerState extends State<AppDrawer> {
   Future<void> _loadVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      setState(() { _version = '${info.version}+${info.buildNumber}'; });
+      setState(() {
+        _version = '${info.version}+${info.buildNumber}';
+      });
     } catch (_) {
       // ignore
     }
   }
 
   Future<void> _loadProfile() async {
-    setState(() { loading = true; });
+    setState(() {
+      loading = true;
+    });
     final p = await SharedPreferences.getInstance();
     final token = p.getString('api_token') ?? '';
-    if (token.isEmpty) { setState(() { loading = false; }); return; }
+    if (token.isEmpty) {
+      setState(() {
+        loading = false;
+      });
+      return;
+    }
     try {
       final api = ApiClient(baseUrl: API_BASE, token: token);
       final res = await api.get('/auth/me');
-      setState(() { user = (res is Map) ? res : (res['data'] ?? res); });
+      setState(() {
+        user = (res is Map) ? res : (res['data'] ?? res);
+      });
     } catch (e) {
       debugPrint('AppDrawer: failed to load profile: $e');
     } finally {
-      setState(() { loading = false; });
+      setState(() {
+        loading = false;
+      });
     }
   }
 
   Future<void> _loadDailyCount() async {
-    setState(() { _loadingDailyCount = true; });
+    setState(() {
+      _loadingDailyCount = true;
+    });
     try {
       final p = await SharedPreferences.getInstance();
       final token = p.getString('api_token') ?? '';
-      if (token.isEmpty) { setState(() { _loadingDailyCount = false; }); return; }
+      if (token.isEmpty) {
+        setState(() {
+          _loadingDailyCount = false;
+        });
+        return;
+      }
       final api = ApiClient(baseUrl: API_BASE, token: token);
       final today = DateTime.now();
-      final dateStr = '${today.year.toString().padLeft(4,'0')}-${today.month.toString().padLeft(2,'0')}-${today.day.toString().padLeft(2,'0')}';
+      final dateStr =
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
       // Fetch DAILY work orders for today and count only those with status containing 'DEPLOYED'
       try {
         final techId = p.getString('tech_id') ?? '';
-        final r2 = await api.get('/work-orders?page=1&pageSize=1000&date=${Uri.encodeComponent(dateStr)}&work_type=DAILY');
+        final r2 = await api.get(
+            '/work-orders?page=1&pageSize=1000&date=${Uri.encodeComponent(dateStr)}&work_type=DAILY');
         final rows = r2 is Map ? (r2['data'] ?? r2) : r2;
         int deployedCount = 0;
         if (rows is List) {
           try {
             deployedCount = rows.where((w) {
               try {
-                final s = (w is Map) ? ((w['status'] ?? w['raw']?['status'] ?? w['raw']?['work_status']) ?? '') : '';
-                if (!s.toString().toUpperCase().contains('DEPLOYED')) return false;
+                final s = (w is Map)
+                    ? ((w['status'] ??
+                            w['raw']?['status'] ??
+                            w['raw']?['work_status']) ??
+                        '')
+                    : '';
+                if (!s.toString().toUpperCase().contains('DEPLOYED'))
+                  return false;
 
                 if (techId.isEmpty) return true;
 
                 // check assigned users / assignees / assigned_to fields
                 bool assigned = false;
                 if (w is Map) {
-                  final au = w['assigned_users'] ?? w['assigned'] ?? w['assignees'] ?? w['assigned_to'];
+                  final au = w['assigned_users'] ??
+                      w['assigned'] ??
+                      w['assignees'] ??
+                      w['assigned_to'];
                   if (au is List) {
                     for (final u in au) {
                       try {
                         if (u == null) continue;
                         if (u is Map) {
-                          final id = (u['id'] ?? u['user_id'] ?? u['nipp'] ?? u['nipp_id'])?.toString() ?? '';
-                          if (id.isNotEmpty && id == techId) { assigned = true; break; }
-                          final uname = (u['name'] ?? u['username'] ?? '')?.toString() ?? '';
-                          if (uname.isNotEmpty && uname == techId) { assigned = true; break; }
+                          final id = (u['id'] ??
+                                      u['user_id'] ??
+                                      u['nipp'] ??
+                                      u['nipp_id'])
+                                  ?.toString() ??
+                              '';
+                          if (id.isNotEmpty && id == techId) {
+                            assigned = true;
+                            break;
+                          }
+                          final uname =
+                              (u['name'] ?? u['username'] ?? '')?.toString() ??
+                                  '';
+                          if (uname.isNotEmpty && uname == techId) {
+                            assigned = true;
+                            break;
+                          }
                         } else {
-                          if (u.toString() == techId) { assigned = true; break; }
+                          if (u.toString() == techId) {
+                            assigned = true;
+                            break;
+                          }
                         }
                       } catch (_) {}
                     }
                   }
 
                   if (!assigned) {
-                    final at = w['assigned_to'] ?? w['assignee'] ?? w['assigned'];
+                    final at =
+                        w['assigned_to'] ?? w['assignee'] ?? w['assigned'];
                     if (at != null) {
                       if (at is Map) {
-                        final id = (at['id'] ?? at['user_id'] ?? at['nipp'])?.toString() ?? '';
+                        final id = (at['id'] ?? at['user_id'] ?? at['nipp'])
+                                ?.toString() ??
+                            '';
                         if (id.isNotEmpty && id == techId) assigned = true;
                         final name = (at['name'] ?? '')?.toString() ?? '';
-                        if (!assigned && name.isNotEmpty && name == techId) assigned = true;
+                        if (!assigned && name.isNotEmpty && name == techId)
+                          assigned = true;
                       } else {
                         if (at.toString() == techId) assigned = true;
                       }
@@ -118,21 +169,34 @@ class _AppDrawerState extends State<AppDrawer> {
                   if (!assigned) {
                     try {
                       final raw = w['raw'] ?? {};
-                      final rau = raw['assigned_users'] ?? raw['assigned_to'] ?? raw['assignees'];
+                      final rau = raw['assigned_users'] ??
+                          raw['assigned_to'] ??
+                          raw['assignees'];
                       if (rau is List) {
                         for (final u in rau) {
                           try {
                             if (u is Map) {
-                              final id = (u['id'] ?? u['user_id'] ?? u['nipp'])?.toString() ?? '';
-                              if (id == techId) { assigned = true; break; }
-                            } else if (u.toString() == techId) { assigned = true; break; }
+                              final id = (u['id'] ?? u['user_id'] ?? u['nipp'])
+                                      ?.toString() ??
+                                  '';
+                              if (id == techId) {
+                                assigned = true;
+                                break;
+                              }
+                            } else if (u.toString() == techId) {
+                              assigned = true;
+                              break;
+                            }
                           } catch (_) {}
                         }
                       }
                       final rat = raw['assigned_to'] ?? raw['assignee'];
                       if (!assigned && rat != null) {
                         if (rat is Map) {
-                          final id = (rat['id'] ?? rat['user_id'] ?? rat['nipp'])?.toString() ?? '';
+                          final id =
+                              (rat['id'] ?? rat['user_id'] ?? rat['nipp'])
+                                      ?.toString() ??
+                                  '';
                           if (id == techId) assigned = true;
                         } else if (rat.toString() == techId) assigned = true;
                       }
@@ -141,19 +205,29 @@ class _AppDrawerState extends State<AppDrawer> {
                 }
 
                 return assigned;
-              } catch (_) { return false; }
+              } catch (_) {
+                return false;
+              }
             }).length;
-          } catch (_) { deployedCount = rows.length; }
+          } catch (_) {
+            deployedCount = rows.length;
+          }
         }
-        setState(() { _dailyCount = deployedCount; });
+        setState(() {
+          _dailyCount = deployedCount;
+        });
       } catch (_) {
         // fallback: no count available
-        setState(() { _dailyCount = 0; });
+        setState(() {
+          _dailyCount = 0;
+        });
       }
     } catch (e) {
       debugPrint('AppDrawer: failed to load daily count: $e');
     } finally {
-      setState(() { _loadingDailyCount = false; });
+      setState(() {
+        _loadingDailyCount = false;
+      });
     }
   }
 
@@ -169,7 +243,8 @@ class _AppDrawerState extends State<AppDrawer> {
     await p.remove('api_token');
     await p.remove('tech_id');
     if (!mounted) return;
-    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+    Navigator.pushAndRemoveUntil(context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
   }
 
   @override
@@ -187,7 +262,11 @@ class _AppDrawerState extends State<AppDrawer> {
                   CircleAvatar(
                     radius: 36,
                     backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: Text(_initials(name), style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+                    child: Text(_initials(name),
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -197,12 +276,16 @@ class _AppDrawerState extends State<AppDrawer> {
                       children: [
                         Text(
                           name.isEmpty ? 'Unknown User' : name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           email,
-                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -215,7 +298,8 @@ class _AppDrawerState extends State<AppDrawer> {
               title: const Text('Profile'),
               onTap: () async {
                 Navigator.pop(context);
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()));
                 await _loadProfile();
               },
             ),
@@ -224,20 +308,38 @@ class _AppDrawerState extends State<AppDrawer> {
               title: const Text('Checklist'),
               onTap: () async {
                 Navigator.pop(context);
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ChecklistScreen()));
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const ChecklistScreen()));
               },
             ),
             ListTile(
               leading: const Icon(Icons.today),
               title: const Text('Daily Work Orders'),
-              trailing: _loadingDailyCount ? const SizedBox(width:24, height:24, child: CircularProgressIndicator(strokeWidth:2)) : (_dailyCount > 0 ? Container(
-                padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
-                child: Text('$_dailyCount', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-              ) : null),
+              trailing: _loadingDailyCount
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : (_dailyCount > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Text('$_dailyCount',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
+                        )
+                      : null),
               onTap: () async {
                 Navigator.pop(context);
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyWorkOrdersScreen()));
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DailyWorkOrdersScreen()));
                 // refresh the count after returning
                 await _loadDailyCount();
               },
@@ -247,17 +349,32 @@ class _AppDrawerState extends State<AppDrawer> {
               title: const Text('Checklist History'),
               onTap: () async {
                 Navigator.pop(context);
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => const ChecklistHistoryScreen()));
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ChecklistHistoryScreen()));
               },
             ),
-            ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: () async { Navigator.pop(context); await _logout(); }),
+            ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Logout'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _logout();
+                }),
             const Spacer(),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('App version', style: TextStyle(color: Colors.grey)),
-                Text(_version.isNotEmpty ? _version : '-', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ]),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+              child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('App version',
+                        style: TextStyle(color: Colors.grey)),
+                    Text(_version.isNotEmpty ? _version : '-',
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ]),
             ),
           ],
         ),

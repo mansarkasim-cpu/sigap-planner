@@ -60,10 +60,19 @@ class RetryUploader {
           if (taskId.isEmpty) {
             try {
               final asRes = await api.get('/assignments');
-              final alist = (asRes is List) ? asRes : (asRes is Map && asRes['data'] != null ? asRes['data'] : asRes);
+              final alist = (asRes is List)
+                  ? asRes
+                  : (asRes is Map && asRes['data'] != null
+                      ? asRes['data']
+                      : asRes);
               if (alist is List) {
-                final found = alist.firstWhere((a) => ((a['id'] ?? '')?.toString() ?? '') == assignmentId, orElse: () => null);
-                if (found != null) taskId = (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
+                final found = alist.firstWhere(
+                    (a) => ((a['id'] ?? '')?.toString() ?? '') == assignmentId,
+                    orElse: () => null);
+                if (found != null)
+                  taskId =
+                      (found['task_id'] ?? found['task'] ?? '')?.toString() ??
+                          '';
               }
             } catch (_) {}
           }
@@ -80,7 +89,10 @@ class RetryUploader {
           await LocalDB.instance.markRealisasiSubmitted(id);
           // delete photo file after success
           if (photoPath.isNotEmpty) {
-            try { final f = File(photoPath); if (await f.exists()) await f.delete(); } catch (_) {}
+            try {
+              final f = File(photoPath);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
           }
         } catch (e) {
           // leave in queue and continue
