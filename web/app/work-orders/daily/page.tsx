@@ -284,7 +284,7 @@ export default function DailyWorkOrdersPage(){
         }
       }
 
-      const q = `/scheduled-technicians?${dateParam ? `date=${encodeURIComponent(dateParam)}` : ''}${timeParam ? `&time=${encodeURIComponent(timeParam)}` : ''}` + (siteParam ? `&site=${encodeURIComponent(siteParam)}` : '');
+      const q = `/scheduled-technicians?${dateParam ? `date=${encodeURIComponent(dateParam)}` : ''}${timeParam ? `&time=${encodeURIComponent(timeParam)}&timeIsLocal=1` : ''}` + (siteParam ? `&site=${encodeURIComponent(siteParam)}` : '');
       const res = await apiClient(q);
       const apiRows = res?.data ?? res ?? [];
       const list = Array.isArray(apiRows) ? apiRows : [];
@@ -655,19 +655,43 @@ export default function DailyWorkOrdersPage(){
   }
 
   async function deployAll() {
-    if (!visible || visible.length === 0) return;
+    // Deploy all work orders matching current filters across all pages
     try{
       setDeployingAll(true);
+      let allRows: any[] = [];
+      let pageIdx = 1;
+      let totalPages = 1;
+
+      // Fetch pages until we've collected all work orders
+      do {
+        const qs: string[] = [];
+        if (search && search.trim()) qs.push(`q=${encodeURIComponent(search.trim())}`);
+        qs.push(`page=${pageIdx}`);
+        qs.push(`pageSize=${pageSize}`);
+        if (dateFilter && dateFilter.trim()) qs.push(`date=${encodeURIComponent(dateFilter.trim())}`);
+        if (jenisFilter && jenisFilter.toString().trim()) qs.push(`jenis=${encodeURIComponent(jenisFilter.toString().trim())}`);
+        if (siteFilter && siteFilter.toString().trim()) qs.push(`site=${encodeURIComponent(siteFilter.toString().trim())}`);
+        qs.push(`work_type=DAILY`);
+        const url = `/work-orders${qs.length ? ('?' + qs.join('&')) : ''}`;
+        const res = await apiClient(url);
+        const rowsData: any[] = res?.data ?? res ?? [];
+        allRows.push(...(Array.isArray(rowsData) ? rowsData : []));
+        const tot = res?.meta?.total ?? (Array.isArray(rowsData) ? rowsData.length : 0);
+        totalPages = Math.max(1, Math.ceil(Number(tot) / pageSize));
+        pageIdx++;
+      } while (pageIdx <= totalPages);
+
       let success = 0;
-      for (const w of visible) {
+      for (const w of allRows) {
         try{
-          // skip already deployed
           if ((w as any).status === 'DEPLOYED') continue;
           const r = await apiClient(`/work-orders/${encodeURIComponent(w.id)}/deploy`, { method: 'POST' });
           if (r) success++;
         }catch(_){ /* continue on error */ }
       }
-      await load(1);
+
+      // refresh current page
+      await load(page);
       setSnackMsg(`Deployed ${success} work orders`); setSnackSeverity('success'); setSnackOpen(true);
     }catch(e:any){ setSnackMsg(e?.message || String(e)); setSnackSeverity('error'); setSnackOpen(true); }
     finally{ setDeployingAll(false); }
@@ -949,7 +973,7 @@ export default function DailyWorkOrdersPage(){
       // call scheduled-technicians; backend will infer shift from time
       const siteParamRaw = (w as any).site || (w as any).raw?.site || null;
       const siteParam = extractSiteValueGlobal(siteParamRaw) || null;
-      const q = `/scheduled-technicians?date=${encodeURIComponent(parts.date)}${parts.time ? `&time=${encodeURIComponent(parts.time)}` : ''}` + (siteParam ? `&site=${encodeURIComponent(siteParam)}` : '');
+      const q = `/scheduled-technicians?date=${encodeURIComponent(parts.date)}${parts.time ? `&time=${encodeURIComponent(parts.time)}&timeIsLocal=1` : ''}` + (siteParam ? `&site=${encodeURIComponent(siteParam)}` : '');
       const res = await apiClient(q);
       const rows = res?.data ?? res ?? [];
       const list = Array.isArray(rows) ? rows : [];

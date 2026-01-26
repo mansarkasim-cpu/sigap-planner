@@ -317,6 +317,88 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           if (schedRows && schedRows.length > 0) {
             filteredTechs = schedRows;
             console.debug('[openTaskModal] using scheduled-technicians sample', (schedRows as any[]).slice(0, 5));
+            // enrich technicians by fetching shift assignments (contains groupName/groupMembers)
+            try {
+              const assignUrl = `/shift-assignments?date=${encodeURIComponent(assignDate)}` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
+              console.debug('[openTaskModal] fetching shift assignments for grouping', { assignUrl });
+              const assignsRes = await apiClient(assignUrl);
+              const assigns = Array.isArray(assignsRes) ? assignsRes : (assignsRes?.data ?? assignsRes ?? []);
+              console.debug('[openTaskModal] shift-assignments response', { count: Array.isArray(assigns) ? assigns.length : 0 });
+              if (Array.isArray(assigns) && assigns.length > 0) {
+                const userToGroup: Record<string,string> = {};
+                for (const a of assigns) {
+                  const gname = (a.groupName || a.group?.name || a.group_name || a.groupName || '').toString();
+                  const members = Array.isArray(a.groupMembers) ? a.groupMembers : (Array.isArray(a.group?.members) ? a.group.members : []);
+                  for (const m of members) {
+                    try { userToGroup[String(m)] = gname || userToGroup[String(m)] || ''; } catch (e) { /* ignore */ }
+                  }
+                }
+                for (const t of filteredTechs) {
+                  try {
+                    const gid = String(t.id || t.userId || t.user_id || '');
+                    if (gid && userToGroup[gid]) t.shift_group = userToGroup[gid];
+                  } catch (e) { /* ignore */ }
+                }
+                console.debug('[openTaskModal] merged group labels into technicians', { sample: filteredTechs.slice(0,5) });
+              } else {
+                // no explicit assignments for that date+site — try loading shift groups for the site and map members
+                try {
+                  const groupsUrl = `/shift-groups` + (woSite ? `?site=${encodeURIComponent(woSite)}` : '');
+                  console.debug('[openTaskModal] fetching shift-groups fallback for grouping', { groupsUrl });
+                  const groupsRes = await apiClient(groupsUrl);
+                  const groups = Array.isArray(groupsRes) ? groupsRes : (groupsRes?.data ?? groupsRes ?? []);
+                  console.debug('[openTaskModal] shift-groups response', { count: Array.isArray(groups) ? groups.length : 0 });
+                  if (Array.isArray(groups) && groups.length > 0) {
+                    const userToGroup2: Record<string,string> = {};
+                    for (const g of groups) {
+                      const gname = (g.name || g.groupName || g.group_name || '').toString();
+                      const members = Array.isArray(g.members) ? g.members : [];
+                      for (const m of members) {
+                        try { userToGroup2[String(m)] = gname || userToGroup2[String(m)] || ''; } catch (e) { /* ignore */ }
+                      }
+                    }
+                    for (const t of filteredTechs) {
+                      try {
+                        const gid = String(t.id || t.userId || t.user_id || '');
+                        if (gid && userToGroup2[gid]) t.shift_group = userToGroup2[gid];
+                      } catch (e) { /* ignore */ }
+                    }
+                    console.debug('[openTaskModal] merged group labels from shift-groups fallback', { sample: filteredTechs.slice(0,5) });
+                  } else {
+                    // if site-scoped groups empty, try fetching all groups (global) and map members
+                    try {
+                      console.debug('[openTaskModal] no site-scoped shift-groups found; fetching all shift-groups for fallback');
+                      const allGroupsRes = await apiClient('/shift-groups');
+                      const allGroups = Array.isArray(allGroupsRes) ? allGroupsRes : (allGroupsRes?.data ?? allGroupsRes ?? []);
+                      console.debug('[openTaskModal] all shift-groups response', { count: Array.isArray(allGroups) ? allGroups.length : 0 });
+                      if (Array.isArray(allGroups) && allGroups.length > 0) {
+                        const userToGroupAll: Record<string,string> = {};
+                        for (const g of allGroups) {
+                          const gname = (g.name || g.groupName || g.group_name || '').toString();
+                          const members = Array.isArray(g.members) ? g.members : [];
+                          for (const m of members) {
+                            try { userToGroupAll[String(m)] = gname || userToGroupAll[String(m)] || ''; } catch (e) { /* ignore */ }
+                          }
+                        }
+                        for (const t of filteredTechs) {
+                          try {
+                            const gid = String(t.id || t.userId || t.user_id || '');
+                            if (gid && userToGroupAll[gid]) t.shift_group = userToGroupAll[gid];
+                          } catch (e) { /* ignore */ }
+                        }
+                        console.debug('[openTaskModal] merged group labels from all shift-groups fallback', { sample: filteredTechs.slice(0,5) });
+                      }
+                    } catch (e) {
+                      console.debug('[openTaskModal] failed to fetch/merge all shift-groups fallback', e);
+                    }
+                  }
+                } catch (e) {
+                  console.debug('[openTaskModal] failed to fetch/merge shift-groups fallback', e);
+                }
+              }
+            } catch (e) {
+              console.debug('[openTaskModal] failed to fetch/merge shift-assignments', e);
+            }
           } else {
             // fallback: load site-filtered technicians
             // console.log('[openTaskModal] scheduled-technicians empty — falling back to /users?role=technician');
@@ -348,6 +430,29 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           const nb = String(b?.name || b?.nama || b?.nipp || b?.email || b?.id || '').toLowerCase();
           if (na < nb) return -1; if (na > nb) return 1; return 0;
         }) : [];
+        // debug: log derived group labels for each technician to help diagnose 'Ungrouped'
+        try {
+          const dbg: Record<string, number> = {};
+          for (const t of sorted) {
+            const g = getTechGroup(t) || 'Ungrouped';
+            dbg[g] = (dbg[g] || 0) + 1;
+          }
+          console.debug('[openTaskModal] technician groups summary', dbg, sorted.slice(0,5));
+          try {
+            const samples = sorted.slice(0,3).map(t => {
+              try { return JSON.parse(JSON.stringify(t)); } catch (e) { return t; }
+            });
+            try {
+              console.debug('[openTaskModal] technician samples (first 3) JSON', JSON.stringify(samples, null, 2));
+            } catch (e) {
+              console.debug('[openTaskModal] technician samples (first 3)', samples);
+            }
+          } catch (e) {
+            console.debug('[openTaskModal] failed to stringify technician samples', e);
+          }
+        } catch (e) {
+          console.debug('[openTaskModal] technician groups debug failed', e);
+        }
         setTechnicians(sorted);
       } catch (e) {
         console.warn('Failed to load technicians from shift assignments', e);
@@ -480,6 +585,62 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       case 'CLOSED': return '#334155';
       default: return '#6b7280';
     }
+  }
+
+  // derive a readable group/shift label from technician object (support many possible field names)
+  function getTechGroup(t: any) {
+    if (!t) return '';
+    const tryString = (v: any) => {
+      if (!v && v !== 0) return '';
+      if (typeof v === 'string') return v;
+      if (typeof v === 'number') return String(v);
+      if (typeof v === 'object') {
+        return String(v.name ?? v.label ?? v.nama ?? v.code ?? v.id ?? '') || '';
+      }
+      return '';
+    };
+
+    // prefer group/shift fields (do NOT fallback to site for grouping)
+    const candidates = [
+      'shift_group', 'group_shift', 'shiftGroup', 'group', 'shift',
+      'group_name', 'groupName', 'shift_name', 'shiftName', 'team', 'team_name', 'teamName',
+      'unit', 'unit_name', 'unitName', 'group_label', 'group_label_name', 'shift_label', 'shift_label_name'
+    ];
+
+    const prettify = (s: string) => {
+      const cleaned = String(s || '').toString().trim().replace(/\s+/g, ' ');
+      if (!cleaned) return '';
+      // convert to Title Case for display
+      return cleaned.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    };
+
+
+    for (const key of candidates) {
+      if (Object.prototype.hasOwnProperty.call(t, key)) {
+        const raw = tryString((t as any)[key]);
+        const val = prettify(raw);
+        if (val) return val;
+      }
+    }
+
+    // also try common nested shapes
+    const nestedPaths = [
+      ['group','name'], ['group','label'], ['group','group_name'],
+      ['shift','name'], ['shift','label'], ['shift','group'], ['shift','group_name'],
+      ['schedule','group'], ['schedule','group_name'], ['schedule','shift_group'], ['schedule','shift','group'],
+      ['assignment','shift_group'], ['assignment','group'], ['shift_assignment','group'],
+      ['team','name'], ['unit','name']
+    ];
+    for (const path of nestedPaths) {
+      let cur: any = t;
+      for (const p of path) { if (cur && Object.prototype.hasOwnProperty.call(cur, p)) cur = cur[p]; else { cur = null; break; } }
+      const raw = tryString(cur);
+      const v = prettify(raw);
+      if (v) return v;
+    }
+
+    // fallback to empty (so UI can show nothing or 'Ungrouped')
+    return '';
   }
 
   const STATUS_OPTIONS = [
@@ -983,9 +1144,12 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                         {shouldShowAssignColumn(taskModal.wo as any) ? (
                           <td style={{ padding: 12, verticalAlign: 'top' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
                               <Autocomplete
                                 multiple
                                 options={technicians || []}
+                                // group technicians by derived label (using getTechGroup helper)
+                                groupBy={(t: any) => getTechGroup(t) || 'Ungrouped'}
                                 getOptionLabel={(t: any) => (t.name || t.nipp || t.email || '').toString()}
                                 filterSelectedOptions
                                 value={(selectedAssignees[taskKey] || []).map((id: any) => technicians.find((t: any) => t.id === id)).filter(Boolean)}
@@ -993,28 +1157,44 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                 renderInput={(params) => <TextField {...params} placeholder="Cari teknisi (nama / email / id)" size="small" />}
                               />
 
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                                  {(technicians || []).slice(0, 200).map((t: any) => {
-                                    const isSel = (selectedAssignees[taskKey] || []).includes(t.id);
-                                    return (
-                                      <Chip
-                                        key={t.id}
-                                        label={(t.name || t.nipp || t.email || '').toString()}
-                                        onClick={() => {
-                                          setSelectedAssignees(prev => {
-                                            const cur = new Set(prev[taskKey] || []);
-                                            if (cur.has(t.id)) cur.delete(t.id); else cur.add(t.id);
-                                            return { ...prev, [taskKey]: Array.from(cur) };
-                                          });
-                                        }}
-                                        clickable
-                                        color={isSel ? 'primary' : 'default'}
-                                        variant={isSel ? 'filled' : 'outlined'}
-                                        size="small"
-                                        sx={{ marginRight: 0.5 }}
-                                      />
-                                    );
-                                  })}
+                                <div style={{ display: 'flex', gap: 8, flexDirection: 'column', marginTop: 8 }}>
+                                  {(() => {
+                                    const arr = (technicians || []).slice(0, 200);
+                                    const groups: Record<string, any[]> = {};
+                                    for (const t of arr) {
+                                      const g = getTechGroup(t) || 'Ungrouped';
+                                      groups[g] = groups[g] || [];
+                                      groups[g].push(t);
+                                    }
+                                    return Object.keys(groups).map((g) => (
+                                      <div key={g} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <div style={{ fontSize: 12, color: '#444', fontWeight: 700 }}>{g}</div>
+                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                          {groups[g].map((t: any) => {
+                                            const isSel = (selectedAssignees[taskKey] || []).includes(t.id);
+                                            return (
+                                              <Chip
+                                                key={t.id}
+                                                label={(t.name || t.nipp || t.email || '').toString()}
+                                                onClick={() => {
+                                                  setSelectedAssignees(prev => {
+                                                    const cur = new Set(prev[taskKey] || []);
+                                                    if (cur.has(t.id)) cur.delete(t.id); else cur.add(t.id);
+                                                    return { ...prev, [taskKey]: Array.from(cur) };
+                                                  });
+                                                }}
+                                                clickable
+                                                color={isSel ? 'primary' : 'default'}
+                                                variant={isSel ? 'filled' : 'outlined'}
+                                                size="small"
+                                                sx={{ marginRight: 0.5 }}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ));
+                                  })()}
                                 </div>
 
                                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start', marginTop: 8 }}>

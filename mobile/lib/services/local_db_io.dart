@@ -58,20 +58,24 @@ class LocalDB {
     // add the columns so inserts don't fail. This is idempotent.
     try {
       final cols = await _db!.rawQuery("PRAGMA table_info('queued_realisasi')");
-      final colNames = cols.map((r) => (r['name'] as String).toLowerCase()).toSet();
+      final colNames =
+          cols.map((r) => (r['name'] as String).toLowerCase()).toSet();
       if (!colNames.contains('taskid')) {
         try {
-          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN taskId TEXT');
+          await _db!
+              .execute('ALTER TABLE queued_realisasi ADD COLUMN taskId TEXT');
         } catch (_) {}
       }
       if (!colNames.contains('starttime')) {
         try {
-          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN startTime INTEGER');
+          await _db!.execute(
+              'ALTER TABLE queued_realisasi ADD COLUMN startTime INTEGER');
         } catch (_) {}
       }
       if (!colNames.contains('endtime')) {
         try {
-          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN endTime INTEGER');
+          await _db!.execute(
+              'ALTER TABLE queued_realisasi ADD COLUMN endTime INTEGER');
         } catch (_) {}
       }
     } catch (_) {}
@@ -86,45 +90,65 @@ class LocalDB {
 
   // Public helper to save photo bytes to a file and return the path.
   Future<String> savePhotoFile(Uint8List bytes, {String? filename}) async {
-    final fn = filename ?? 'realisasi_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final fn =
+        filename ?? 'realisasi_${DateTime.now().millisecondsSinceEpoch}.jpg';
     return await _savePhotoToFile(bytes, fn);
   }
 
-  Future<void> saveChecklist({required String assignmentId, required String taskId, required Uint8List photoBytes, bool checked = true}) async {
+  Future<void> saveChecklist(
+      {required String assignmentId,
+      required String taskId,
+      required Uint8List photoBytes,
+      bool checked = true}) async {
     await init();
     // Allow multiple photos per task by giving each saved row a unique id
-    final id = '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
-    final filename = 'realisasi_${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final id =
+        '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
+    final filename =
+        'realisasi_${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
     final path = await _savePhotoToFile(photoBytes, filename);
     final now = DateTime.now().millisecondsSinceEpoch;
-    await _db!.insert('checklist', {
-      'id': id,
-      'assignmentId': assignmentId,
-      'taskId': taskId,
-      'photoPath': path,
-      'checked': checked ? 1 : 0,
-      'createdAt': now
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db!.insert(
+        'checklist',
+        {
+          'id': id,
+          'assignmentId': assignmentId,
+          'taskId': taskId,
+          'photoPath': path,
+          'checked': checked ? 1 : 0,
+          'createdAt': now
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<void> removeChecklist({required String assignmentId, required String taskId}) async {
+  Future<void> removeChecklist(
+      {required String assignmentId, required String taskId}) async {
     await init();
     // Remove all checklist entries for this assignment+task (delete multiple photos)
     await _db!.transaction((txn) async {
-      final recs = await txn.query('checklist', where: 'assignmentId = ? AND taskId = ?', whereArgs: [assignmentId, taskId]);
+      final recs = await txn.query('checklist',
+          where: 'assignmentId = ? AND taskId = ?',
+          whereArgs: [assignmentId, taskId]);
       for (final r in recs) {
         final pth = r['photoPath'] as String?;
         if (pth != null && pth.isNotEmpty) {
-          try { final f = File(pth); if (await f.exists()) await f.delete(); } catch (_) {}
+          try {
+            final f = File(pth);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
         }
       }
-      await txn.delete('checklist', where: 'assignmentId = ? AND taskId = ?', whereArgs: [assignmentId, taskId]);
+      await txn.delete('checklist',
+          where: 'assignmentId = ? AND taskId = ?',
+          whereArgs: [assignmentId, taskId]);
     });
   }
 
-  Future<List<Map<String, dynamic>>> getChecklistForAssignment(String assignmentId) async {
+  Future<List<Map<String, dynamic>>> getChecklistForAssignment(
+      String assignmentId) async {
     await init();
-    final rows = await _db!.query('checklist', where: 'assignmentId = ?', whereArgs: [assignmentId]);
+    final rows = await _db!.query('checklist',
+        where: 'assignmentId = ?', whereArgs: [assignmentId]);
     // attach photo bytes to each row for convenience
     final List<Map<String, dynamic>> out = [];
     for (final r in rows) {
@@ -144,35 +168,54 @@ class LocalDB {
     return out;
   }
 
-  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath, int? startTime, int? endTime}) async {
+  Future<void> queueRealisasiUpload(
+      {required String id,
+      required String assignmentId,
+      String? taskId,
+      String? notes,
+      String? photoPath,
+      int? startTime,
+      int? endTime}) async {
     await init();
     final now = DateTime.now().millisecondsSinceEpoch;
-    await _db!.insert('queued_realisasi', {
-      'id': id,
-      'assignmentId': assignmentId,
-      'taskId': taskId,
-      'notes': notes,
-      'photoPath': photoPath,
-      'startTime': startTime,
-      'endTime': endTime,
-      'submitted': 0,
-      'createdAt': now
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db!.insert(
+        'queued_realisasi',
+        {
+          'id': id,
+          'assignmentId': assignmentId,
+          'taskId': taskId,
+          'notes': notes,
+          'photoPath': photoPath,
+          'startTime': startTime,
+          'endTime': endTime,
+          'submitted': 0,
+          'createdAt': now
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Map<String, dynamic>>> getQueuedRealisasi() async {
     await init();
-    return await _db!.query('queued_realisasi', where: 'submitted = ?', whereArgs: [0]);
+    return await _db!
+        .query('queued_realisasi', where: 'submitted = ?', whereArgs: [0]);
   }
 
-  Future<void> setAssignmentStart(String assignmentId, DateTime startedAt) async {
+  Future<void> setAssignmentStart(
+      String assignmentId, DateTime startedAt) async {
     await init();
-    await _db!.insert('assignment_meta', {'assignmentId': assignmentId, 'startedAt': startedAt.millisecondsSinceEpoch}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db!.insert(
+        'assignment_meta',
+        {
+          'assignmentId': assignmentId,
+          'startedAt': startedAt.millisecondsSinceEpoch
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<DateTime?> getAssignmentStart(String assignmentId) async {
     await init();
-    final rows = await _db!.query('assignment_meta', where: 'assignmentId = ?', whereArgs: [assignmentId]);
+    final rows = await _db!.query('assignment_meta',
+        where: 'assignmentId = ?', whereArgs: [assignmentId]);
     if (rows.isEmpty) return null;
     final v = rows.first['startedAt'] as int?;
     if (v == null) return null;
@@ -181,6 +224,7 @@ class LocalDB {
 
   Future<void> markRealisasiSubmitted(String id) async {
     await init();
-    await _db!.update('queued_realisasi', {'submitted': 1}, where: 'id = ?', whereArgs: [id]);
+    await _db!.update('queued_realisasi', {'submitted': 1},
+        where: 'id = ?', whereArgs: [id]);
   }
 }

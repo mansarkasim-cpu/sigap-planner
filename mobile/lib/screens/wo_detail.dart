@@ -26,7 +26,8 @@ class WODetailScreen extends StatefulWidget {
   State<WODetailScreen> createState() => _WODetailScreenState();
 }
 
-class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProviderStateMixin {
+class _WODetailScreenState extends State<WODetailScreen>
+    with SingleTickerProviderStateMixin {
   Map<String, dynamic>? woDetail;
   List<dynamic> tasks = [];
   Map<String, dynamic>? assignmentDetail;
@@ -52,9 +53,10 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
     // swipe hint animation: slight left slide to indicate swipe direction
     _swipeController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 900));
-    _swipeOffset = Tween<Offset>(begin: Offset.zero, end: const Offset(-0.06, 0))
-        .chain(CurveTween(curve: Curves.easeInOut))
-        .animate(_swipeController);
+    _swipeOffset =
+        Tween<Offset>(begin: Offset.zero, end: const Offset(-0.06, 0))
+            .chain(CurveTween(curve: Curves.easeInOut))
+            .animate(_swipeController);
     _swipeController.repeat(reverse: true);
   }
 
@@ -147,10 +149,14 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           if (tid.isNotEmpty) {
             setState(() {
               _selectedTaskId = tid;
-                assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
-                // prefer explicit start fields from assignment if available
-                try {
-                final s = (found['start_date'] ?? found['start_time'] ?? found['start'] ?? found['startTime']);
+              assignmentDetail =
+                  (found is Map) ? Map<String, dynamic>.from(found) : null;
+              // prefer explicit start fields from assignment if available
+              try {
+                final s = (found['start_date'] ??
+                    found['start_time'] ??
+                    found['start'] ??
+                    found['startTime']);
                 if (s != null) {
                   try {
                     final dt = DateTime.parse(s.toString());
@@ -161,11 +167,15 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                 }
               } catch (_) {}
             });
-              // also try LocalDB stored start time (swipe timestamp)
-              try {
-                final localStart = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
-                if (localStart != null) setState(() { assignmentStart = localStart.toUtc().toIso8601String(); });
-              } catch (_) {}
+            // also try LocalDB stored start time (swipe timestamp)
+            try {
+              final localStart = await LocalDB.instance
+                  .getAssignmentStart(widget.assignmentId);
+              if (localStart != null)
+                setState(() {
+                  assignmentStart = localStart.toUtc().toIso8601String();
+                });
+            } catch (_) {}
             return;
           }
         }
@@ -246,22 +256,29 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
           }
         }
         if (startTime == null) {
-          final dt = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+          final dt =
+              await LocalDB.instance.getAssignmentStart(widget.assignmentId);
           if (dt != null) startTime = dt.toUtc();
         }
       } catch (_) {
         startTime = null;
       }
       final endTime = DateTime.now().toUtc();
-      final qTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
+      final qTaskId = (_selectedTaskId ??
+              (assignmentDetail != null
+                  ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task'])
+                  : null))
+          ?.toString();
 
       // Persist submission locally first (photo file + queued record) to mitigate offline.
       await LocalDB.instance.init();
-      final qid = '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
+      final qid =
+          '${widget.assignmentId}_${DateTime.now().millisecondsSinceEpoch}';
       String? photoPath;
       if (bytes != null) {
         try {
-          photoPath = await LocalDB.instance.savePhotoFile(bytes, filename: 'queued_${qid}.jpg');
+          photoPath = await LocalDB.instance
+              .savePhotoFile(bytes, filename: 'queued_${qid}.jpg');
         } catch (_) {
           photoPath = null;
         }
@@ -269,7 +286,14 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       final int? startMs = startTime?.millisecondsSinceEpoch;
       final int endMs = endTime.millisecondsSinceEpoch;
       try {
-        await LocalDB.instance.queueRealisasiUpload(id: qid, assignmentId: widget.assignmentId, taskId: qTaskId, notes: _keterangan?.trim(), photoPath: photoPath, startTime: startMs, endTime: endMs);
+        await LocalDB.instance.queueRealisasiUpload(
+            id: qid,
+            assignmentId: widget.assignmentId,
+            taskId: qTaskId,
+            notes: _keterangan?.trim(),
+            photoPath: photoPath,
+            startTime: startMs,
+            endTime: endMs);
       } catch (qe) {
         debugPrint('Failed to queue local realisasi record: $qe');
       }
@@ -319,60 +343,95 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                     ? pendRes['data']
                     : pendRes);
             if (list is List) {
-                  for (final p in list) {
-                    try {
-                      // Try matching by assignment id (legacy)
-                      final aid = (p is Map)
-                          ? (p['assignmentId'] ?? p['assignment']?['id'] ?? p['assignmentId'] ?? p['assignment_id'])
-                          : null;
-                      if (aid != null && aid.toString() == widget.assignmentId) {
-                        pendingId = (p['id'] ?? p['_id'] ?? p['pendingId'] ?? p['pending_id'])?.toString() ?? pendingId;
-                        break;
-                      }
+              for (final p in list) {
+                try {
+                  // Try matching by assignment id (legacy)
+                  final aid = (p is Map)
+                      ? (p['assignmentId'] ??
+                          p['assignment']?['id'] ??
+                          p['assignmentId'] ??
+                          p['assignment_id'])
+                      : null;
+                  if (aid != null && aid.toString() == widget.assignmentId) {
+                    pendingId = (p['id'] ??
+                                p['_id'] ??
+                                p['pendingId'] ??
+                                p['pending_id'])
+                            ?.toString() ??
+                        pendingId;
+                    break;
+                  }
 
-                      // Try matching by task id (safer: pending records link to tasks)
-                      final ourTaskId = (_selectedTaskId ?? (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null))?.toString();
-                      if (p is Map) {
-                        final ptid = (p['taskId'] ?? p['task_id'] ?? p['task']?['id'] ?? p['task']?['task_id'])?.toString() ?? '';
-                        // build candidate ids from current assignment/task list (cover numeric id, uuid, external ids)
-                        final candidates = <String>{};
-                        if (ourTaskId != null && ourTaskId.isNotEmpty) candidates.add(ourTaskId);
+                  // Try matching by task id (safer: pending records link to tasks)
+                  final ourTaskId = (_selectedTaskId ??
+                          (assignmentDetail != null
+                              ? (assignmentDetail!['task_id'] ??
+                                  assignmentDetail!['task'])
+                              : null))
+                      ?.toString();
+                  if (p is Map) {
+                    final ptid = (p['taskId'] ??
+                                p['task_id'] ??
+                                p['task']?['id'] ??
+                                p['task']?['task_id'])
+                            ?.toString() ??
+                        '';
+                    // build candidate ids from current assignment/task list (cover numeric id, uuid, external ids)
+                    final candidates = <String>{};
+                    if (ourTaskId != null && ourTaskId.isNotEmpty)
+                      candidates.add(ourTaskId);
+                    try {
+                      final aid = (assignmentDetail != null
+                              ? (assignmentDetail!['task_id'] ??
+                                  assignmentDetail!['task'])
+                              : null)
+                          ?.toString();
+                      if (aid != null && aid.isNotEmpty) candidates.add(aid);
+                    } catch (_) {}
+                    try {
+                      for (final t in tasks) {
+                        if (t == null) continue;
                         try {
-                          final aid = (assignmentDetail != null ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task']) : null)?.toString();
-                          if (aid != null && aid.isNotEmpty) candidates.add(aid);
-                        } catch (_) {}
-                        try {
-                          for (final t in tasks) {
-                            if (t == null) continue;
+                          final List keys = [
+                            'id',
+                            'task_id',
+                            'taskId',
+                            'external_id',
+                            'externalId',
+                            'externalId'
+                          ];
+                          for (final k in keys) {
                             try {
-                              final List keys = ['id','task_id','taskId','external_id','externalId','externalId'];
-                              for (final k in keys) {
-                                try {
-                                  final v = t[k];
-                                  if (v != null) candidates.add(v.toString());
-                                } catch (_) {}
-                              }
+                              final v = t[k];
+                              if (v != null) candidates.add(v.toString());
                             } catch (_) {}
                           }
                         } catch (_) {}
-
-                        if (ptid.isNotEmpty) {
-                          if (candidates.contains(ptid)) {
-                            pendingId = (p['id'] ?? p['_id'] ?? p['pendingId'] ?? p['pending_id'])?.toString() ?? pendingId;
-                            break;
-                          }
-                        }
-                      }
-
-                      // if no assignment/task match, try deep search inside this pending item
-                      final deep = _deepFindPendingId(p);
-                      if (deep != null && deep.isNotEmpty) {
-                        pendingId = deep;
-                        break;
                       }
                     } catch (_) {}
+
+                    if (ptid.isNotEmpty) {
+                      if (candidates.contains(ptid)) {
+                        pendingId = (p['id'] ??
+                                    p['_id'] ??
+                                    p['pendingId'] ??
+                                    p['pending_id'])
+                                ?.toString() ??
+                            pendingId;
+                        break;
+                      }
+                    }
                   }
-                }
+
+                  // if no assignment/task match, try deep search inside this pending item
+                  final deep = _deepFindPendingId(p);
+                  if (deep != null && deep.isNotEmpty) {
+                    pendingId = deep;
+                    break;
+                  }
+                } catch (_) {}
+              }
+            }
           } catch (e) {
             debugPrint('failed to fetch pending list for fallback: $e');
           }
@@ -396,7 +455,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
         debugPrint('auto-approve block failed: $e');
       }
       // Per policy: do not modify WorkOrder start_date/end_date on submit.
-      debugPrint('Skipping work order date update on submit (handled by server/leader only)');
+      debugPrint(
+          'Skipping work order date update on submit (handled by server/leader only)');
       // on success navigate back to main screen
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
@@ -414,7 +474,9 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
         // submission failed after queue attempt — local record already created earlier,
         // inform the user that data is saved locally for later retry
         try {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim, data disimpan secara lokal dan akan dikirim ulang nanti.')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Gagal mengirim, data disimpan secara lokal dan akan dikirim ulang nanti.')));
         } catch (_) {}
       } catch (_) {}
     } finally {
@@ -488,7 +550,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       try {
         if (_techId != null && _techId!.isNotEmpty) {
           try {
-            final res = await api.get('/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
+            final res = await api.get(
+                '/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
             final list = (res is Map && res['assignments'] != null)
                 ? res['assignments']
                 : ((res is List) ? res : (res['data'] ?? res));
@@ -497,7 +560,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                   (e) => (e['id'] ?? '').toString() == widget.assignmentId,
                   orElse: () => <String, dynamic>{});
               setState(() {
-                assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
+                assignmentStatus =
+                    found.isNotEmpty ? (found['status'] ?? '') : null;
               });
               if (assignmentStatus != null) return;
             }
@@ -515,7 +579,8 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                 (e) => (e['id'] ?? '').toString() == widget.assignmentId,
                 orElse: () => <String, dynamic>{});
             setState(() {
-              assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
+              assignmentStatus =
+                  found.isNotEmpty ? (found['status'] ?? '') : null;
             });
             if (assignmentStatus != null) return;
           }
@@ -528,10 +593,10 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
               (e) => (e['id'] ?? '').toString() == widget.assignmentId,
               orElse: () => <String, dynamic>{});
           setState(() {
-            assignmentStatus = found.isNotEmpty ? (found['status'] ?? '') : null;
+            assignmentStatus =
+                found.isNotEmpty ? (found['status'] ?? '') : null;
           });
         }
-        
       } catch (e) {
         debugPrint('failed to load assignment status: $e');
       }
@@ -543,7 +608,7 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
   Future<void> _acceptAssignment() async {
     final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
     try {
-        await api.patch(
+      await api.patch(
           '/assignments/${Uri.encodeComponent(widget.assignmentId)}',
           {'status': 'PREPARATION'});
       ScaffoldMessenger.of(context)
@@ -599,14 +664,20 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       // record start time locally for this assignment
       try {
         await LocalDB.instance.init();
-        await LocalDB.instance.setAssignmentStart(widget.assignmentId, swipeTime);
-        setState(() { assignmentStart = swipeTime.toIso8601String(); });
+        await LocalDB.instance
+            .setAssignmentStart(widget.assignmentId, swipeTime);
+        setState(() {
+          assignmentStart = swipeTime.toIso8601String();
+        });
         if (kDebugMode) {
           try {
-            final check = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
-            debugPrint('WODetail debug: after setAssignmentStart local value=$check');
+            final check =
+                await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+            debugPrint(
+                'WODetail debug: after setAssignmentStart local value=$check');
           } catch (e) {
-            debugPrint('WODetail debug: after setAssignmentStart read failed: $e');
+            debugPrint(
+                'WODetail debug: after setAssignmentStart read failed: $e');
           }
         }
       } catch (e) {
@@ -731,13 +802,14 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
     try {
       final picker = ImagePicker();
       XFile? photo;
-      
+
       // Show dialog to choose between camera and gallery
       final imageSource = await showDialog<ImageSource>(
           context: context,
           builder: (c) => AlertDialog(
                 title: const Text('Pilih Sumber Foto'),
-                content: const Text('Ambil foto dari kamera atau pilih dari galeri?'),
+                content: const Text(
+                    'Ambil foto dari kamera atau pilih dari galeri?'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(c, null),
@@ -750,9 +822,9 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
                       child: const Text('Kamera')),
                 ],
               ));
-      
+
       if (imageSource == null) return;
-      
+
       // Pick image from the selected source
       photo = await picker.pickImage(
           source: imageSource, imageQuality: 75, maxWidth: 1600);
@@ -821,17 +893,30 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
       if (assignmentDetail == null) return false;
       final a = assignmentDetail!;
       // check common single-assignee fields
-      final candidate = (a['assignee'] ?? a['assigneeId'] ?? a['assignee_id'] ?? a['assigned_to'] ?? a['user'] ?? a['assignedTo']);
+      final candidate = (a['assignee'] ??
+          a['assigneeId'] ??
+          a['assignee_id'] ??
+          a['assigned_to'] ??
+          a['user'] ??
+          a['assignedTo']);
       if (candidate != null) {
         if (candidate is String) {
           if (candidate == cur) return true;
         } else if (candidate is Map) {
-          final id = (candidate['id'] ?? candidate['user_id'] ?? candidate['nipp'] ?? candidate['external_id'])?.toString() ?? '';
+          final id = (candidate['id'] ??
+                      candidate['user_id'] ??
+                      candidate['nipp'] ??
+                      candidate['external_id'])
+                  ?.toString() ??
+              '';
           if (id.isNotEmpty && id == cur) return true;
         }
       }
       // check multi-assignee lists
-      final listCand = (a['assignees'] ?? a['assigned'] ?? a['assigned_to_list'] ?? a['assignment_users']);
+      final listCand = (a['assignees'] ??
+          a['assigned'] ??
+          a['assigned_to_list'] ??
+          a['assignment_users']);
       if (listCand is List) {
         for (final it in listCand) {
           try {
@@ -839,7 +924,10 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
             if (it is String) {
               if (it == cur) return true;
             } else if (it is Map) {
-              final id = (it['id'] ?? it['user_id'] ?? it['nipp'] ?? it['external_id'])?.toString() ?? '';
+              final id =
+                  (it['id'] ?? it['user_id'] ?? it['nipp'] ?? it['external_id'])
+                          ?.toString() ??
+                      '';
               if (id.isNotEmpty && id == cur) return true;
             }
           } catch (_) {}
@@ -1052,771 +1140,842 @@ class _WODetailScreenState extends State<WODetailScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final bool _canStart = (assignmentStatus == 'PREPARATION' ||
-        assignmentStatus == 'DEPLOYED');
+    final bool _canStart =
+        (assignmentStatus == 'PREPARATION' || assignmentStatus == 'DEPLOYED');
     final bool _selectedHasRealisasi = (() {
       try {
         if (_selectedTaskId == null) return false;
         final sel = tasks.firstWhere((t) {
-          final tid = (t['id'] ?? t['_id'] ?? t['taskId'] ?? '')?.toString() ?? '';
+          final tid =
+              (t['id'] ?? t['_id'] ?? t['taskId'] ?? '')?.toString() ?? '';
           return tid == _selectedTaskId;
         }, orElse: () => null);
         if (sel == null) return false;
-        final rCount = int.tryParse((sel['realisasi_count'] ?? sel['realisasiCount'] ?? sel['realisasi']?.length ?? 0).toString()) ?? 0;
-        final pCount = int.tryParse((sel['pending_realisasi_count'] ?? sel['pendingRealisasiCount'] ?? sel['pending_realisasi']?.length ?? sel['pending']?.length ?? 0).toString()) ?? 0;
+        final rCount = int.tryParse((sel['realisasi_count'] ??
+                    sel['realisasiCount'] ??
+                    sel['realisasi']?.length ??
+                    0)
+                .toString()) ??
+            0;
+        final pCount = int.tryParse((sel['pending_realisasi_count'] ??
+                    sel['pendingRealisasiCount'] ??
+                    sel['pending_realisasi']?.length ??
+                    sel['pending']?.length ??
+                    0)
+                .toString()) ??
+            0;
         final hasFlag = (sel['has_realisasi'] == true) || (rCount > 0);
-        final pendingFlag = (sel['has_pending_realisasi'] == true) || (pCount > 0);
+        final pendingFlag =
+            (sel['has_pending_realisasi'] == true) || (pCount > 0);
         final st = (assignmentStatus ?? '').toString().toUpperCase();
-        final assignCompleted = (st.contains('COMP') || st.contains('VERIF') || st.contains('DONE') || st.contains('APPROV') || st.contains('OK') || st.contains('REALISASI'));
+        final assignCompleted = (st.contains('COMP') ||
+            st.contains('VERIF') ||
+            st.contains('DONE') ||
+            st.contains('APPROV') ||
+            st.contains('OK') ||
+            st.contains('REALISASI'));
         return hasFlag || pendingFlag || assignCompleted;
-      } catch (_) { return false; }
+      } catch (_) {
+        return false;
+      }
     })();
     return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          title: Text(woDetail?['doc_no']?.toString() ?? widget.woId),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
-        drawer: const AppDrawer(),
-        body: loading
-            ? const Center(child: CircularProgressIndicator())
-            : Stack(
-                children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Card(
-                      margin: EdgeInsets.zero,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                    child: Text(
-                                        'WO: ${woDetail?['doc_no'] ?? widget.woId}',
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold))),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(6)),
+        title: Text(woDetail?['doc_no']?.toString() ?? widget.woId),
+      ),
+      drawer: const AppDrawer(),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 110),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Card(
+                        margin: EdgeInsets.zero,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
                                       child: Text(
-                                          (woDetail?['status'] ??
-                                                  woDetail?['raw']?['status'] ??
-                                                  '')
-                                              .toString(),
+                                          'WO: ${woDetail?['doc_no'] ?? widget.woId}',
                                           style: const TextStyle(
-                                              fontWeight: FontWeight.w600)),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    if ((woDetail?['work_type'] ??
-                                            woDetail?['raw']?['work_type'] ??
-                                            woDetail?['raw']?['type_work']) !=
-                                        null)
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold))),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
-                                            color: Colors.purple.shade50,
+                                            color: Colors.blue.shade50,
                                             borderRadius:
                                                 BorderRadius.circular(6)),
                                         child: Text(
-                                            (woDetail?['work_type'] ??
+                                            (woDetail?['status'] ??
                                                     woDetail?['raw']
-                                                        ?['work_type'] ??
-                                                    woDetail?['raw']
-                                                        ?['type_work'])
+                                                        ?['status'] ??
+                                                    '')
                                                 .toString(),
                                             style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.purple)),
+                                                fontWeight: FontWeight.w600)),
                                       ),
-                                  ],
-                                )
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Asset: ${woDetail?['asset_name'] ?? '-'}',
-                                style: const TextStyle(fontSize: 14)),
-                            const SizedBox(height: 6),
-                            // debug: why is '(swiped)' not appearing?
-                            (() {
-                              final bool isInProgress = ((assignmentStatus != null && assignmentStatus!.toString().toUpperCase().contains("IN_PROGRESS")) || (((woDetail?['status'] ?? woDetail?['raw']?['status'])?.toString() ?? '').toUpperCase().contains("IN_PROGRESS")));
-                              if (kDebugMode) {
-                                debugPrint('WODetail debug: assignmentStart=${assignmentStart ?? '<null>'} assignmentStatus=${assignmentStatus ?? '<null>'} woStatus=${(woDetail?['status'] ?? woDetail?['raw']?['status']) ?? '<null>'} isInProgress=$isInProgress');
-                              }
-                              return Text(
-                                'Start: ${formatUtcDisplay((isInProgress && assignmentStart != null) ? assignmentStart : woDetail?['start_date'], extractTimezone(woDetail))}${(isInProgress && assignmentStart != null) ? ' (swiped)' : ''}',
-                                style: (isInProgress && assignmentStart != null) ? const TextStyle(color: Colors.green, fontWeight: FontWeight.w600) : const TextStyle(color: Colors.grey),
-                              );
-                            })(),
-                            const SizedBox(height: 6),
-                            Text(
-                                'Location: ${woDetail?['vendor_cabang'] ?? woDetail?['raw']?['vendor_cabang'] ?? woDetail?['raw']?['site'] ?? '-'}',
-                                style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 8),
-                            Text(woDetail?['description'] ?? '-',
-                                maxLines: 3, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 12),
-                            // determine if the selected task or assignment already has realisasi/completed
-                            // Tools
-                            Builder(builder: (_) {
-                              final tools = _extractTools();
-                              if (tools.isNotEmpty) {
+                                      const SizedBox(height: 6),
+                                      if ((woDetail?['work_type'] ??
+                                              woDetail?['raw']?['work_type'] ??
+                                              woDetail?['raw']?['type_work']) !=
+                                          null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                              color: Colors.purple.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(6)),
+                                          child: Text(
+                                              (woDetail?['work_type'] ??
+                                                      woDetail?['raw']
+                                                          ?['work_type'] ??
+                                                      woDetail?['raw']
+                                                          ?['type_work'])
+                                                  .toString(),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.purple)),
+                                        ),
+                                    ],
+                                  )
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text('Asset: ${woDetail?['asset_name'] ?? '-'}',
+                                  style: const TextStyle(fontSize: 14)),
+                              const SizedBox(height: 6),
+                              // debug: why is '(swiped)' not appearing?
+                              (() {
+                                final bool isInProgress = ((assignmentStatus !=
+                                            null &&
+                                        assignmentStatus!
+                                            .toString()
+                                            .toUpperCase()
+                                            .contains("IN_PROGRESS")) ||
+                                    (((woDetail?['status'] ??
+                                                    woDetail?['raw']?['status'])
+                                                ?.toString() ??
+                                            '')
+                                        .toUpperCase()
+                                        .contains("IN_PROGRESS")));
+                                if (kDebugMode) {
+                                  debugPrint(
+                                      'WODetail debug: assignmentStart=${assignmentStart ?? '<null>'} assignmentStatus=${assignmentStatus ?? '<null>'} woStatus=${(woDetail?['status'] ?? woDetail?['raw']?['status']) ?? '<null>'} isInProgress=$isInProgress');
+                                }
+                                return Text(
+                                  'Start: ${formatUtcDisplay((isInProgress && assignmentStart != null) ? assignmentStart : woDetail?['start_date'], extractTimezone(woDetail))}${(isInProgress && assignmentStart != null) ? ' (swiped)' : ''}',
+                                  style:
+                                      (isInProgress && assignmentStart != null)
+                                          ? const TextStyle(
+                                              color: Colors.green,
+                                              fontWeight: FontWeight.w600)
+                                          : const TextStyle(color: Colors.grey),
+                                );
+                              })(),
+                              const SizedBox(height: 6),
+                              Text(
+                                  'Location: ${woDetail?['vendor_cabang'] ?? woDetail?['raw']?['vendor_cabang'] ?? woDetail?['raw']?['site'] ?? '-'}',
+                                  style: const TextStyle(color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Text(woDetail?['description'] ?? '-',
+                                  maxLines: 3, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 12),
+                              // determine if the selected task or assignment already has realisasi/completed
+                              // Tools
+                              Builder(builder: (_) {
+                                final tools = _extractTools();
+                                if (tools.isNotEmpty) {
+                                  return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Required Tools',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                            spacing: 8,
+                                            runSpacing: 6,
+                                            children: tools.map((t) {
+                                              final name = t['name'] ?? 'tool';
+                                              final qty =
+                                                  (t['qty'] ?? '').toString();
+                                              final unit =
+                                                  (t['unit'] ?? '').toString();
+                                              final label = qty.isNotEmpty
+                                                  ? (unit.isNotEmpty
+                                                      ? '$name • $qty $unit'
+                                                      : '$name • $qty')
+                                                  : name.toString();
+                                              return Chip(label: Text(label));
+                                            }).toList()),
+                                        const SizedBox(height: 12),
+                                      ]);
+                                }
+                                return const SizedBox.shrink();
+                              }),
+
+                              // Services
+                              Builder(builder: (_) {
+                                final services = _extractServices();
+                                if (services.isNotEmpty) {
+                                  return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Services',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 8),
+                                        Column(
+                                            children: services.map((s) {
+                                          final name = s['name'] ?? 'service';
+                                          final note =
+                                              (s['note'] ?? '').toString();
+                                          return ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(name.toString(),
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                            subtitle: note.isNotEmpty
+                                                ? Text(note,
+                                                    style: const TextStyle(
+                                                        color: Colors.grey))
+                                                : null,
+                                          );
+                                        }).toList()),
+                                        const SizedBox(height: 12),
+                                      ]);
+                                }
+                                return const SizedBox.shrink();
+                              }),
+
+                              // Spareparts
+                              Builder(builder: (_) {
+                                final parts = _extractSpareparts();
+                                if (parts.isNotEmpty) {
+                                  return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Spareparts',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w700)),
+                                        const SizedBox(height: 8),
+                                        Column(
+                                            children: parts.map((p) {
+                                          final name = p['name'] ?? 'part';
+                                          final code =
+                                              (p['code'] ?? '').toString();
+                                          final qty =
+                                              (p['qty'] ?? '').toString();
+                                          final unit =
+                                              (p['unit'] ?? '').toString();
+                                          final warehouse =
+                                              (p['warehouse'] ?? '').toString();
+                                          final category =
+                                              (p['category'] ?? '').toString();
+                                          final type =
+                                              (p['type'] ?? '').toString();
+                                          final oa =
+                                              (p['oa_no'] ?? '').toString();
+                                          final subtitleParts = <String>[];
+                                          if (warehouse.isNotEmpty)
+                                            subtitleParts.add('WH: $warehouse');
+                                          if (category.isNotEmpty)
+                                            subtitleParts.add('Cat: $category');
+                                          if (type.isNotEmpty)
+                                            subtitleParts.add('Type: $type');
+                                          if (oa.isNotEmpty)
+                                            subtitleParts.add('OA: $oa');
+                                          final subtitle =
+                                              subtitleParts.join(' • ');
+                                          final trailing = qty.isNotEmpty
+                                              ? (unit.isNotEmpty
+                                                  ? '$qty $unit'
+                                                  : qty)
+                                              : '';
+                                          final nameStr = name.toString();
+                                          final displayName = nameStr.isNotEmpty
+                                              ? nameStr
+                                              : (code.isNotEmpty
+                                                  ? code
+                                                  : 'part');
+                                          final titleText = (code.isNotEmpty &&
+                                                  nameStr.isNotEmpty)
+                                              ? '$displayName ($code)'
+                                              : displayName;
+
+                                          // Build subtitle showing metadata and warehouse name
+                                          Widget? subtitleWidget;
+                                          final metaLines = <String>[];
+                                          if (subtitle.isNotEmpty)
+                                            metaLines.add(subtitle);
+                                          if (warehouse.isNotEmpty)
+                                            metaLines
+                                                .add('Warehouse: $warehouse');
+                                          if (metaLines.isNotEmpty) {
+                                            subtitleWidget = Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                for (final line in metaLines)
+                                                  Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              bottom: 2),
+                                                      child: Text(line,
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .grey))),
+                                              ],
+                                            );
+                                          } else {
+                                            subtitleWidget = null;
+                                          }
+
+                                          return ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(titleText,
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                            subtitle: subtitleWidget,
+                                            trailing: trailing.isNotEmpty
+                                                ? Text(trailing,
+                                                    style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w700))
+                                                : null,
+                                          );
+                                        }).toList()),
+                                        const SizedBox(height: 12),
+                                      ]);
+                                }
+                                return const SizedBox.shrink();
+                              }),
+
+                              // Attachments
+                              Builder(builder: (_) {
+                                final atts = _extractAttachments();
+                                if (atts.isEmpty)
+                                  return const SizedBox.shrink();
                                 return Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Required Tools',
+                                      const Text('Attachments',
                                           style: TextStyle(
                                               fontWeight: FontWeight.w700)),
                                       const SizedBox(height: 8),
                                       Wrap(
                                           spacing: 8,
                                           runSpacing: 6,
-                                          children: tools.map((t) {
-                                            final name = t['name'] ?? 'tool';
-                                            final qty =
-                                                (t['qty'] ?? '').toString();
-                                            final unit =
-                                                (t['unit'] ?? '').toString();
-                                            final label = qty.isNotEmpty
-                                                ? (unit.isNotEmpty
-                                                    ? '$name • $qty $unit'
-                                                    : '$name • $qty')
-                                                : name.toString();
-                                            return Chip(label: Text(label));
+                                          children: atts.map((a) {
+                                            final name =
+                                                a['name'] ?? a['url'] ?? 'file';
+                                            final url = a['url'] ?? '';
+                                            return ActionChip(
+                                              label: Text(name.toString()),
+                                              onPressed: () async {
+                                                if (url.isNotEmpty) {
+                                                  final Uri uri =
+                                                      Uri.parse(url);
+                                                  // try to launch; if fails, show dialog with copy option
+                                                  try {
+                                                    if (await canLaunchUrl(
+                                                        uri)) {
+                                                      await launchUrl(uri,
+                                                          mode: LaunchMode
+                                                              .externalApplication);
+                                                      return;
+                                                    }
+                                                  } catch (_) {}
+                                                  // fallback dialog with copy
+                                                  showDialog(
+                                                      context: context,
+                                                      builder:
+                                                          (c) => AlertDialog(
+                                                                title: Text(name
+                                                                    .toString()),
+                                                                content:
+                                                                    Text(url),
+                                                                actions: [
+                                                                  TextButton(
+                                                                      onPressed:
+                                                                          () {
+                                                                        Navigator
+                                                                            .pop(c);
+                                                                      },
+                                                                      child: const Text(
+                                                                          'Close')),
+                                                                  TextButton(
+                                                                      onPressed:
+                                                                          () async {
+                                                                        await Clipboard.setData(ClipboardData(
+                                                                            text:
+                                                                                url));
+                                                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                                                            content:
+                                                                                Text('URL copied')));
+                                                                        Navigator
+                                                                            .pop(c);
+                                                                      },
+                                                                      child: const Text(
+                                                                          'Copy URL')),
+                                                                ],
+                                                              ));
+                                                } else {
+                                                  showDialog(
+                                                      context: context,
+                                                      builder: (c) =>
+                                                          AlertDialog(
+                                                            title: Text(name
+                                                                .toString()),
+                                                            content: const Text(
+                                                                'No URL available'),
+                                                            actions: [
+                                                              TextButton(
+                                                                  onPressed:
+                                                                      () {
+                                                                    Navigator
+                                                                        .pop(c);
+                                                                  },
+                                                                  child: const Text(
+                                                                      'Close'))
+                                                            ],
+                                                          ));
+                                                }
+                                              },
+                                            );
                                           }).toList()),
                                       const SizedBox(height: 12),
                                     ]);
-                              }
-                              return const SizedBox.shrink();
-                            }),
+                              }),
 
-                            // Services
-                            Builder(builder: (_) {
-                              final services = _extractServices();
-                              if (services.isNotEmpty) {
-                                return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Services',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700)),
-                                      const SizedBox(height: 8),
-                                      Column(
-                                          children: services.map((s) {
-                                        final name = s['name'] ?? 'service';
-                                        final note =
-                                            (s['note'] ?? '').toString();
-                                        return ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(name.toString(),
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w600)),
-                                          subtitle: note.isNotEmpty
-                                              ? Text(note,
-                                                  style: const TextStyle(
-                                                      color: Colors.grey))
-                                              : null,
-                                        );
-                                      }).toList()),
-                                      const SizedBox(height: 12),
-                                    ]);
-                              }
-                              return const SizedBox.shrink();
-                            }),
-
-                            // Spareparts
-                            Builder(builder: (_) {
-                              final parts = _extractSpareparts();
-                              if (parts.isNotEmpty) {
-                                return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Spareparts',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700)),
-                                      const SizedBox(height: 8),
-                                      Column(
-                                          children: parts.map((p) {
-                                        final name = p['name'] ?? 'part';
-                                        final code =
-                                            (p['code'] ?? '').toString();
-                                        final qty = (p['qty'] ?? '').toString();
-                                        final unit =
-                                            (p['unit'] ?? '').toString();
-                                        final warehouse =
-                                            (p['warehouse'] ?? '').toString();
-                                        final category =
-                                            (p['category'] ?? '').toString();
-                                        final type =
-                                            (p['type'] ?? '').toString();
-                                        final oa =
-                                            (p['oa_no'] ?? '').toString();
-                                        final subtitleParts = <String>[];
-                                        if (warehouse.isNotEmpty)
-                                          subtitleParts.add('WH: $warehouse');
-                                        if (category.isNotEmpty)
-                                          subtitleParts.add('Cat: $category');
-                                        if (type.isNotEmpty)
-                                          subtitleParts.add('Type: $type');
-                                        if (oa.isNotEmpty)
-                                          subtitleParts.add('OA: $oa');
-                                        final subtitle =
-                                            subtitleParts.join(' • ');
-                                        final trailing = qty.isNotEmpty
-                                            ? (unit.isNotEmpty
-                                                ? '$qty $unit'
-                                                : qty)
-                                            : '';
-                                        final nameStr = name.toString();
-                                        final displayName = nameStr.isNotEmpty
-                                            ? nameStr
-                                            : (code.isNotEmpty ? code : 'part');
-                                        final titleText = (code.isNotEmpty &&
-                                                nameStr.isNotEmpty)
-                                            ? '$displayName ($code)'
-                                            : displayName;
-
-                                        // Build subtitle showing metadata and warehouse name
-                                        Widget? subtitleWidget;
-                                        final metaLines = <String>[];
-                                        if (subtitle.isNotEmpty)
-                                          metaLines.add(subtitle);
-                                        if (warehouse.isNotEmpty)
-                                          metaLines
-                                              .add('Warehouse: $warehouse');
-                                        if (metaLines.isNotEmpty) {
-                                          subtitleWidget = Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              for (final line in metaLines)
-                                                Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            bottom: 2),
-                                                    child: Text(line,
-                                                        style: const TextStyle(
-                                                            color:
-                                                                Colors.grey))),
-                                            ],
-                                          );
-                                        } else {
-                                          subtitleWidget = null;
-                                        }
-
-                                        return ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(titleText,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w600)),
-                                          subtitle: subtitleWidget,
-                                          trailing: trailing.isNotEmpty
-                                              ? Text(trailing,
-                                                  style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w700))
-                                              : null,
-                                        );
-                                      }).toList()),
-                                      const SizedBox(height: 12),
-                                    ]);
-                              }
-                              return const SizedBox.shrink();
-                            }),
-
-                            // Attachments
-                            Builder(builder: (_) {
-                              final atts = _extractAttachments();
-                              if (atts.isEmpty) return const SizedBox.shrink();
-                              return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Attachments',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                        spacing: 8,
-                                        runSpacing: 6,
-                                        children: atts.map((a) {
-                                          final name =
-                                              a['name'] ?? a['url'] ?? 'file';
-                                          final url = a['url'] ?? '';
-                                          return ActionChip(
-                                            label: Text(name.toString()),
-                                            onPressed: () async {
-                                              if (url.isNotEmpty) {
-                                                final Uri uri = Uri.parse(url);
-                                                // try to launch; if fails, show dialog with copy option
-                                                try {
-                                                  if (await canLaunchUrl(uri)) {
-                                                    await launchUrl(uri,
-                                                        mode: LaunchMode
-                                                            .externalApplication);
-                                                    return;
-                                                  }
-                                                } catch (_) {}
-                                                // fallback dialog with copy
-                                                showDialog(
-                                                    context: context,
-                                                    builder: (c) => AlertDialog(
-                                                          title: Text(
-                                                              name.toString()),
-                                                          content: Text(url),
-                                                          actions: [
-                                                            TextButton(
-                                                                onPressed: () {
-                                                                  Navigator.pop(
-                                                                      c);
-                                                                },
-                                                                child: const Text(
-                                                                    'Close')),
-                                                            TextButton(
-                                                                onPressed:
-                                                                    () async {
-                                                                  await Clipboard.setData(
-                                                                      ClipboardData(
-                                                                          text:
-                                                                              url));
-                                                                  ScaffoldMessenger.of(
-                                                                          context)
-                                                                      .showSnackBar(const SnackBar(
-                                                                          content:
-                                                                              Text('URL copied')));
-                                                                  Navigator.pop(
-                                                                      c);
-                                                                },
-                                                                child: const Text(
-                                                                    'Copy URL')),
-                                                          ],
-                                                        ));
-                                              } else {
-                                                showDialog(
-                                                    context: context,
-                                                    builder: (c) => AlertDialog(
-                                                          title: Text(
-                                                              name.toString()),
-                                                          content: const Text(
-                                                              'No URL available'),
-                                                          actions: [
-                                                            TextButton(
-                                                                onPressed: () {
-                                                                  Navigator.pop(
-                                                                      c);
-                                                                },
-                                                                child:
-                                                                    const Text(
-                                                                        'Close'))
-                                                          ],
-                                                        ));
-                                              }
-                                            },
-                                          );
-                                        }).toList()),
-                                    const SizedBox(height: 12),
-                                  ]);
-                            }),
-
-                            // Note: Accept button removed. Swipe-to-start is available when
-                            // assignmentStatus is DEPLOYED or PREPARATION.
-                          ],
+                              // Note: Accept button removed. Swipe-to-start is available when
+                              // assignmentStatus is DEPLOYED or PREPARATION.
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Tasks',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Builder(builder: (_) {
-                      if (tasks.isEmpty)
-                        return const Text('No tasks available',
-                            style: TextStyle(color: Colors.grey));
-                      // filter tasks to only those selected from Inbox when available
-                      final filteredTasks = (tasks.where((t) {
-                        if (_selectedTaskId == null) return true;
-                        final id =
-                            (t['id'] ?? t['external_id'] ?? '')?.toString() ??
-                                '';
-                        return id == _selectedTaskId;
-                      })).toList();
+                      const SizedBox(height: 12),
+                      const Text('Tasks',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      Builder(builder: (_) {
+                        if (tasks.isEmpty)
+                          return const Text('No tasks available',
+                              style: TextStyle(color: Colors.grey));
+                        // filter tasks to only those selected from Inbox when available
+                        final filteredTasks = (tasks.where((t) {
+                          if (_selectedTaskId == null) return true;
+                          final id =
+                              (t['id'] ?? t['external_id'] ?? '')?.toString() ??
+                                  '';
+                          return id == _selectedTaskId;
+                        })).toList();
 
-                      // compute weighted progress
-                      double total = 0.0;
-                      double checked = 0.0;
-                      for (final t in filteredTasks) {
-                        final id =
-                            (t['id'] ?? t['external_id'] ?? '').toString();
-                        final d = _taskDuration(t);
-                        total += d > 0 ? d : 1.0;
-                        if (checkedTasks.contains(id))
-                          checked += (d > 0 ? d : 1.0);
-                      }
-                      final progress = total > 0 ? (checked / total) : 0.0;
+                        // compute weighted progress
+                        double total = 0.0;
+                        double checked = 0.0;
+                        for (final t in filteredTasks) {
+                          final id =
+                              (t['id'] ?? t['external_id'] ?? '').toString();
+                          final d = _taskDuration(t);
+                          total += d > 0 ? d : 1.0;
+                          if (checkedTasks.contains(id))
+                            checked += (d > 0 ? d : 1.0);
+                        }
+                        final progress = total > 0 ? (checked / total) : 0.0;
 
-                      return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 8.0),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    LinearProgressIndicator(
-                                        value: progress, minHeight: 8),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                        '${(progress * 100).toStringAsFixed(0)}% complete',
-                                        style: const TextStyle(
-                                            fontSize: 12, color: Colors.grey)),
-                                  ]),
-                            ),
-
-                            ...filteredTasks.map((t) {
-                              final taskId = (t['id'] ?? t['external_id'] ?? '')
-                                  .toString();
-                              final taskName =
-                                  t['name'] ?? t['task_name'] ?? '-';
-                              final dur = _taskDuration(t).toStringAsFixed(0);
-                              final assigns = (t['assignments'] is List)
-                                  ? List.from(t['assignments'])
-                                  : <dynamic>[];
-                              final checkedState =
-                                  checkedTasks.contains(taskId);
-
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 6),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Checkbox(
-                                          value: checkedState,
-                                          onChanged: (() {
-                                            // determine if this task is assigned to current technician
-                                            try {
-                                              final assigns = (t['assignments']
-                                                      is List)
-                                                  ? List.from(t['assignments'])
-                                                  : <dynamic>[];
-                                              bool assignedToCurrent = false;
-                                              if (assigns.isEmpty)
-                                                assignedToCurrent = true;
-                                              if (!assignedToCurrent &&
-                                                  _techId != null &&
-                                                  _techId!.isNotEmpty) {
-                                                for (final as in assigns) {
-                                                  try {
-                                                    // try common id fields
-                                                    final candidates =
-                                                        <String>[];
-                                                    if (as is Map) {
-                                                      final u = as['user'] ??
-                                                          as['assigned_to'] ??
-                                                          as['assignee'] ??
-                                                          as;
-                                                      if (u is Map) {
-                                                        for (final k in [
-                                                          'id',
-                                                          'user_id',
-                                                          'userId',
-                                                          'nipp',
-                                                          'external_id',
-                                                          'username'
-                                                        ]) {
-                                                          try {
-                                                            final v = u[k];
-                                                            if (v != null)
-                                                              candidates.add(
-                                                                  v.toString());
-                                                          } catch (_) {}
-                                                        }
-                                                      } else {
-                                                        for (final k in [
-                                                          'assignee',
-                                                          'assignee_id',
-                                                          'assigneeId',
-                                                          'assigned_to',
-                                                          'user_id'
-                                                        ]) {
-                                                          try {
-                                                            final v = as[k];
-                                                            if (v != null)
-                                                              candidates.add(
-                                                                  v.toString());
-                                                          } catch (_) {}
-                                                        }
-                                                      }
-                                                    }
-                                                    if (candidates.any(
-                                                        (c) => c == _techId)) {
-                                                      assignedToCurrent = true;
-                                                      break;
-                                                    }
-                                                  } catch (_) {}
-                                                }
-                                              }
-                                              final enabled =
-                                                  _isWorkInProgress() &&
-                                                      (assigns.isEmpty ||
-                                                          assignedToCurrent);
-                                              return enabled
-                                                  ? (_) {
-                                                      _onTaskCheckboxPressed(
-                                                          taskId);
-                                                    }
-                                                  : null;
-                                            } catch (_) {
-                                              return _isWorkInProgress()
-                                                  ? (_) {
-                                                      _onTaskCheckboxPressed(
-                                                          taskId);
-                                                    }
-                                                  : null;
-                                            }
-                                          })(),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        // thumbnail (if present)
-                                        if (taskPhotoBytes.containsKey(taskId))
-                                          GestureDetector(
-                                            onTap: () => _showImage(
-                                                bytes: taskPhotoBytes[taskId]),
-                                            child: Container(
-                                              width: 80,
-                                              margin: const EdgeInsets.only(
-                                                  right: 8),
-                                              decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  color: Colors.grey.shade200),
-                                              child: ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  child: Image.memory(
-                                                      taskPhotoBytes[taskId]!,
-                                                      fit: BoxFit.cover)),
-                                            ),
-                                          )
-                                        else
-                                          const SizedBox(width: 0),
-
-                                        Expanded(
-                                            child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                              Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Expanded(
-                                                        child: Text('$taskName',
-                                                            style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700))),
-                                                    Builder(builder: (_) {
-                                                      final statusText =
-                                                          _deriveTaskStatus(
-                                                              t, taskId);
-                                                      return Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 4),
-                                                        decoration: BoxDecoration(
-                                                            color: _statusColor(
-                                                                statusText),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        6)),
-                                                        child: Text(statusText,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        12)),
-                                                      );
-                                                    })
-                                                  ]),
-                                              const SizedBox(height: 6),
-                                              Text('Duration: $dur min',
-                                                  style: const TextStyle(
-                                                      color: Colors.grey,
-                                                      fontSize: 13)),
-                                              const SizedBox(height: 8),
-                                              if (assigns.isNotEmpty)
-                                                Wrap(
-                                                    spacing: 8,
-                                                    runSpacing: 6,
-                                                    children: assigns
-                                                        .map<Widget>((as) {
-                                                      final name = as['user']
-                                                              ?['name'] ??
-                                                          as['user']?['nipp'] ??
-                                                          as['assigned_to'] ??
-                                                          as['user_id'] ??
-                                                          'Unknown';
-                                                      return Chip(
-                                                          label: Text(
-                                                              name.toString()));
-                                                    }).toList())
-                                              else
-                                                const Text(
-                                                    'No assigned technicians',
-                                                    style: TextStyle(
-                                                        color: Colors.grey))
-                                            ]))
-                                      ]),
-                                ),
-                              );
-                            }).toList(),
-
-                            const SizedBox(height: 12),
-                            // Keterangan input for Submit Realisasi (optional)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6.0),
-                              child: TextField(
-                                decoration: const InputDecoration(
-                                  labelText: 'Keterangan (opsional)',
-                                  hintText: 'Alasan atau catatan perubahan',
-                                ),
-                                maxLines: 3,
-                                onChanged: (v) => setState(() { _keterangan = v; }),
-                              ),
-                            ),
-                            // Submit Realisasi button (enabled when progress reaches 100%)
-                            if (!_selectedHasRealisasi)
+                        return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                child: ElevatedButton(
-                                  onPressed: (progress >= 0.999)
-                                      ? () async {
-                                          final confirm = await showDialog<bool>(
-                                            context: context,
-                                            builder: (c) => AlertDialog(
-                                              title: const Text('Konfirmasi Submit'),
-                                              content: const Text('Anda yakin ingin submit realisasi? Data akan dikirim untuk approval.'),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(c, false),
-                                                  child: const Text('Batal'),
-                                                ),
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(c, true),
-                                                  child: const Text('Submit'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                          if (confirm == true) {
-                                            await _submitRealisasi();
-                                          }
-                                        }
-                                      : null,
-                                  child: const Text('Submit Realisasi'),
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      LinearProgressIndicator(
+                                          value: progress, minHeight: 8),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                          '${(progress * 100).toStringAsFixed(0)}% complete',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey)),
+                                    ]),
+                              ),
+
+                              ...filteredTasks.map((t) {
+                                final taskId =
+                                    (t['id'] ?? t['external_id'] ?? '')
+                                        .toString();
+                                final taskName =
+                                    t['name'] ?? t['task_name'] ?? '-';
+                                final dur = _taskDuration(t).toStringAsFixed(0);
+                                final assigns = (t['assignments'] is List)
+                                    ? List.from(t['assignments'])
+                                    : <dynamic>[];
+                                final checkedState =
+                                    checkedTasks.contains(taskId);
+
+                                return Card(
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 6),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Checkbox(
+                                            value: checkedState,
+                                            onChanged: (() {
+                                              // determine if this task is assigned to current technician
+                                              try {
+                                                final assigns =
+                                                    (t['assignments'] is List)
+                                                        ? List.from(
+                                                            t['assignments'])
+                                                        : <dynamic>[];
+                                                bool assignedToCurrent = false;
+                                                if (assigns.isEmpty)
+                                                  assignedToCurrent = true;
+                                                if (!assignedToCurrent &&
+                                                    _techId != null &&
+                                                    _techId!.isNotEmpty) {
+                                                  for (final as in assigns) {
+                                                    try {
+                                                      // try common id fields
+                                                      final candidates =
+                                                          <String>[];
+                                                      if (as is Map) {
+                                                        final u = as['user'] ??
+                                                            as['assigned_to'] ??
+                                                            as['assignee'] ??
+                                                            as;
+                                                        if (u is Map) {
+                                                          for (final k in [
+                                                            'id',
+                                                            'user_id',
+                                                            'userId',
+                                                            'nipp',
+                                                            'external_id',
+                                                            'username'
+                                                          ]) {
+                                                            try {
+                                                              final v = u[k];
+                                                              if (v != null)
+                                                                candidates.add(v
+                                                                    .toString());
+                                                            } catch (_) {}
+                                                          }
+                                                        } else {
+                                                          for (final k in [
+                                                            'assignee',
+                                                            'assignee_id',
+                                                            'assigneeId',
+                                                            'assigned_to',
+                                                            'user_id'
+                                                          ]) {
+                                                            try {
+                                                              final v = as[k];
+                                                              if (v != null)
+                                                                candidates.add(v
+                                                                    .toString());
+                                                            } catch (_) {}
+                                                          }
+                                                        }
+                                                      }
+                                                      if (candidates.any((c) =>
+                                                          c == _techId)) {
+                                                        assignedToCurrent =
+                                                            true;
+                                                        break;
+                                                      }
+                                                    } catch (_) {}
+                                                  }
+                                                }
+                                                final enabled =
+                                                    _isWorkInProgress() &&
+                                                        (assigns.isEmpty ||
+                                                            assignedToCurrent);
+                                                return enabled
+                                                    ? (_) {
+                                                        _onTaskCheckboxPressed(
+                                                            taskId);
+                                                      }
+                                                    : null;
+                                              } catch (_) {
+                                                return _isWorkInProgress()
+                                                    ? (_) {
+                                                        _onTaskCheckboxPressed(
+                                                            taskId);
+                                                      }
+                                                    : null;
+                                              }
+                                            })(),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // thumbnail (if present)
+                                          if (taskPhotoBytes
+                                              .containsKey(taskId))
+                                            GestureDetector(
+                                              onTap: () => _showImage(
+                                                  bytes:
+                                                      taskPhotoBytes[taskId]),
+                                              child: Container(
+                                                width: 80,
+                                                margin: const EdgeInsets.only(
+                                                    right: 8),
+                                                decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                    color:
+                                                        Colors.grey.shade200),
+                                                child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                    child: Image.memory(
+                                                        taskPhotoBytes[taskId]!,
+                                                        fit: BoxFit.cover)),
+                                              ),
+                                            )
+                                          else
+                                            const SizedBox(width: 0),
+
+                                          Expanded(
+                                              child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                          child: Text(
+                                                              '$taskName',
+                                                              style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700))),
+                                                      Builder(builder: (_) {
+                                                        final statusText =
+                                                            _deriveTaskStatus(
+                                                                t, taskId);
+                                                        return Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 4),
+                                                          decoration: BoxDecoration(
+                                                              color: _statusColor(
+                                                                  statusText),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          6)),
+                                                          child: Text(
+                                                              statusText,
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          12)),
+                                                        );
+                                                      })
+                                                    ]),
+                                                const SizedBox(height: 6),
+                                                Text('Duration: $dur min',
+                                                    style: const TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 13)),
+                                                const SizedBox(height: 8),
+                                                if (assigns.isNotEmpty)
+                                                  Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 6,
+                                                      children: assigns
+                                                          .map<Widget>((as) {
+                                                        final name = as['user']
+                                                                ?['name'] ??
+                                                            as['user']
+                                                                ?['nipp'] ??
+                                                            as['assigned_to'] ??
+                                                            as['user_id'] ??
+                                                            'Unknown';
+                                                        return Chip(
+                                                            label: Text(name
+                                                                .toString()));
+                                                      }).toList())
+                                                else
+                                                  const Text(
+                                                      'No assigned technicians',
+                                                      style: TextStyle(
+                                                          color: Colors.grey))
+                                              ]))
+                                        ]),
+                                  ),
+                                );
+                              }).toList(),
+
+                              const SizedBox(height: 12),
+                              // Keterangan input for Submit Realisasi (optional)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6.0),
+                                child: TextField(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Keterangan (opsional)',
+                                    hintText: 'Alasan atau catatan perubahan',
+                                  ),
+                                  maxLines: 3,
+                                  onChanged: (v) => setState(() {
+                                    _keterangan = v;
+                                  }),
                                 ),
                               ),
-                          ]);
-                    }),
-                    const SizedBox(height: 8),
-                    // removed inline swipe control (floating one is positioned)
-                  ],
+                              // Submit Realisasi button (enabled when progress reaches 100%)
+                              if (!_selectedHasRealisasi)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  child: ElevatedButton(
+                                    onPressed: (progress >= 0.999)
+                                        ? () async {
+                                            final confirm =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (c) => AlertDialog(
+                                                title: const Text(
+                                                    'Konfirmasi Submit'),
+                                                content: const Text(
+                                                    'Anda yakin ingin submit realisasi? Data akan dikirim untuk approval.'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(c, false),
+                                                    child: const Text('Batal'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(c, true),
+                                                    child: const Text('Submit'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirm == true) {
+                                              await _submitRealisasi();
+                                            }
+                                          }
+                                        : null,
+                                    child: const Text('Submit Realisasi'),
+                                  ),
+                                ),
+                            ]);
+                      }),
+                      const SizedBox(height: 8),
+                      // removed inline swipe control (floating one is positioned)
+                    ],
+                  ),
                 ),
-              ),
-                  // Floating swipe control (only visible when available)
-                  if (_canStart && !_selectedHasRealisasi)
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      child: Material(
-                        elevation: 8,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Dismissible(
-                          key: Key('start-${widget.assignmentId}'),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                              decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(8)),
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              child: const Icon(Icons.play_arrow,
-                                  color: Colors.white)),
-                          confirmDismiss: (dir) async {
-                            final ok = await showDialog<bool>(
-                                context: context,
-                                builder: (c) => AlertDialog(
-                                        title: const Text('Start work?'),
-                                        content: const Text(
-                                            'Swipe to confirm starting work'),
-                                        actions: [
-                                          TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(c, false),
-                                              child: const Text('Cancel')),
-                                          TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(c, true),
-                                              child: const Text('Start'))
-                                        ]));
-                            return ok == true;
-                          },
-                          onDismissed: (dir) async {
-                            await _startWork();
-                          },
-                          child: SlideTransition(
-                            position: _swipeOffset,
-                            child: Container(
-                              height: 72,
-                              alignment: Alignment.center,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade600,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text('Swipe left to START',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16)),
+                // Floating swipe control (only visible when available)
+                if (_canStart && !_selectedHasRealisasi)
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Dismissible(
+                        key: Key('start-${widget.assignmentId}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                            decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(8)),
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            child: const Icon(Icons.play_arrow,
+                                color: Colors.white)),
+                        confirmDismiss: (dir) async {
+                          final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                      title: const Text('Start work?'),
+                                      content: const Text(
+                                          'Swipe to confirm starting work'),
+                                      actions: [
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(c, false),
+                                            child: const Text('Cancel')),
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(c, true),
+                                            child: const Text('Start'))
+                                      ]));
+                          return ok == true;
+                        },
+                        onDismissed: (dir) async {
+                          await _startWork();
+                        },
+                        child: SlideTransition(
+                          position: _swipeOffset,
+                          child: Container(
+                            height: 72,
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade600,
+                              borderRadius: BorderRadius.circular(8),
                             ),
+                            child: const Text('Swipe left to START',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16)),
                           ),
                         ),
                       ),
                     ),
-                ],
-              ),
-        );
+                  ),
+              ],
+            ),
+    );
   }
 }

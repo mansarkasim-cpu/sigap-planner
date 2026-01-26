@@ -10,8 +10,13 @@ class LocalDB {
 
   Future<void> init() async {}
 
-  Future<void> saveChecklist({required String assignmentId, required String taskId, required Uint8List photoBytes, bool checked = true}) async {
-    final id = '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
+  Future<void> saveChecklist(
+      {required String assignmentId,
+      required String taskId,
+      required Uint8List photoBytes,
+      bool checked = true}) async {
+    final id =
+        '${assignmentId}_${taskId}_${DateTime.now().millisecondsSinceEpoch}';
     _checklists.add({
       'id': id,
       'assignmentId': assignmentId,
@@ -23,15 +28,23 @@ class LocalDB {
     });
   }
 
-  Future<void> removeChecklist({required String assignmentId, required String taskId}) async {
-    _checklists.removeWhere((r) => r['assignmentId'] == assignmentId && r['taskId'] == taskId);
+  Future<void> removeChecklist(
+      {required String assignmentId, required String taskId}) async {
+    _checklists.removeWhere(
+        (r) => r['assignmentId'] == assignmentId && r['taskId'] == taskId);
   }
 
-  Future<List<Map<String, dynamic>>> getChecklistForAssignment(String assignmentId) async {
+  Future<List<Map<String, dynamic>>> getChecklistForAssignment(
+      String assignmentId) async {
     return _checklists.where((r) => r['assignmentId'] == assignmentId).toList();
   }
 
-  Future<void> queueRealisasiUpload({required String id, required String assignmentId, String? taskId, String? notes, String? photoPath}) async {
+  Future<void> queueRealisasiUpload(
+      {required String id,
+      required String assignmentId,
+      String? taskId,
+      String? notes,
+      String? photoPath}) async {
     _queued.removeWhere((r) => r['id'] == id);
     _queued.add({
       'id': id,
@@ -46,21 +59,38 @@ class LocalDB {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getQueuedRealisasi() async => _queued.where((r) => r['submitted'] == 0).toList();
+  Future<List<Map<String, dynamic>>> getQueuedRealisasi() async =>
+      _queued.where((r) => r['submitted'] == 0).toList();
 
   Future<void> markRealisasiSubmitted(String id) async {
     final idx = _queued.indexWhere((r) => r['id'] == id);
     if (idx >= 0) _queued[idx]['submitted'] = 1;
   }
 
-  Future<void> setAssignmentStart(String assignmentId, DateTime startedAt) async {
+  Future<void> setAssignmentStart(
+      String assignmentId, DateTime startedAt) async {
     // store as a simple map in _checklists for stub convenience
-    _checklists.removeWhere((r) => r['assignmentId'] == assignmentId && r['taskId'] == '__assignment_meta__');
-    _checklists.add({'id': '${assignmentId}__meta', 'assignmentId': assignmentId, 'taskId': '__assignment_meta__', 'photoPath': null, 'photoBytes': null, 'checked': 0, 'createdAt': DateTime.now().millisecondsSinceEpoch, 'startedAt': startedAt.millisecondsSinceEpoch});
+    _checklists.removeWhere((r) =>
+        r['assignmentId'] == assignmentId &&
+        r['taskId'] == '__assignment_meta__');
+    _checklists.add({
+      'id': '${assignmentId}__meta',
+      'assignmentId': assignmentId,
+      'taskId': '__assignment_meta__',
+      'photoPath': null,
+      'photoBytes': null,
+      'checked': 0,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'startedAt': startedAt.millisecondsSinceEpoch
+    });
   }
 
   Future<DateTime?> getAssignmentStart(String assignmentId) async {
-    final found = _checklists.firstWhere((r) => r['assignmentId'] == assignmentId && r['taskId'] == '__assignment_meta__', orElse: () => <String,dynamic>{});
+    final found = _checklists.firstWhere(
+        (r) =>
+            r['assignmentId'] == assignmentId &&
+            r['taskId'] == '__assignment_meta__',
+        orElse: () => <String, dynamic>{});
     if (found.isEmpty) return null;
     final v = found['startedAt'] as int?;
     if (v == null) return null;

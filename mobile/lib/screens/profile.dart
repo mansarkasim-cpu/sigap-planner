@@ -22,17 +22,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    setState(() { loading = true; });
+    setState(() {
+      loading = true;
+    });
     final p = await SharedPreferences.getInstance();
     final token = p.getString('api_token') ?? '';
     try {
       final api = ApiClient(baseUrl: API_BASE, token: token);
       final res = await api.get('/auth/me');
-      setState(() { user = (res is Map) ? res : (res['data'] ?? res); });
+      setState(() {
+        user = (res is Map) ? res : (res['data'] ?? res);
+      });
     } catch (e) {
       debugPrint('failed load profile: $e');
     } finally {
-      setState(() { loading = false; });
+      setState(() {
+        loading = false;
+      });
     }
   }
 
@@ -40,30 +46,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final p = await SharedPreferences.getInstance();
     await p.remove('api_token');
     await p.remove('tech_id');
-    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+    Navigator.pushAndRemoveUntil(context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: loading ? const Center(child: CircularProgressIndicator()) : Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Name: ${user?['username'] ?? user?['name'] ?? '-'}'),
-            const SizedBox(height: 8),
-            Text('NIPP: ${user?['nipp'] ?? '-'}'),
-            const SizedBox(height: 8),
-            Text('Email: ${user?['email'] ?? '-'}'),
-            const SizedBox(height: 8),
-            Text('Role: ${user?['role'] ?? '-'}'),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(onPressed: _logout, icon: const Icon(Icons.logout), label: const Text('Logout')),
-          ],
-        ),
-      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Name: ${user?['username'] ?? user?['name'] ?? '-'}'),
+                  const SizedBox(height: 8),
+                  Text('NIPP: ${user?['nipp'] ?? '-'}'),
+                  const SizedBox(height: 8),
+                  Text('Email: ${user?['email'] ?? '-'}'),
+                  const SizedBox(height: 8),
+                  Text('Role: ${user?['role'] ?? '-'}'),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                      onPressed: _logout,
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout')),
+                ],
+              ),
+            ),
     );
   }
 }

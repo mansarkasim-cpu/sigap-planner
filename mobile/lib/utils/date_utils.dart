@@ -2,7 +2,8 @@
 String formatUtcDisplay(dynamic raw, [String? tzIana]) {
   if (raw == null) return '-';
   final s = raw.toString().trim();
-  final sqlRx = RegExp(r'^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?\$');
+  final sqlRx = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?\$');
   final m = sqlRx.firstMatch(s);
   DateTime? dt;
   if (m != null) {
@@ -29,6 +30,7 @@ String formatUtcDisplay(dynamic raw, [String? tzIana]) {
     if (t.contains('jayapura') || t.contains('wit')) return 9;
     return null;
   }
+
   String _tzAbbrev(String? tz) {
     if (tz == null) return '';
     final t = tz.toLowerCase();
@@ -37,20 +39,28 @@ String formatUtcDisplay(dynamic raw, [String? tzIana]) {
     if (t.contains('jayapura') || t.contains('wit')) return 'WIT';
     return '';
   }
+
   final offset = _tzOffsetHours(tzIana);
-  final displayDt = (offset != null) ? dtUtc.add(Duration(hours: offset)) : dtUtc;
+  final displayDt =
+      (offset != null) ? dtUtc.add(Duration(hours: offset)) : dtUtc;
   final abbrev = _tzAbbrev(tzIana);
   String pad(int n) => n.toString().padLeft(2, '0');
-  final out = '${pad(displayDt.day)}/${pad(displayDt.month)}/${displayDt.year} ${pad(displayDt.hour)}:${pad(displayDt.minute)}';
+  final out =
+      '${pad(displayDt.day)}/${pad(displayDt.month)}/${displayDt.year} ${pad(displayDt.hour)}:${pad(displayDt.minute)}';
   return abbrev.isNotEmpty ? '$out $abbrev' : out;
 }
 
 String? extractTimezone(dynamic obj) {
   try {
     if (obj is Map) {
-      if (obj.containsKey('site_timezone')) return obj['site_timezone']?.toString();
+      if (obj.containsKey('site_timezone'))
+        return obj['site_timezone']?.toString();
       if (obj.containsKey('timezone')) return obj['timezone']?.toString();
-      final site = obj['site'] ?? obj['raw']?['site'] ?? obj['vendor_cabang'] ?? obj['location'] ?? null;
+      final site = obj['site'] ??
+          obj['raw']?['site'] ??
+          obj['vendor_cabang'] ??
+          obj['location'] ??
+          null;
       if (site is Map) {
         if (site['timezone'] != null) return site['timezone'].toString();
         if (site['code'] != null && site['code'].toString().isNotEmpty) {
@@ -67,7 +77,8 @@ String? extractTimezone(dynamic obj) {
       }
       final raw = obj['raw'];
       if (raw is Map) {
-        if (raw['site_timezone'] != null) return raw['site_timezone'].toString();
+        if (raw['site_timezone'] != null)
+          return raw['site_timezone'].toString();
         if (raw['timezone'] != null) return raw['timezone'].toString();
         final rsite = raw['site'] ?? raw['vendor_cabang'];
         if (rsite is String) {
