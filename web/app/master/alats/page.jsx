@@ -79,7 +79,20 @@ export default function AlatsPage(){
           <Box sx={{ color:'text.secondary', fontSize:13 }}>Manage equipment instances</Box>
         </Box>
         <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
-          {/* Removed search/clear/filter buttons per request; keep Refresh and Create */}
+          <TextField
+            size="small"
+            placeholder="Search nama alat"
+            value={q}
+            onChange={e=>setQ(e.target.value)}
+            onKeyDown={e=>{ if(e.key === 'Enter'){ setPage(1); load(1, pageSize, e.target.value); } }}
+            sx={{ minWidth:220 }}
+          />
+          <Select size="small" value={filterJenis ?? ''} onChange={e=>{ setFilterJenis(e.target.value || null); }} displayEmpty sx={{ minWidth:200 }}>
+            <MenuItem value=""><em>All jenis</em></MenuItem>
+            {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
+          </Select>
+          <Button variant="outlined" onClick={()=>{ setPage(1); load(1, pageSize, q); }} startIcon={loading? <CircularProgress size={18}/> : null}>Search</Button>
+          <Button variant="outlined" onClick={()=>{ setQ(''); setFilterJenis(null); setPage(1); load(1, pageSize, ''); }}>Clear</Button>
           <Button variant="outlined" onClick={()=>load(page,pageSize,q)} startIcon={loading? <CircularProgress size={18}/> : null}>Refresh</Button>
           <Button variant="contained" sx={{ ml:1 }} startIcon={<AddIcon/>} onClick={openCreate}>Create Alat</Button>
         </Box>
@@ -89,7 +102,15 @@ export default function AlatsPage(){
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow><TableCell>ID</TableCell><TableCell>Nama</TableCell><TableCell>Jenis</TableCell><TableCell>Site</TableCell><TableCell>Serial/Kode</TableCell><TableCell align="right">Action</TableCell></TableRow>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Nama</TableCell>
+                <TableCell>Jenis</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Site</TableCell>
+                <TableCell>Serial/Kode</TableCell>
+                <TableCell align="right">Action</TableCell>
+              </TableRow>
             </TableHead>
             <TableBody>
               {rows.map(r=> (
