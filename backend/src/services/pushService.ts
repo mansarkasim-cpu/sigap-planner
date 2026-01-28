@@ -86,7 +86,7 @@ export async function pushNotify(userId: string, message: string) {
       const resp = await admin.messaging().sendMulticast(payload);
       console.log('pushNotify sent:', resp.successCount, 'successes,', resp.failureCount, 'failures');
       if (resp.failureCount && resp.failureCount > 0) {
-        resp.responses.forEach((r, idx) => {
+        resp.responses.forEach((r: any, idx: number) => {
           if (!r.success) {
             console.warn('Failed token:', tokens[idx], r.error?.message);
           }
@@ -106,7 +106,7 @@ export async function pushNotify(userId: string, message: string) {
             data: payload.data as any 
           })
             .then(() => ({ token: t, success: true }))
-            .catch((err) => ({ token: t, success: false, error: err }))
+            .catch((err: any) => ({ token: t, success: false, error: err }))
         );
         const results = await Promise.all(sendPromises);
         const successCount = results.filter((r) => r.success).length;
