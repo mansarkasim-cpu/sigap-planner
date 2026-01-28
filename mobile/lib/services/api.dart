@@ -31,7 +31,19 @@ class ApiClient {
     final headers = _headers();
     debugPrint('ApiClient POST: ${url.toString()}');
     debugPrint('ApiClient Headers: $headers');
-    debugPrint('ApiClient Body: ${json.encode(body)}');
+    try {
+      // Create a redacted copy of the body for logging to avoid printing large base64 blobs
+      final redacted = Map<String, dynamic>.from(body);
+      for (final k in ['photoBase64', 'signatureBase64', 'photoBase64s', 'photo']) {
+        if (redacted.containsKey(k) && redacted[k] is String) {
+          final s = redacted[k] as String;
+          redacted[k] = s.length > 200 ? '${s.substring(0, 200)}...<redacted:${s.length}>' : '<redacted:${s.length}>';
+        }
+      }
+      debugPrint('ApiClient Body: ${json.encode(redacted)}');
+    } catch (e) {
+      debugPrint('ApiClient Body: <failed to encode for debug>');
+    }
     final res = await http.post(url, headers: headers, body: json.encode(body));
     if (res.statusCode >= 200 && res.statusCode < 300)
       return json.decode(res.body);
@@ -44,7 +56,7 @@ class ApiClient {
     final headers = _headers();
     debugPrint('ApiClient PATCH: ${url.toString()}');
     debugPrint('ApiClient Headers: $headers');
-    debugPrint('ApiClient Body: ${json.encode(body)}');
+    // debugPrint('ApiClient Body: ${json.encode(body)}');
     final res = await http.patch(url, headers: headers, body: json.encode(body));
     if (res.statusCode >= 200 && res.statusCode < 300)
       return json.decode(res.body);
