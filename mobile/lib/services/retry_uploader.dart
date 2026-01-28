@@ -77,9 +77,14 @@ class RetryUploader {
             } catch (_) {}
           }
 
+          // If we couldn't resolve a taskId, skip sending and leave item in queue
+          if (taskId.isEmpty) {
+            debugPrint('RetryUploader: skipping queued item $id — taskId unresolved');
+            continue;
+          }
           final body = {
             'assignmentId': assignmentId,
-            'taskId': taskId.isNotEmpty ? taskId : null,
+            'taskId': taskId,
             'notes': notes.isNotEmpty ? notes : null,
             'photoBase64': bytes != null ? base64Encode(bytes) : null,
             'startTime': null,
@@ -96,11 +101,11 @@ class RetryUploader {
           }
         } catch (e) {
           // leave in queue and continue
-          debugPrint('retry upload failed for item: $e');
+          // debugPrint('retry upload failed for item: $e');
         }
       }
     } catch (e) {
-      debugPrint('retry uploader error: $e');
+      // debugPrint('retry uploader error: $e');
     } finally {
       _running = false;
     }
