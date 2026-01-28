@@ -108,7 +108,7 @@ export async function pushNotify(userId: string, message: string) {
             .then(() => ({ token: t, success: true }))
             .catch((err: any) => ({ token: t, success: false, error: err }))
         );
-        const results = await Promise.all(sendPromises);
+        const results = await Promise.all(sendPromises) as Array<{ token: string; success: boolean; error?: any }>;
         const successCount = results.filter((r) => r.success).length;
         const failureCount = results.length - successCount;
         console.log('pushNotify fallback sent:', successCount, 'successes,', failureCount, 'failures');
