@@ -4,6 +4,16 @@ import { User } from '../entities/User';
 import admin from 'firebase-admin';
 import fs from 'fs';
 
+async function removeStaleToken(token: string) {
+  try {
+    const dtRepo = AppDataSource.getRepository(DeviceToken);
+    await dtRepo.delete({ token } as any);
+    console.log('pushNotify: removed stale device token', token);
+  } catch (e) {
+    console.warn('pushNotify: failed to remove stale token', token, e);
+  }
+}
+
 let initialized = false;
 
 function initFirebase() {
@@ -88,7 +98,12 @@ export async function pushNotify(userId: string, message: string) {
       if (resp.failureCount && resp.failureCount > 0) {
         resp.responses.forEach((r: any, idx: number) => {
           if (!r.success) {
-            console.warn('Failed token:', tokens[idx], r.error?.message);
+            const err = r.error || {};
+            const errCode = err?.code || err?.errorInfo?.code || (err && err.errorInfo && err.errorInfo.code) || '';
+            console.warn('Failed token:', tokens[idx], r.error?.message, errCode);
+            if (String(errCode).includes('registration-token-not-registered') || String(r.error?.message).includes('Requested entity was not found')) {
+              removeStaleToken(tokens[idx]);
+            }
           }
         });
       }
@@ -113,7 +128,14 @@ export async function pushNotify(userId: string, message: string) {
         const failureCount = results.length - successCount;
         console.log('pushNotify fallback sent:', successCount, 'successes,', failureCount, 'failures');
         results.forEach((r) => {
-          if (!r.success) console.warn('Failed token (fallback):', r.token, r.error?.message || r.error);
+          if (!r.success) {
+            const err = r.error || {};
+            const errCode = err?.code || err?.errorInfo?.code || (err && err.errorInfo && err.errorInfo.code) || '';
+            console.warn('Failed token (fallback):', r.token, r.error?.message || r.error, errCode);
+            if (String(errCode).includes('registration-token-not-registered') || String(r.error?.message).includes('Requested entity was not found')) {
+              removeStaleToken(r.token);
+            }
+          }
         });
       } catch (ee) {
         console.error('pushNotify fallback error', ee);
