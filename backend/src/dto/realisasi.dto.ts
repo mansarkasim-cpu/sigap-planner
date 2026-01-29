@@ -39,6 +39,7 @@ export async function createAssignment(req: Request, res: Response) {
   await assignmentRepo().save(assignment);
 
   // push notification (stub)
+  console.log('INSTRUMENT pushNotify createAssignment', { assigneeId: dto.assigneeId, woId: wo.id, woDoc: wo.doc_no });
   pushNotify(dto.assigneeId, `New assignment for WO ${wo.doc_no}`);
 
   return res.status(201).json({ id: assignment.id });
@@ -122,11 +123,13 @@ export async function createRealisasi(req: Request, res: Response) {
       .andWhere('a.wo_id = :wo', { wo: (task as any).workOrder?.id })
       .orderBy('a.created_at', 'DESC')
       .getOne();
-    if (maybe) {
+      if (maybe) {
       maybe.status = 'COMPLETED';
       await aRepo.save(maybe);
+      console.log('INSTRUMENT pushNotify createRealisasi - maybe', { assignedBy: maybe.assignedBy, woId: maybe.wo?.id, woDoc: maybe.wo?.doc_no });
       pushNotify(maybe.assignedBy || "", `Realisasi submitted for WO ${maybe.wo?.doc_no}`);
     } else {
+      console.log('INSTRUMENT pushNotify createRealisasi - fallback task', { taskId: (task as any).id, woId: task.workOrder?.id, woDoc: task.workOrder?.doc_no });
       pushNotify('', `Realisasi submitted for WO ${task.workOrder?.doc_no}`);
     }
   } catch (e) {
@@ -216,6 +219,7 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
   await pendingRepo().save(pending);
 
   // notify lead shift (stub)
+  console.log('INSTRUMENT pushNotify submitPendingRealisasi', { target: 'lead_shift', taskId: (task as any).id, woId: task.workOrder?.id, woDoc: task.workOrder?.doc_no });
   pushNotify('lead_shift', `New realisasi submitted for WO ${task.workOrder?.doc_no}`);
 
   return res.status(201).json({ id: pending.id });
@@ -436,6 +440,7 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   await pendingRepo().save(pending);
 
   // notify submitter/planner
+  console.log('INSTRUMENT pushNotify approvePendingRealisasi', { target: '', woId: wo?.id, woDoc: wo?.doc_no });
   pushNotify('', `Realisasi approved for WO ${wo?.doc_no}`);
 
   return res.json({ id: realisasi.id });

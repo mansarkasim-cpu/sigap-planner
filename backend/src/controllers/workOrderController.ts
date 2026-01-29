@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import * as service from '../services/workOrderService';
 import { AppDataSource } from '../ormconfig';
+import { pushNotify } from '../services/pushService';
 import { Task } from '../entities/Task';
 import { Assignment } from '../entities/Assignment';
 import { WorkOrder } from '../entities/WorkOrder';
@@ -578,6 +579,21 @@ export async function deployWorkOrder(req: Request, res: Response) {
     // update work order status
     wo.status = 'DEPLOYED' as any;
     await woRepo.save(wo as any);
+
+    // notify assigned technicians (if any)
+    try {
+      const assigneeIds = Array.from(new Set(created.map(a => (a as any).assigneeId).filter((x: any) => x)));
+      const title = `Assigned: WO ${wo.doc_no ?? ''}`;
+      const body = `You have been deployed to work order ${wo.doc_no ?? wo.id}`;
+      for (const uid of assigneeIds) {
+        // instrument: log intent to push
+        console.log('INSTRUMENT pushNotify deployWorkOrder', { targetUserId: String(uid), woId: wo?.id, woDoc: wo?.doc_no, title, body });
+        // fire-and-forget, log errors
+        pushNotify(String(uid), `${body}`).catch((e: any) => console.warn('pushNotify error', e));
+      }
+    } catch (e) {
+      console.warn('Failed to send deployment notifications', e);
+    }
 
     return res.status(201).json({ message: 'deployed', created });
   } catch (err) {
