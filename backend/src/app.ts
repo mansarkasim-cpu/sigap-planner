@@ -12,6 +12,7 @@ import taskRoutes from './routes/task.routes';
 import checklistRoutes from './routes/checklist.routes';
 import masterRoutes from './routes/master.routes';
 import monitoringRoutes from './routes/monitoring.routes';
+import deviceRoutes from './routes/device.routes';
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -76,6 +77,7 @@ app.use('/api', taskRoutes);
 app.use('/api', checklistRoutes);
 app.use('/api', masterRoutes);
 app.use('/api', monitoringRoutes);
+app.use('/api', deviceRoutes);
 
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swaggerRoutes);
@@ -130,6 +132,31 @@ app.use((err: any, req: any, res: any, next: any) => {
 app.use((req, res, next) => {
   console.log(`[INCOMING] ${req.method} ${req.originalUrl} - from ${req.ip} - origin: ${req.headers.origin}`);
   next();
+});
+
+// Temporary debug endpoint: echo request body/headers to verify POST handling
+app.post('/api/echo', (req: any, res: any) => {
+  res.json({ ok: true, method: req.method, url: req.originalUrl, headers: req.headers, body: req.body || null });
+});
+
+// Temporary debug endpoint: list registered routes for quick inspection
+app.get('/api/_routes', (req: any, res: any) => {
+  try {
+    const routes: Array<any> = [];
+    const stack = (app as any)._router && (app as any)._router.stack ? (app as any)._router.stack : [];
+    stack.forEach((layer: any) => {
+      if (layer.route && layer.route.path) {
+        routes.push({ path: layer.route.path, methods: layer.route.methods });
+      } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
+        layer.handle.stack.forEach((r: any) => {
+          if (r.route && r.route.path) routes.push({ path: r.route.path, methods: r.route.methods });
+        });
+      }
+    });
+    res.json({ routes });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 export default app;
