@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../config.dart';
 import 'inbox.dart';
+import '../services/push_notifications.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -48,18 +49,35 @@ class _LoginScreenState extends State<LoginScreen> {
       loading = true;
     });
     try {
+      debugPrint('=== LOGIN FLOW START ===');
+      debugPrint('🔹 Logging in with NIPP: $nipp');
       final api = ApiClient(baseUrl: base);
       final res =
           await api.post('/auth/login', {'nipp': nipp, 'password': pass});
       final token = res['accessToken'] ?? res['token'] ?? '';
       final user = res['user'] ?? {};
       final userId = (user is Map) ? (user['id'] ?? '') : '';
+      debugPrint('✓ Login successful - userId: $userId, token: ${token.toString().substring(0, 20)}...');
+      
       final p = await SharedPreferences.getInstance();
       await p.setString('api_token', token.toString());
       await p.setString('tech_id', userId.toString());
+      debugPrint('✓ Saved to SharedPreferences - api_token and tech_id');
+      
+      // register device token with backend for push notifications
+      try {
+        debugPrint('→ Attempting to register device token...');
+        await PushNotifications.registerAndSendToken();
+        debugPrint('✓ Device token registration completed');
+      } catch (e) {
+        debugPrint('❌ Failed to register device token: $e');
+      }
+      
+      debugPrint('=== LOGIN FLOW END - Navigating to Inbox ===');
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => InboxScreen()));
     } catch (e) {
+      debugPrint('❌ Login failed: $e');
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {

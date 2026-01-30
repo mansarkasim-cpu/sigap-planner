@@ -32,6 +32,10 @@ __decorate([
     __metadata("design:type", Object)
 ], Realisasi.prototype, "photoUrl", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'photo_urls', type: 'jsonb', nullable: true }),
+    __metadata("design:type", Object)
+], Realisasi.prototype, "photoUrls", void 0);
+__decorate([
     (0, typeorm_1.Column)({ name: 'signature_url', type: "varchar", length: 1000, nullable: true }),
     __metadata("design:type", Object)
 ], Realisasi.prototype, "signatureUrl", void 0);

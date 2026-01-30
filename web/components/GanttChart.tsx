@@ -532,7 +532,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
   function shouldShowAssignColumn(wo: WO | null) {
     const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
-    return !(s === 'IN_PROGRESS' || s === 'COMPLETED');
+    return !(s === 'COMPLETED');
   }
 
   async function openTaskModal(w: WO) {
@@ -1725,7 +1725,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                                     <Button size="small" variant="contained" color="primary" onClick={() => { window.location.href = '/login'; }}>Login to assign</Button>
                                     <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
                                   </>
-                                ) : !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
+                                ) : !['DEPLOYED'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
                                   <>
                                     <Button size="small" variant="contained" disabled={Boolean(assignLoading[taskKey])} onClick={async () => {
                                       const ass = selectedAssignees[taskKey] || [];

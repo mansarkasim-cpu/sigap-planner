@@ -30,6 +30,7 @@ exports.deleteWorkOrderHandler = exports.undeployWorkOrder = exports.deployWorkO
 const axios_1 = __importDefault(require("axios"));
 const service = __importStar(require("../services/workOrderService"));
 const ormconfig_1 = require("../ormconfig");
+const pushService_1 = require("../services/pushService");
 const Task_1 = require("../entities/Task");
 const Assignment_1 = require("../entities/Assignment");
 const WorkOrder_1 = require("../entities/WorkOrder");
@@ -474,32 +475,8 @@ async function deployWorkOrder(req, res) {
                 const taskName = t.name ?? '';
                 // pick first assigned user for this task (if any)
                 const assigns = t.assignments || [];
-                // additionally, gather any personils from workorder raw.labours that may represent assigned technicians
+                // Do NOT use workorder.raw.labours to derive assignments — ignore that data
                 const extraAssignees = [];
-                try {
-                    const raw = wo.raw;
-                    if (raw && Array.isArray(raw.labours)) {
-                        for (const lab of raw.labours) {
-                            try {
-                                const personils = lab?.personils ?? [];
-                                if (Array.isArray(personils)) {
-                                    for (const p of personils) {
-                                        try {
-                                            // try personil.nip or personil.personil?.nip
-                                            const pp = p;
-                                            const nip = pp['nipp'] ?? pp['nip'] ?? (pp['personil'] ? pp['personil']['nip'] : null);
-                                            if (nip)
-                                                extraAssignees.push(String(nip));
-                                        }
-                                        catch (e) { }
-                                    }
-                                }
-                            }
-                            catch (e) { }
-                        }
-                    }
-                }
-                catch (e) { }
                 if (assigns.length > 0 || extraAssignees.length > 0) {
                     // create one assignment record per TaskAssignment.user (support multiple technicians per task)
                     // collect assignee ids from Task.assignments (UUIDs) and from extraAssignees (nipp strings which we'll try to resolve)
@@ -510,19 +487,30 @@ async function deployWorkOrder(req, res) {
                     // resolve extraAssignees (nipp) to user UUIDs when possible
                     // we'll resolve extraAssignees (nipp values) to user UUIDs below
                     // process Task.assignments first
+                    // Prefetch existing assignments for this workorder+task to avoid race/duplications
+                    const existingRows = await assignmentRepo.createQueryBuilder('a')
+                        .where('a.wo_id = :wo AND a.task_id = :task', { wo: id, task: taskId })
+                        .getMany();
+                    const existingAssigneeSet = new Set((existingRows || []).map(r => (r.assigneeId || '').toString()));
                     for (const ta of assigns) {
                         const assigneeId = ta?.user?.id ?? ta?.user_id ?? ta?.userId ?? undefined;
-                        // avoid creating duplicate assignment for same wo+task+assignee
-                        const exists = await assignmentRepo.createQueryBuilder('a')
-                            .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-                            .getOne();
-                        if (exists) {
-                            exists.assigneeId = assigneeId ?? exists.assigneeId;
-                            exists.task_name = taskName || exists.task_name;
-                            exists.status = 'DEPLOYED';
-                            const saved = await assignmentRepo.save(exists);
-                            created.push(saved);
-                            continue;
+                        const assKey = assigneeId ? String(assigneeId) : '';
+                        if (existingAssigneeSet.has(assKey)) {
+                            // update existing record's metadata/status if needed
+                            try {
+                                const exists = existingRows.find(r => (r.assigneeId || '').toString() === assKey);
+                                if (exists) {
+                                    exists.assigneeId = assigneeId ?? exists.assigneeId;
+                                    exists.task_name = taskName || exists.task_name;
+                                    exists.status = 'DEPLOYED';
+                                    const saved = await assignmentRepo.save(exists);
+                                    created.push(saved);
+                                    continue;
+                                }
+                            }
+                            catch (e) {
+                                // fallthrough to attempt creation below
+                            }
                         }
                         const a = new Assignment_1.Assignment();
                         a.wo = wo;
@@ -532,6 +520,8 @@ async function deployWorkOrder(req, res) {
                         a.status = 'DEPLOYED';
                         const saved = await assignmentRepo.save(a);
                         created.push(saved);
+                        // track to avoid duplicates later in this loop
+                        existingAssigneeSet.add(assKey);
                     }
                     // now process extraAssignees (nipp values) attempting to resolve to User by nipp
                     if (extraAssignees.length > 0) {
@@ -544,10 +534,7 @@ async function deployWorkOrder(req, res) {
                                     const u = await userRepo.findOneBy({ nipp: String(nip) });
                                     const assigneeId = u ? String(u.id) : String(nip);
                                     // avoid duplicate creation when same id already created
-                                    const exists = await assignmentRepo.createQueryBuilder('a')
-                                        .where('a.wo_id = :wo AND a.task_id = :task AND (a.assignee_id = :assignee OR (:assignee IS NULL AND a.assignee_id IS NULL))', { wo: id, task: taskId, assignee: assigneeId ?? null })
-                                        .getOne();
-                                    if (exists)
+                                    if (existingAssigneeSet.has(String(assigneeId)))
                                         continue;
                                     const a = new Assignment_1.Assignment();
                                     a.wo = wo;
@@ -593,6 +580,21 @@ async function deployWorkOrder(req, res) {
         // update work order status
         wo.status = 'DEPLOYED';
         await woRepo.save(wo);
+        // notify assigned technicians (if any)
+        try {
+            const assigneeIds = Array.from(new Set(created.map(a => a.assigneeId).filter((x) => x)));
+            const title = `Assigned: WO ${wo.doc_no ?? ''}`;
+            const body = `You have been deployed to work order ${wo.doc_no ?? wo.id}`;
+            for (const uid of assigneeIds) {
+                // instrument: log intent to push
+                console.log('INSTRUMENT pushNotify deployWorkOrder', { targetUserId: String(uid), woId: wo?.id, woDoc: wo?.doc_no, title, body });
+                // fire-and-forget, log errors
+                (0, pushService_1.pushNotify)(String(uid), `${body}`).catch((e) => console.warn('pushNotify error', e));
+            }
+        }
+        catch (e) {
+            console.warn('Failed to send deployment notifications', e);
+        }
         return res.status(201).json({ message: 'deployed', created });
     }
     catch (err) {

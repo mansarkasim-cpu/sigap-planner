@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "379916776732",
+    "project_id": "sigapplanner",
+    "storage_bucket": "sigapplanner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:379916776732:android:9640e4eb3ff83157d176d9",
+        "android_client_info": {
+          "package_name": "com.example.sigap_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDW-c05z770G-w1KHCCJSc56QqmfxOSW4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncUserSitesFromWorkOrders = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.listUsers = void 0;
+exports.syncUserSitesFromWorkOrders = exports.resetPassword = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.listUsers = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const ormconfig_1 = require("../ormconfig");
 const User_1 = require("../entities/User");
@@ -110,10 +110,8 @@ async function updateUser(req, res) {
         }
         u.name = name ?? u.name;
         u.email = email ?? u.email;
-        if (password !== undefined) {
-            // hash provided password
-            u.password = password ? await bcryptjs_1.default.hash(String(password), 10) : undefined;
-        }
+        // Do NOT modify password on user update here. Password changes
+        // should be performed via a dedicated endpoint or admin action.
         u.role = role ?? u.role;
         u.site = site ?? u.site;
         u.nipp = nipp ?? u.nipp;
@@ -141,6 +139,26 @@ async function deleteUser(req, res) {
     }
 }
 exports.deleteUser = deleteUser;
+async function resetPassword(req, res) {
+    try {
+        const id = req.params.id;
+        const { password } = req.body || {};
+        if (!password)
+            return res.status(400).json({ message: 'password required' });
+        const u = await repo().findOneBy({ id });
+        if (!u)
+            return res.status(404).json({ message: 'User not found' });
+        const hashed = await bcryptjs_1.default.hash(String(password), 10);
+        u.password = hashed;
+        const saved = await repo().save(u);
+        return res.json({ message: 'password reset', data: { id: saved.id } });
+    }
+    catch (err) {
+        console.error('resetPassword error', err);
+        return res.status(500).json({ message: 'Failed to reset password', detail: err.message || err });
+    }
+}
+exports.resetPassword = resetPassword;
 async function syncUserSitesFromWorkOrders(req, res) {
     // Optional helper: copy vendor_cabang from work_orders.raw -> user.site by matching email/name
     // This is a best-effort helper and should be tailored for your data model.

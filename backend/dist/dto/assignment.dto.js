@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RealisasiCreateDTO = void 0;
 const class_validator_1 = require("class-validator");
+const class_validator_2 = require("class-validator");
 class RealisasiCreateDTO {
 }
 __decorate([
@@ -45,4 +46,10 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], RealisasiCreateDTO.prototype, "result", void 0);
+__decorate([
+    (0, class_validator_2.IsArray)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], RealisasiCreateDTO.prototype, "photoUrls", void 0);
 exports.RealisasiCreateDTO = RealisasiCreateDTO;

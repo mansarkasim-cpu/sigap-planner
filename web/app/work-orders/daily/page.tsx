@@ -168,6 +168,14 @@ export default function DailyWorkOrdersPage(){
     }catch(e){ setTechOptions([]); }
   }
 
+  async function loadAssetsOnly() {
+    try{
+      const aRes = await apiClient('/master/alats?page=1&pageSize=1000');
+      const alatRows = Array.isArray(aRes) ? aRes : (aRes?.data ?? []);
+      setAssetsOptions(Array.isArray(alatRows) ? alatRows : []);
+    }catch(e){ setAssetsOptions([]); }
+  }
+
   async function loadAvailableAssetsForDate(dateStr?: string) {
     try{
       const aRes = await apiClient('/master/alats?page=1&pageSize=1000');
@@ -618,18 +626,19 @@ export default function DailyWorkOrdersPage(){
     }
     setCustomOpen(true);
     await loadSiteOptions();
-    // load techs/users in background
-    loadAssetsAndTechs();
+    // load assets only (do not load all users so we can prefer scheduled technicians)
+    await loadAssetsOnly();
     // initialize Start from top-level date filter (use 08:00 as default time)
+    let initialStart = '';
     if (dateFilter && String(dateFilter).trim()) {
       const d = String(dateFilter).trim();
-      // ensure format YYYY-MM-DD
       const m = d.match(/^(\d{4}-\d{2}-\d{2})$/);
-      if (m) setCustomStart(`${m[1]}T08:00`);
-      else setCustomStart('');
-    } else {
-      setCustomStart('');
+      if (m) initialStart = `${m[1]}T08:00`;
     }
+    setCustomStart(initialStart);
+    // populate technicians based on scheduled shift for the chosen start time/site
+    // call without awaiting so UI opens immediately
+    loadTechsForDate(initialStart || undefined, customSite);
     setSelectedAssets([]);
     setSelectedTechs([]);
     setPreviewSchedule([]);
@@ -1329,7 +1338,10 @@ export default function DailyWorkOrdersPage(){
                 ) : (
                   <>
                     <Box sx={{display:'flex',alignItems:'center',justifyContent:'space-between',mb:1}}>
-                      <Typography variant="subtitle2">Select technicians (rotation pool)</Typography>
+                      <Box>
+                        <Typography variant="subtitle2">Select technicians (rotation pool)</Typography>
+                        <Typography variant="caption" color="text.secondary">{selectedTechs.length} teknisi terpilih</Typography>
+                      </Box>
                       <Box sx={{display:'flex',alignItems:'center',gap:1}}>
                         {techsFromSchedule ? (
                           scheduledEmpty ? <Chip label="scheduled (no assignments)" size="small" color="warning" sx={{fontSize:11}} /> : <Chip label="scheduled" size="small" color="primary" sx={{fontSize:11}} />

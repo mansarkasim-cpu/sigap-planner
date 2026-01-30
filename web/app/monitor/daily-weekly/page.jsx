@@ -156,6 +156,11 @@ export default function WeeklyMonitoring(){
 
   useEffect(()=>{ loadSites(); load(); }, [])
 
+  // reload immediately when site or weekStart changes (e.g., user selects site or date)
+  useEffect(()=>{
+    try{ load() }catch(e){}
+  }, [siteId, weekStart])
+
   // clamp currentPage when data or rowsPerPage change
   useEffect(()=>{
     if (!usePagedView) return;
@@ -413,9 +418,9 @@ export default function WeeklyMonitoring(){
                           let color = 'default';
                           if (s && s.done) {
                             statusLabel = 'DONE';
-                            // Orange (warning) jika ada catatan/notes, atau ada item yang false
+                            // Biru (info) jika ada catatan/notes, atau ada item yang false
                             if (s.notes || s.catatan || s.has_false) {
-                              color = 'warning';
+                              color = 'info';
                             } else {
                               color = 'success';
                             }
