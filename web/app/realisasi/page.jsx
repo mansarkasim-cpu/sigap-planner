@@ -318,7 +318,6 @@ export default function Page() {
               <TableCell><strong>Asset</strong></TableCell>
               <TableCell><strong>Start</strong></TableCell>
               <TableCell><strong>End</strong></TableCell>
-              <TableCell><strong>Tasks</strong></TableCell>
               <TableCell><strong>Actions</strong></TableCell>
             </TableRow>
           </TableHead>
@@ -339,7 +338,6 @@ export default function Page() {
                   const hdrEnd = range.maxEnd ? formatDateDisplay(range.maxEnd.toISOString(), tz) : formatDateDisplay(wo.end_date || wo.raw?.end_date, tz)
                   return hdrEnd
                 })()}</TableCell>
-                <TableCell>{expanded[wo.id] ? (expanded[wo.id].tasks?.length ?? (wo.tasks_count ?? wo.task_count ?? '-')) : (wo.tasks_count ?? wo.task_count ?? '-')}</TableCell>
                 <TableCell>
                   <Button size="small" variant="contained" startIcon={<VisibilityIcon />} onClick={() => openModal(wo)}>
                     View
