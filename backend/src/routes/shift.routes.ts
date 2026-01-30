@@ -433,7 +433,7 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
     console.debug('[scheduled-technicians] main SQL', sql, params);
     const rows = await AppDataSource.manager.query(sql, params);
     if (debugFlag === '1' || debugFlag === 'true') {
-      return res.json({ date, time, timeZone, localDateStr, localTimeStr, shiftId, params, dbgMembers, dbgUserIds, sql, rows });
+      return res.json({ date, time, timeZone, localDateStr, localTimeStr, shiftIdStart, shiftIdEnd, params, dbgMembers, dbgUserIds, sql, rows });
     }
     return res.json(rows);
   } catch (err) {
