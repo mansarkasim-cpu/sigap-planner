@@ -319,4 +319,73 @@ router.delete('/tasks/:id/assign/:assignId', auth_1.authMiddleware, async (req, 
         return res.status(500).json({ message: 'Failed to delete assignment' });
     }
 });
+// DELETE /api/tasks/:id
+router.delete('/tasks/:id', auth_1.authMiddleware, async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const taskRepo = ormconfig_1.AppDataSource.getRepository(Task_1.Task);
+        const aRepo = ormconfig_1.AppDataSource.getRepository(TaskAssignment_1.TaskAssignment);
+        const task = await taskRepo.findOne({ where: { id: taskId }, relations: ['assignments', 'workOrder'] });
+        if (!task)
+            return res.status(404).json({ message: 'Not found' });
+        // prevent deletion when realisasi exists for this task
+        try {
+            const realRows = await ormconfig_1.AppDataSource.query('SELECT id FROM realisasi WHERE task_id = $1 LIMIT 1', [taskId]);
+            if (realRows && realRows.length > 0)
+                return res.status(400).json({ message: 'Cannot delete task with realisasi' });
+        }
+        catch (e) {
+            console.warn('failed to check realisasi for task delete', e);
+        }
+        // remove assignments first
+        try {
+            if (Array.isArray(task.assignments) && task.assignments.length > 0) {
+                await aRepo.remove(task.assignments);
+            }
+        }
+        catch (e) {
+            console.warn('failed to remove assignments before deleting task', e);
+        }
+        // finally remove task
+        await taskRepo.remove(task);
+        // update related workorder status similar to assignment deletion logic
+        try {
+            const woId = task.workOrder?.id;
+            if (woId) {
+                const tasks = await taskRepo.createQueryBuilder('t')
+                    .leftJoinAndSelect('t.assignments', 'a')
+                    .where('t.workOrder = :wo', { wo: woId })
+                    .getMany();
+                const total = tasks.length;
+                const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
+                const woRepo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
+                const wo = await woRepo.findOneBy({ id: woId });
+                if (wo) {
+                    if (total === 0) {
+                        wo.status = 'NEW';
+                    }
+                    else if (assignedCount === 0) {
+                        wo.status = 'NEW';
+                    }
+                    else if (assignedCount < total) {
+                        wo.status = 'ASSIGNED';
+                    }
+                    else if (assignedCount === total) {
+                        wo.status = 'READY_TO_DEPLOY';
+                    }
+                    if (wo.status)
+                        await woRepo.save(wo);
+                }
+            }
+        }
+        catch (e) {
+            console.warn('post-delete task workorder status update failed', e);
+        }
+        return res.json({ message: 'deleted' });
+    }
+    catch (err) {
+        console.error('delete task', err);
+        return res.status(500).json({ message: 'Failed to delete task' });
+    }
+});
 exports.default = router;

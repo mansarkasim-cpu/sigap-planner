@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { AppDataSource } from '../ormconfig';
 import { Task } from '../entities/Task';
+import { Assignment } from '../entities/Assignment';
 import { TaskAssignment } from '../entities/TaskAssignment';
 import { WorkOrder } from '../entities/WorkOrder';
 import { authMiddleware } from '../middleware/auth';
@@ -215,6 +216,11 @@ router.post('/tasks/:id/assign', authMiddleware, async (req: Request, res: Respo
 
     const a: any = repo.create({ task: { id: taskId } as any, user: { id: userId } as any, assignedBy });
     const saved = await repo.save(a);
+    // fetch task + workorder so we can mirror assignment and update wo status
+    const taskRepo = AppDataSource.getRepository(Task);
+    const t = await taskRepo.findOne({ where: { id: taskId }, relations: ['workOrder'] as any });
+    const woId = t?.workOrder?.id;
+    // Mirror Assignment creation is handled by `TaskAssignmentSubscriber`.
     // after assignment, update work order status based on number of assigned tasks
     try {
       const taskRepo = AppDataSource.getRepository(Task);
@@ -230,16 +236,22 @@ router.post('/tasks/:id/assign', authMiddleware, async (req: Request, res: Respo
         const woRepo = AppDataSource.getRepository(WorkOrder);
         const wo = await woRepo.findOneBy({ id: woId } as any);
         if (wo) {
-          if (total === 0) {
-            wo.status = 'NEW';
-          } else if (assignedCount === 0) {
-            wo.status = 'NEW';
-          } else if (assignedCount < total) {
-            wo.status = 'ASSIGNED';
-          } else if (assignedCount === total) {
-            wo.status = 'READY_TO_DEPLOY';
+          // preserve current IN_PROGRESS or PREPARATION status
+          const currentStatus = (wo.status || '').toString();
+          if (currentStatus !== 'IN_PROGRESS' && currentStatus !== 'PREPARATION') {
+            if (total === 0) {
+              wo.status = 'NEW';
+            } else if (assignedCount === 0) {
+              wo.status = 'NEW';
+            } else if (assignedCount < total) {
+              wo.status = 'ASSIGNED';
+            } else if (assignedCount === total) {
+              wo.status = 'READY_TO_DEPLOY';
+            }
+            if (wo.status) await woRepo.save(wo);
+          } else {
+            // keep existing status (IN_PROGRESS or PREPARATION)
           }
-          if (wo.status) await woRepo.save(wo);
         }
       }
     } catch (e) {
@@ -292,16 +304,22 @@ router.delete('/tasks/:id/assign/:assignId', authMiddleware, async (req: Request
           const woRepo = AppDataSource.getRepository(WorkOrder);
           const wo = await woRepo.findOneBy({ id: woId } as any);
           if (wo) {
-            if (total === 0) {
-              wo.status = 'NEW';
-            } else if (assignedCount === 0) {
-              wo.status = 'NEW';
-            } else if (assignedCount < total) {
-              wo.status = 'ASSIGNED';
-            } else if (assignedCount === total) {
-              wo.status = 'READY_TO_DEPLOY';
+            // preserve current IN_PROGRESS or PREPARATION status
+            const currentStatus = (wo.status || '').toString();
+            if (currentStatus !== 'IN_PROGRESS' && currentStatus !== 'PREPARATION') {
+              if (total === 0) {
+                wo.status = 'NEW';
+              } else if (assignedCount === 0) {
+                wo.status = 'NEW';
+              } else if (assignedCount < total) {
+                wo.status = 'ASSIGNED';
+              } else if (assignedCount === total) {
+                wo.status = 'READY_TO_DEPLOY';
+              }
+              if (wo.status) await woRepo.save(wo);
+            } else {
+              // keep existing status (IN_PROGRESS or PREPARATION)
             }
-            if (wo.status) await woRepo.save(wo);
           }
         }
       }

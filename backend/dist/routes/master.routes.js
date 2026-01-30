@@ -32,38 +32,38 @@ const qCtrl = __importStar(require("../controllers/masterQuestionController"));
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 // Hubs (protected)
-router.get('/master/hubs', auth_1.authMiddleware, hubCtrl.listHubs);
-router.get('/master/hubs/:id', auth_1.authMiddleware, hubCtrl.getHub);
-router.post('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), hubCtrl.createHub);
-router.patch('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), hubCtrl.updateHub);
+router.get('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), hubCtrl.listHubs);
+router.get('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), hubCtrl.getHub);
+router.post('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.createHub);
+router.patch('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.updateHub);
 router.delete('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.deleteHub);
 // Sites (protected)
-router.get('/master/sites', auth_1.authMiddleware, siteCtrl.listSites);
-router.get('/master/sites/:id', auth_1.authMiddleware, siteCtrl.getSite);
-router.post('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), siteCtrl.createSite);
-router.patch('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), siteCtrl.updateSite);
+router.get('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), siteCtrl.listSites);
+router.get('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), siteCtrl.getSite);
+router.post('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.createSite);
+router.patch('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.updateSite);
 router.delete('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.deleteSite);
 // Jenis Alat (protected)
-router.get('/master/jenis-alat', auth_1.authMiddleware, jenisCtrl.listJenis);
-router.get('/master/jenis-alat/:id', auth_1.authMiddleware, jenisCtrl.getJenis);
-router.post('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), jenisCtrl.createJenis);
-router.patch('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), jenisCtrl.updateJenis);
+router.get('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), jenisCtrl.listJenis);
+router.get('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), jenisCtrl.getJenis);
+router.post('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.createJenis);
+router.patch('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.updateJenis);
 router.delete('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.deleteJenis);
 // Alat (protected)
-router.get('/master/alats', auth_1.authMiddleware, alatCtrl.listAlats);
-router.get('/master/alats/:id', auth_1.authMiddleware, alatCtrl.getAlat);
-router.post('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), alatCtrl.createAlat);
-router.patch('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), alatCtrl.updateAlat);
+router.get('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), alatCtrl.listAlats);
+router.get('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), alatCtrl.getAlat);
+router.post('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.createAlat);
+router.patch('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.deleteAlat);
 // Questions & Options (protected)
-router.get('/master/questions', auth_1.authMiddleware, qCtrl.listQuestions);
-router.get('/master/questions/:id', auth_1.authMiddleware, qCtrl.getQuestion);
-router.post('/master/questions', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), qCtrl.createQuestion);
-router.patch('/master/questions/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), qCtrl.updateQuestion);
+router.get('/master/questions', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.listQuestions);
+router.get('/master/questions/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.getQuestion);
+router.post('/master/questions', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.createQuestion);
+router.patch('/master/questions/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.updateQuestion);
 router.delete('/master/questions/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.deleteQuestion);
-router.post('/master/options', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), qCtrl.createOption);
-router.patch('/master/options/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'planner']), qCtrl.updateOption);
+router.post('/master/options', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.createOption);
+router.patch('/master/options/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.updateOption);
 router.delete('/master/options/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.deleteOption);
 // allow listing options (used by mobile client to fetch options per question)
-router.get('/master/options', auth_1.authMiddleware, qCtrl.listOptions);
+router.get('/master/options', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.listOptions);
 exports.default = router;

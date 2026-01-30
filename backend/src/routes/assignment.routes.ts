@@ -76,7 +76,13 @@ router.post("/assignment", authMiddleware, async (req: Request, res: Response) =
       a.wo = wo as any;
       a.assigneeId = assignee;
       a.scheduledAt = dto.scheduled_start ? new Date(dto.scheduled_start) : undefined;
-      a.status = "ASSIGNED";
+      // If the work order is already IN_PROGRESS, mark new assignment as IN_PROGRESS and set startedAt
+      if ((wo as any).status === 'IN_PROGRESS') {
+        a.status = 'IN_PROGRESS';
+        try { a.startedAt = new Date(); } catch (_) { /* ignore */ }
+      } else {
+        a.status = "ASSIGNED";
+      }
       a.task_id = dto.task_id;
       a.task_name = dto.task_name;
       const saved = await assignmentRepo.save(a);

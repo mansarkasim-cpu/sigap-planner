@@ -40,6 +40,7 @@ const task_routes_1 = __importDefault(require("./routes/task.routes"));
 const checklist_routes_1 = __importDefault(require("./routes/checklist.routes"));
 const master_routes_1 = __importDefault(require("./routes/master.routes"));
 const monitoring_routes_1 = __importDefault(require("./routes/monitoring.routes"));
+const device_routes_1 = __importDefault(require("./routes/device.routes"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const app = (0, express_1.default)();
@@ -98,6 +99,7 @@ app.use('/api', task_routes_1.default);
 app.use('/api', checklist_routes_1.default);
 app.use('/api', master_routes_1.default);
 app.use('/api', monitoring_routes_1.default);
+app.use('/api', device_routes_1.default);
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swagger_routes_1.default);
 // static uploads (dev)
@@ -146,5 +148,31 @@ app.use((err, req, res, next) => {
 app.use((req, res, next) => {
     console.log(`[INCOMING] ${req.method} ${req.originalUrl} - from ${req.ip} - origin: ${req.headers.origin}`);
     next();
+});
+// Temporary debug endpoint: echo request body/headers to verify POST handling
+app.post('/api/echo', (req, res) => {
+    res.json({ ok: true, method: req.method, url: req.originalUrl, headers: req.headers, body: req.body || null });
+});
+// Temporary debug endpoint: list registered routes for quick inspection
+app.get('/api/_routes', (req, res) => {
+    try {
+        const routes = [];
+        const stack = app._router && app._router.stack ? app._router.stack : [];
+        stack.forEach((layer) => {
+            if (layer.route && layer.route.path) {
+                routes.push({ path: layer.route.path, methods: layer.route.methods });
+            }
+            else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
+                layer.handle.stack.forEach((r) => {
+                    if (r.route && r.route.path)
+                        routes.push({ path: r.route.path, methods: r.route.methods });
+                });
+            }
+        });
+        res.json({ routes });
+    }
+    catch (e) {
+        res.status(500).json({ error: String(e) });
+    }
 });
 exports.default = app;

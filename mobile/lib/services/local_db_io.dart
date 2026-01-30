@@ -49,6 +49,7 @@ class LocalDB {
           startTime INTEGER,
           endTime INTEGER,
           submitted INTEGER,
+          serverId TEXT,
           createdAt INTEGER
         )
       ''');
@@ -64,6 +65,11 @@ class LocalDB {
         try {
           await _db!
               .execute('ALTER TABLE queued_realisasi ADD COLUMN taskId TEXT');
+        } catch (_) {}
+      }
+      if (!colNames.contains('serverid')) {
+        try {
+          await _db!.execute('ALTER TABLE queued_realisasi ADD COLUMN serverId TEXT');
         } catch (_) {}
       }
       if (!colNames.contains('starttime')) {
@@ -175,7 +181,8 @@ class LocalDB {
       String? notes,
       String? photoPath,
       int? startTime,
-      int? endTime}) async {
+      int? endTime,
+      String? serverId}) async {
     await init();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db!.insert(
@@ -189,6 +196,7 @@ class LocalDB {
           'startTime': startTime,
           'endTime': endTime,
           'submitted': 0,
+          'serverId': serverId,
           'createdAt': now
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
@@ -222,9 +230,11 @@ class LocalDB {
     return DateTime.fromMillisecondsSinceEpoch(v);
   }
 
-  Future<void> markRealisasiSubmitted(String id) async {
+  Future<void> markRealisasiSubmitted(String id, {String? serverId}) async {
     await init();
-    await _db!.update('queued_realisasi', {'submitted': 1},
+    final updates = <String, Object?>{'submitted': 1};
+    if (serverId != null && serverId.isNotEmpty) updates['serverId'] = serverId;
+    await _db!.update('queued_realisasi', updates,
         where: 'id = ?', whereArgs: [id]);
   }
 }

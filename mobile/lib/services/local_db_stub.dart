@@ -44,7 +44,8 @@ class LocalDB {
       required String assignmentId,
       String? taskId,
       String? notes,
-      String? photoPath}) async {
+      String? photoPath,
+      String? serverId}) async {
     _queued.removeWhere((r) => r['id'] == id);
     _queued.add({
       'id': id,
@@ -55,6 +56,7 @@ class LocalDB {
       'startTime': null,
       'endTime': null,
       'submitted': 0,
+      'serverId': serverId,
       'createdAt': DateTime.now().millisecondsSinceEpoch
     });
   }
@@ -62,9 +64,12 @@ class LocalDB {
   Future<List<Map<String, dynamic>>> getQueuedRealisasi() async =>
       _queued.where((r) => r['submitted'] == 0).toList();
 
-  Future<void> markRealisasiSubmitted(String id) async {
+  Future<void> markRealisasiSubmitted(String id, {String? serverId}) async {
     final idx = _queued.indexWhere((r) => r['id'] == id);
-    if (idx >= 0) _queued[idx]['submitted'] = 1;
+    if (idx >= 0) {
+      _queued[idx]['submitted'] = 1;
+      if (serverId != null) _queued[idx]['serverId'] = serverId;
+    }
   }
 
   Future<void> setAssignmentStart(

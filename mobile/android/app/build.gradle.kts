@@ -35,6 +35,9 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Disable code shrinking and resource shrinking so bundled raw sounds are preserved
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
@@ -42,3 +45,5 @@ android {
 flutter {
     source = "../.."
 }
+
+apply(plugin = "com.google.gms.google-services")

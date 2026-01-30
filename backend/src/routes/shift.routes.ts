@@ -273,18 +273,18 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
     // so shift matching uses local wall-clock time.
     let localTimeStr: string | null = null;
     let localDateStr = date; // fallback
+    const endDate = req.query.endDate ? String(req.query.endDate) : (req.query.end ? String(req.query.end) : '');
+    const endTime = req.query.endTime ? String(req.query.endTime) : null;
+    let localEndTimeStr: string | null = null;
+    let localEndDateStr = endDate ? endDate : date;
     try {
       if (time) {
         if (timeIsLocal) {
-          // Treat the provided `time` as already in the target timezone's local wall-clock.
-          // Use it directly; local date remains `date` (caller may supply prior/next day if needed).
           localTimeStr = time;
         } else {
-          // build an ISO instant from provided date+time in UTC
           const isoUtc = `${date}T${time}:00Z`;
           const d = new Date(isoUtc);
           if (!isNaN(d.getTime())) {
-            // get local time components in target timezone
             const parts = new Intl.DateTimeFormat('en-GB', {
               timeZone,
               hour: '2-digit', minute: '2-digit', hour12: false,
@@ -300,29 +300,82 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
           }
         }
       }
+
+      if (endTime) {
+        if (timeIsLocal) {
+          localEndTimeStr = endTime;
+          if (!endDate) localEndDateStr = localDateStr;
+        } else {
+          const ed = endDate || date;
+          const isoUtcEnd = `${ed}T${endTime}:00Z`;
+          const d2 = new Date(isoUtcEnd);
+          if (!isNaN(d2.getTime())) {
+            const parts2 = new Intl.DateTimeFormat('en-GB', {
+              timeZone,
+              hour: '2-digit', minute: '2-digit', hour12: false,
+              year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(d2);
+            const map2: any = {};
+            for (const p of parts2) map2[p.type] = p.value;
+            const hh2 = map2.hour || '00';
+            const mm2 = map2.minute || '00';
+            localEndTimeStr = `${hh2}:${mm2}`;
+            const yyyy2 = map2.year; const mmth2 = map2.month; const dd2 = map2.day;
+            if (yyyy2 && mmth2 && dd2) localEndDateStr = `${yyyy2}-${mmth2}-${dd2}`;
+          }
+        }
+      }
     } catch (e) {
-      // fallback: leave localTimeStr null and use original date/time
       console.warn('[scheduled-technicians] failed to convert UTC time to local', e);
     }
 
     // Use raw SQL to extract JSONB members and join to user table
+    // Support optional endDate to return assignments between start and end (inclusive)
+
     const params: any[] = [localDateStr];
+    // build date condition: either single date or inclusive range (use local converted dates)
+    let dateCond = 'a.date = $1';
+    if (localEndDateStr && localEndDateStr !== localDateStr) {
+      params.push(localEndDateStr);
+      dateCond = 'a.date >= $1 AND a.date <= $2';
+    }
+
     let siteCond = '';
     // Only filter by the assignment's site (`a.site`).
     // Previously the code required both a.site and u.site to match the provided site,
     // which incorrectly excluded users whose `site` field is empty or differs.
-    if (site) { params.push(site); siteCond = ' AND LOWER(COALESCE(a.site,\'\')) = LOWER($2)'; }
+    if (site) { params.push(site); siteCond = ` AND LOWER(COALESCE(a.site,'')) = LOWER($${params.length})`; }
 
-    // determine shift from local time if provided
-    const shiftId = findShiftIdForTime(localTimeStr || time);
+    // determine shift(s) from local start/end times if provided
+    const shiftIdStart = findShiftIdForTime(localTimeStr || time);
+    const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime);
     let shiftCond = '';
-    if (shiftId !== null) {
-      // Build params using effective localDate (already applied)
-      if (!site) params.push(shiftId);
-      else params.push(shiftId); // shift param index will follow site param if present
-      const idx = params.length;
-      shiftCond = ` AND a.shift = $${idx}`;
-      console.debug('[scheduled-technicians] filtering by shift', { date, time, timeZone, localDate: localDateStr, localTime: localTimeStr, shiftId });
+    // If only start time provided, filter by that shift
+    if (shiftIdStart !== null && !shiftIdEnd) {
+      params.push(shiftIdStart);
+      shiftCond = ` AND a.shift = $${params.length}`;
+      console.debug('[scheduled-technicians] filtering by single shift', { date, time, timeZone, localDate: localDateStr, localTime: localTimeStr, shiftIdStart });
+    } else if (shiftIdStart !== null && shiftIdEnd !== null) {
+      // If start and end fall on the same local date, include the range of shifts between them (inclusive)
+      if (localDateStr === localEndDateStr) {
+        const shifts: number[] = [];
+        const maxShift = SHIFT_DEFS.length;
+        let cur = shiftIdStart;
+        while (true) {
+          shifts.push(cur);
+          if (cur === shiftIdEnd) break;
+          cur = (cur % maxShift) + 1;
+          if (shifts.length > maxShift) break; // safety
+        }
+        const idxStart = params.length + 1;
+        for (const s of shifts) params.push(s);
+        const placeholders = shifts.map((_, i) => `$${idxStart + i}`).join(',');
+        shiftCond = ` AND a.shift IN (${placeholders})`;
+        console.debug('[scheduled-technicians] filtering by shift range', { localDate: localDateStr, localTime: localTimeStr, localEndTimeStr, shifts });
+      } else {
+        // date range spans multiple days: do not restrict shifts (include all shifts for intermediate dates)
+        console.debug('[scheduled-technicians] date range spans multiple days; not restricting shifts by time');
+      }
     }
 
     const sql = `
@@ -333,7 +386,7 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
         FROM shift_group g
       ) gm ON gm.member_id_text = u.id::text
       JOIN shift_assignment a ON a.group_id = gm.gid
-      WHERE a.date = $1 ${siteCond} ${shiftCond}
+      WHERE ${dateCond} ${siteCond} ${shiftCond}
       AND u.role = 'technician'
     `;
 
@@ -341,13 +394,12 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
     let dbgMembers: any[] = [];
     let dbgUserIds: any[] = [];
     try {
-      // For member diagnostics, only filter by assignment.a.site (don't reference u)
-      const memberSiteCond = site ? ` AND LOWER(COALESCE(a.site,'')) = LOWER($2)` : '';
+      // For member diagnostics, reuse the same date/site/shift conditions used by main SQL
       const dbgMembersSql = `
         SELECT DISTINCT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
         FROM shift_group g
         JOIN shift_assignment a ON a.group_id = g.id
-        WHERE a.date = $1 ${memberSiteCond} ${shiftCond}
+        WHERE ${dateCond} ${siteCond} ${shiftCond}
       `;
       if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
         console.debug('[scheduled-technicians] diagnostic member_ids SQL', dbgMembersSql, params);
@@ -365,7 +417,7 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
           FROM shift_group g
         ) gm ON gm.member_id_text = u.id::text
         JOIN shift_assignment a ON a.group_id = gm.gid
-        WHERE a.date = $1 ${siteCond} ${shiftCond}
+        WHERE ${dateCond} ${siteCond} ${shiftCond}
       `;
       if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
         console.debug('[scheduled-technicians] diagnostic user_ids SQL', dbgUserIdsSql, params);

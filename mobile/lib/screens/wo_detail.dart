@@ -309,7 +309,7 @@ class _WODetailScreenState extends State<WODetailScreen>
 
       // submit to lead-shift for approval (backend will reject duplicates)
       final res = await api.post('/realisasi/submit', body);
-      // mark queued record as submitted
+      // mark queued record as submitted (server id may be saved later if available)
       try {
         await LocalDB.instance.markRealisasiSubmitted(qid);
       } catch (_) {}
@@ -451,6 +451,12 @@ class _WODetailScreenState extends State<WODetailScreen>
           debugPrint(
               'auto-approve skipped: isLead=$_isLead pendingId=$pendingId');
         }
+        // Persist server-side pending id back to local queue for future reference
+        try {
+          if (pendingId != null && pendingId.isNotEmpty) {
+            await LocalDB.instance.markRealisasiSubmitted(qid, serverId: pendingId);
+          }
+        } catch (_) {}
       } catch (e) {
         debugPrint('auto-approve block failed: $e');
       }

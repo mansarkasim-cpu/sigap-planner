@@ -27,6 +27,10 @@ const migrationsGlob = hasCompiledEntities
   ? path.join(__dirname, './migrations/*.js')
   : path.join(__dirname, './migrations/*.ts');
 
+const subscribersGlob = hasCompiledEntities
+  ? path.join(__dirname, './subscribers/*.js')
+  : path.join(__dirname, './subscribers/*.ts');
+
 export const AppDataSource = new DataSource({
   // type: "postgres",
   // url: process.env.DATABASE_URL,
@@ -45,4 +49,5 @@ export const AppDataSource = new DataSource({
   // Use detected globs so the runtime loads the correct entity files.
   entities: [entitiesGlob],
   migrations: [migrationsGlob],
+  subscribers: [subscribersGlob],
 });

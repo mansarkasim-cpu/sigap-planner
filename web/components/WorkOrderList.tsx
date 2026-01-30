@@ -303,8 +303,12 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         }
         const assignDate = `${sdUtc.getUTCFullYear()}-${pad(sdUtc.getUTCMonth() + 1)}-${pad(sdUtc.getUTCDate())}`;
         const assignTime = `${pad(sdUtc.getUTCHours())}:${pad(sdUtc.getUTCMinutes())}`;
-        console.debug('[openTaskModal] assignDate/time (local)', { assignDate, assignTime, raw: w.start_date });
-        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&time=${encodeURIComponent(assignTime)}&timeIsLocal=1` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
+        const edRaw = resolveEndDate(w) || w.start_date;
+        const edUtc = parseToUtcDate(String(edRaw));
+        const assignEndDate = edUtc ? `${edUtc.getUTCFullYear()}-${pad(edUtc.getUTCMonth() + 1)}-${pad(edUtc.getUTCDate())}` : assignDate;
+        const assignEndTime = edUtc ? `${pad(edUtc.getUTCHours())}:${pad(edUtc.getUTCMinutes())}` : assignTime;
+        console.debug('[openTaskModal] assignDate/time (local)', { assignDate, assignTime, assignEndDate, assignEndTime, raw: w.start_date });
+        const schedUrl = `/scheduled-technicians?date=${encodeURIComponent(assignDate)}&endDate=${encodeURIComponent(assignEndDate)}&time=${encodeURIComponent(assignTime)}&endTime=${encodeURIComponent(assignEndTime)}&timeIsLocal=1` + (woSite ? `&site=${encodeURIComponent(woSite)}` : '');
         console.debug(schedUrl);
 
         try {
@@ -653,7 +657,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
   function shouldShowAssignColumn(wo: WorkOrder | null) {
     const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
-    return !(s === 'IN_PROGRESS' || s === 'COMPLETED');
+    return !(s === 'COMPLETED');
   }
 
   function renderStatusBadge(s: string) {
@@ -864,7 +868,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                             </IconButton>
                           </Tooltip>
                         )}
-                        {!(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                        {!(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
                           <Tooltip title="Edit Tanggal">
                             <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
                               <EditOutlinedIcon fontSize="small" />
@@ -930,7 +934,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              {!(statusNorm === 'IN_PROGRESS' || statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                              {!(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
                                 <Tooltip title="Edit Tanggal">
                                   <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
                                     <EditOutlinedIcon fontSize="small" />
@@ -1103,7 +1107,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                     style={{ background: '#eef2ff', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'center' }}
                                   >
                                     <span style={{ fontSize: 13, fontWeight: 600 }}>{asgn.user?.name ?? asgn.user?.nipp ?? asgn.user?.email ?? asgn.assigned_to ?? 'Unknown'}</span>
-                                    {currentUser && !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) && (
+                                    {currentUser && !['DEPLOYED'].includes(((taskModal.wo as any)?.status ?? '').toString()) && (
                                       <button onClick={async () => {
                                         try {
                                           await apiClient(`/tasks/${encodeURIComponent(act.id)}/assign/${encodeURIComponent(asgn.id)}`, { method: 'DELETE' });
@@ -1205,7 +1209,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                     <Button size="small" variant="contained" color="primary" onClick={() => { window.location.href = '/login'; }}>Login to assign</Button>
                                     <Button size="small" onClick={() => { setSelectedAssignees(prev => ({ ...prev, [taskKey]: [] })); }}>Clear</Button>
                                   </>
-                                ) : !['DEPLOYED', 'IN_PROGRESS'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
+                                ) : !['DEPLOYED'].includes(((taskModal.wo as any)?.status ?? '').toString()) ? (
                                   <>
                                     <Button size="small" variant="contained" onClick={async () => {
                                       const ass = selectedAssignees[taskKey] || [];
@@ -1293,12 +1297,14 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         <DialogTitle>Edit Dates — {editing?.doc_no ?? editing?.id}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            {/* when work order is IN_PROGRESS only allow editing end date */}
             <TextField
               label="Start Date & Time"
               type="datetime-local"
               size="small"
               value={editStartInput}
               onChange={e => setEditStartInput(e.target.value)}
+              disabled={editing ? normalizeStatusRaw((editing as any).status ?? editing?.raw?.status) === 'IN_PROGRESS' : false}
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
@@ -1348,7 +1354,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
             )}
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+          <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setEditing(null)} disabled={editLoading}>Batal</Button>
           <Button variant="contained" color="primary" onClick={async () => {
             // Convert datetime-local (YYYY-MM-DDTHH:MM) to SQL datetime string 'YYYY-MM-DD HH:MM:00'
@@ -1362,10 +1368,12 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
             }
 
             // basic validation: ensure input matches expected pattern
-            if (editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { showToast('Start date tidak valid', 'warning'); return; }
+            const editingIsInProgress = editing ? normalizeStatusRaw((editing as any).status ?? editing?.raw?.status) === 'IN_PROGRESS' : false;
+            if (!editingIsInProgress && editStartInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editStartInput)) { showToast('Start date tidak valid', 'warning'); return; }
             if (editEndInput && !/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/.test(editEndInput)) { showToast('End date tidak valid', 'warning'); return; }
 
-            const sSql = datetimeLocalToSql(editStartInput || null);
+            // if editing is IN_PROGRESS, do not send start_date (preserve existing start)
+            const sSql = editingIsInProgress ? undefined : datetimeLocalToSql(editStartInput || null);
             const eSql = datetimeLocalToSql(editEndInput || null);
             await saveEdit(editing!.id, sSql, eSql);
           }} disabled={editLoading}>{editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>

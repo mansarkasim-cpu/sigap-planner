@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 // Foreground system notifications use `flutter_local_notifications`.
 // This enables showing notifications when app is in foreground.
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// Local notifications removed to avoid plugin build issues
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import '../config.dart';
@@ -12,15 +12,7 @@ import '../config.dart';
 class PushNotifications {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static bool _initialized = false;
-  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
-  static const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
-    'high_alerts',
-    'High Priority Alerts',
-    description: 'Loud alarm channel for SIGAP notifications',
-    importance: Importance.max,
-    playSound: true,
-  );
-  // no local notification plugin here to keep android build simple
+// Note: local foreground notifications removed; restore plugin to re-enable.
 
   // Call once during app startup
   static Future<void> init() async {
@@ -28,37 +20,10 @@ class PushNotifications {
       debugPrint('PushNotifications.init called');
       if (kIsWeb) return; // Web setup not covered here
       await _requestPermission();
-      // Initialize local notifications plugin and create channel on Android
-      try {
-        const initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-        const initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-        await _localNotifications.initialize(initializationSettings);
-        // create channel (no-op on iOS)
-        await _localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(_androidChannel);
-      } catch (e) {
-        debugPrint('Local notifications init failed: $e');
-      }
-
+      // Foreground messages are logged. To show system notifications while
+      // app is foreground, re-add `flutter_local_notifications` and initialize it.
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-        debugPrint('FCM foreground message: ${message.notification}');
-        final notif = message.notification;
-        if (notif != null && !kIsWeb) {
-          try {
-            final androidDetails = AndroidNotificationDetails(
-              _androidChannel.id,
-              _androidChannel.name,
-              channelDescription: _androidChannel.description,
-              importance: Importance.max,
-              priority: Priority.high,
-              sound: RawResourceAndroidNotificationSound('ship_horn'),
-              playSound: true,
-            );
-            final platformDetails = NotificationDetails(android: androidDetails);
-            await _localNotifications.show(notif.hashCode, notif.title, notif.body, platformDetails, payload: jsonEncode(message.data));
-          } catch (e) {
-            debugPrint('Failed to show local notification: $e');
-          }
-        }
+        debugPrint('FCM foreground message (no local notification): ${message.notification}');
       });
       // Listen for token refresh and register automatically
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {

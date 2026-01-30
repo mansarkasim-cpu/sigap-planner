@@ -270,15 +270,19 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
         if (site) {
             try {
                 const msRepo = ormconfig_1.AppDataSource.getRepository(MasterSite_1.MasterSite);
-                // try matching by code or name
                 let ms = null;
                 // if site looks numeric, try id lookup
                 const maybeId = Number(site);
                 if (!isNaN(maybeId) && Number.isInteger(maybeId)) {
                     ms = await msRepo.findOne({ where: { id: maybeId } });
                 }
-                if (!ms)
-                    ms = await msRepo.findOne({ where: [{ code: site }, { name: site }] });
+                // If not found by id, try a case-insensitive match on code or name.
+                if (!ms) {
+                    ms = await msRepo.createQueryBuilder('ms')
+                        .where('LOWER(ms.code) = LOWER(:s)', { s: site })
+                        .orWhere('LOWER(ms.name) = LOWER(:s)', { s: site })
+                        .getOne();
+                }
                 if (ms && (ms.timezone || '').toString().trim() !== '') {
                     timeZone = ms.timezone;
                 }
@@ -287,33 +291,45 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
                 console.warn('[scheduled-technicians] failed to lookup site timezone, falling back to default', e);
             }
         }
+        // support debug flag
+        const debugFlag = req.query.debug ? String(req.query.debug).toLowerCase() : '';
+        // support timeIsLocal flag: when true, the provided `time` is treated as the
+        // site's local wall-clock time (no UTC->local conversion). Accepts `1` or `true`.
+        const timeIsLocal = req.query.timeIsLocal ? String(req.query.timeIsLocal).toLowerCase() === '1' || String(req.query.timeIsLocal).toLowerCase() === 'true' : false;
         // Convert provided UTC date+time to the site's local date/time (in timeZone)
         // so shift matching uses local wall-clock time.
         let localTimeStr = null;
         let localDateStr = date; // fallback
         try {
             if (time) {
-                // build an ISO instant from provided date+time in UTC
-                const isoUtc = `${date}T${time}:00Z`;
-                const d = new Date(isoUtc);
-                if (!isNaN(d.getTime())) {
-                    // get local time components in target timezone
-                    const parts = new Intl.DateTimeFormat('en-GB', {
-                        timeZone,
-                        hour: '2-digit', minute: '2-digit', hour12: false,
-                        year: 'numeric', month: '2-digit', day: '2-digit'
-                    }).formatToParts(d);
-                    const map = {};
-                    for (const p of parts)
-                        map[p.type] = p.value;
-                    const hh = map.hour || '00';
-                    const mm = map.minute || '00';
-                    localTimeStr = `${hh}:${mm}`;
-                    const yyyy = map.year;
-                    const mmth = map.month;
-                    const dd = map.day;
-                    if (yyyy && mmth && dd)
-                        localDateStr = `${yyyy}-${mmth}-${dd}`;
+                if (timeIsLocal) {
+                    // Treat the provided `time` as already in the target timezone's local wall-clock.
+                    // Use it directly; local date remains `date` (caller may supply prior/next day if needed).
+                    localTimeStr = time;
+                }
+                else {
+                    // build an ISO instant from provided date+time in UTC
+                    const isoUtc = `${date}T${time}:00Z`;
+                    const d = new Date(isoUtc);
+                    if (!isNaN(d.getTime())) {
+                        // get local time components in target timezone
+                        const parts = new Intl.DateTimeFormat('en-GB', {
+                            timeZone,
+                            hour: '2-digit', minute: '2-digit', hour12: false,
+                            year: 'numeric', month: '2-digit', day: '2-digit'
+                        }).formatToParts(d);
+                        const map = {};
+                        for (const p of parts)
+                            map[p.type] = p.value;
+                        const hh = map.hour || '00';
+                        const mm = map.minute || '00';
+                        localTimeStr = `${hh}:${mm}`;
+                        const yyyy = map.year;
+                        const mmth = map.month;
+                        const dd = map.day;
+                        if (yyyy && mmth && dd)
+                            localDateStr = `${yyyy}-${mmth}-${dd}`;
+                    }
                 }
             }
         }
@@ -324,9 +340,12 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
         // Use raw SQL to extract JSONB members and join to user table
         const params = [localDateStr];
         let siteCond = '';
+        // Only filter by the assignment's site (`a.site`).
+        // Previously the code required both a.site and u.site to match the provided site,
+        // which incorrectly excluded users whose `site` field is empty or differs.
         if (site) {
             params.push(site);
-            siteCond = ' AND LOWER(COALESCE(a.site,\'\')) = LOWER($2) AND LOWER(COALESCE(u.site,\'\')) = LOWER($2)';
+            siteCond = ' AND LOWER(COALESCE(a.site,\'\')) = LOWER($2)';
         }
         // determine shift from local time if provided
         const shiftId = findShiftIdForTime(localTimeStr || time);
@@ -352,32 +371,40 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
       WHERE a.date = $1 ${siteCond} ${shiftCond}
       AND u.role = 'technician'
     `;
-        // Diagnostic: when debugging, log which group-member IDs and user IDs are matched
+        // Diagnostic: when debugging, collect which group-member IDs and user IDs are matched
+        let dbgMembers = [];
+        let dbgUserIds = [];
         try {
-            if (process.env.NODE_ENV !== 'production') {
-                // For member diagnostics, only filter by assignment.a.site (don't reference u)
-                const memberSiteCond = site ? ` AND LOWER(COALESCE(a.site,'')) = LOWER($2)` : '';
-                const dbgMembersSql = `
-          SELECT DISTINCT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
-          FROM shift_group g
-          JOIN shift_assignment a ON a.group_id = g.id
-          WHERE a.date = $1 ${memberSiteCond} ${shiftCond}
-        `;
+            // For member diagnostics, only filter by assignment.a.site (don't reference u)
+            const memberSiteCond = site ? ` AND LOWER(COALESCE(a.site,'')) = LOWER($2)` : '';
+            const dbgMembersSql = `
+        SELECT DISTINCT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
+        FROM shift_group g
+        JOIN shift_assignment a ON a.group_id = g.id
+        WHERE a.date = $1 ${memberSiteCond} ${shiftCond}
+      `;
+            if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
                 console.debug('[scheduled-technicians] diagnostic member_ids SQL', dbgMembersSql, params);
-                const dbgMembers = await ormconfig_1.AppDataSource.manager.query(dbgMembersSql, params);
+            }
+            dbgMembers = await ormconfig_1.AppDataSource.manager.query(dbgMembersSql, params);
+            if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
                 console.debug('[scheduled-technicians] diagnostic member_ids', dbgMembers);
-                const dbgUserIdsSql = `
-          SELECT DISTINCT u.id
-          FROM "user" u
-          JOIN (
-            SELECT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
-            FROM shift_group g
-          ) gm ON gm.member_id_text = u.id::text
-          JOIN shift_assignment a ON a.group_id = gm.gid
-          WHERE a.date = $1 ${siteCond} ${shiftCond}
-        `;
+            }
+            const dbgUserIdsSql = `
+        SELECT DISTINCT u.id
+        FROM "user" u
+        JOIN (
+          SELECT g.id as gid, jsonb_array_elements_text(g.members) as member_id_text
+          FROM shift_group g
+        ) gm ON gm.member_id_text = u.id::text
+        JOIN shift_assignment a ON a.group_id = gm.gid
+        WHERE a.date = $1 ${siteCond} ${shiftCond}
+      `;
+            if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
                 console.debug('[scheduled-technicians] diagnostic user_ids SQL', dbgUserIdsSql, params);
-                const dbgUserIds = await ormconfig_1.AppDataSource.manager.query(dbgUserIdsSql, params);
+            }
+            dbgUserIds = await ormconfig_1.AppDataSource.manager.query(dbgUserIdsSql, params);
+            if (process.env.NODE_ENV !== 'production' || debugFlag === '1' || debugFlag === 'true') {
                 console.debug('[scheduled-technicians] diagnostic user_ids', dbgUserIds);
             }
         }
@@ -386,6 +413,9 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
         }
         console.debug('[scheduled-technicians] main SQL', sql, params);
         const rows = await ormconfig_1.AppDataSource.manager.query(sql, params);
+        if (debugFlag === '1' || debugFlag === 'true') {
+            return res.json({ date, time, timeZone, localDateStr, localTimeStr, shiftId, params, dbgMembers, dbgUserIds, sql, rows });
+        }
         return res.json(rows);
     }
     catch (err) {
