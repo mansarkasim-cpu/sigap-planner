@@ -1,5 +1,6 @@
 import { EventSubscriber, EntitySubscriberInterface, InsertEvent } from 'typeorm';
 import { TaskAssignment } from '../entities/TaskAssignment';
+import { pushNotify } from '../services/pushService';
 import { AppDataSource } from '../ormconfig';
 import { Assignment } from '../entities/Assignment';
 import { Task } from '../entities/Task';
@@ -37,7 +38,20 @@ export class TaskAssignmentSubscriber implements EntitySubscriberInterface<TaskA
       ass.status = (String((wo as any).status || '').toUpperCase() === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'ASSIGNED';
       if (ass.status === 'IN_PROGRESS') ass.startedAt = new Date();
 
-      await assignmentRepo.save(ass);
+      const savedAss = await assignmentRepo.save(ass);
+      // If the related WorkOrder is already IN_PROGRESS, notify the newly assigned technician
+      try {
+        const woStatus = String((wo as any).status || '').toUpperCase();
+        if (woStatus === 'IN_PROGRESS') {
+          try {
+            await pushNotify(String(userId), `Anda ditugaskan pada Work Order ${wo.doc_no ?? wo.id}`);
+          } catch (e) {
+            console.warn('pushNotify failed for assignment', e);
+          }
+        }
+      } catch (e) {
+        // ignore notification errors
+      }
     } catch (e) {
       console.warn('TaskAssignmentSubscriber failed to create mirror Assignment', e);
     }
