@@ -1,6 +1,7 @@
 import { AppDataSource } from '../ormconfig';
 import { DeviceToken } from '../entities/DeviceToken';
 import { User } from '../entities/User';
+import { ShiftGroup } from '../entities/ShiftGroup';
 import admin from 'firebase-admin';
 import fs from 'fs';
 
@@ -47,22 +48,40 @@ async function tokensForUserId(userId: string) {
   const dtRepo = AppDataSource.getRepository(DeviceToken);
   if (!userId) {
     const rows = await dtRepo.find();
+    console.log('pushNotify: tokensForUserId called with empty userId -> returning all tokens count=', rows.length);
     return rows.map(r => r.token);
   }
   // special keywords
   if (userId === 'lead_shift') {
     const userRepo = AppDataSource.getRepository(User);
+    const shiftRepo = AppDataSource.getRepository(ShiftGroup);
+
+    // gather leaders declared via shift_group.leader
+    const groups = await shiftRepo.find();
+    const leaderIdsFromGroups = groups
+      .map(g => g.leader)
+      .filter((v): v is string => !!v && v.toString().trim() !== '');
+
+    // also keep legacy role-based leads for compatibility
     const leads = await userRepo.find({ where: { role: 'lead_shift' } as any });
-    if (leads.length === 0) return [];
-    const userIds = leads.map(u => u.id);
+    const leaderIdsFromRole = leads.map(u => u.id).filter((v): v is string => !!v);
+
+    const userIds = Array.from(new Set([...leaderIdsFromGroups, ...leaderIdsFromRole]));
+    console.log('pushNotify: resolving lead_shift users, fromGroups=', leaderIdsFromGroups.length, 'fromRole=', leaderIdsFromRole.length, 'total=', userIds.length);
+    if (userIds.length === 0) return [];
+
     const tokens = await dtRepo.createQueryBuilder('d')
       .where('d.user_id IN (:...ids)', { ids: userIds })
       .getMany();
-    return tokens.map(t => t.token);
+    const tokenList = tokens.map(t => t.token);
+    console.log('pushNotify: tokens for lead_shift count=', tokenList.length, 'tokens=', tokenList);
+    return tokenList;
   }
   // assume userId is uuid
   const tokens = await dtRepo.find({ where: { user: { id: userId } as any } as any });
-  return tokens.map(t => t.token);
+  const tokenList = tokens.map(t => t.token);
+  console.log('pushNotify: tokens for user', userId, 'count=', tokenList.length, 'tokens=', tokenList);
+  return tokenList;
 }
 
 export async function pushNotify(userId: string, message: string) {
