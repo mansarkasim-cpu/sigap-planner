@@ -88,6 +88,17 @@ export async function createOrUpdateFromSigap(payload: {
       end_date: payload.end_date ?? existing.end_date,
       raw: payload.raw ?? existing.raw,
     });
+    // If the existing record was soft-deleted, clear deleted_at to restore it
+    try {
+      if ((existing as any).deleted_at) {
+        (existing as any).deleted_at = null;
+      }
+      if ((existing as any).status === 'DELETED') {
+        (existing as any).status = 'PREPARATION';
+      }
+    } catch (e) {
+      // ignore if fields not present
+    }
     const saved = await repo.save(existing);
     // upsert tasks from SIGAP payload (if any)
     try {
@@ -146,6 +157,11 @@ export async function createOrUpdateFromSigap(payload: {
           end_date: payload.end_date ?? recovered.end_date,
           raw: payload.raw ?? recovered.raw,
         });
+        // clear soft-delete marker if present so re-imported WO becomes visible
+        try {
+          if ((recovered as any).deleted_at) (recovered as any).deleted_at = null;
+          if ((recovered as any).status === 'DELETED') (recovered as any).status = 'PREPARATION';
+        } catch (e) { /* ignore */ }
         const saved = await repo.save(recovered);
         try {
           await upsertTasksForWorkOrder(saved, payload.raw);
