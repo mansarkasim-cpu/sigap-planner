@@ -128,12 +128,31 @@ export async function createRealisasi(req: Request, res: Response) {
       await aRepo.save(maybe);
       console.log('INSTRUMENT pushNotify createRealisasi - maybe', { assignedBy: maybe.assignedBy, woId: maybe.wo?.id, woDoc: maybe.wo?.doc_no });
       pushNotify(maybe.assignedBy || "", `Realisasi submitted for WO ${maybe.wo?.doc_no}`);
+      // Also notify shift leaders so they receive a push when a technician submits realisasi
+      try {
+        console.log('INSTRUMENT pushNotify createRealisasi - lead_shift', { woId: maybe.wo?.id, woDoc: maybe.wo?.doc_no });
+        pushNotify('lead_shift', `New realisasi submitted for WO ${maybe.wo?.doc_no}`);
+      } catch (e) {
+        console.warn('Failed to pushNotify lead_shift for createRealisasi (maybe block)', e);
+      }
     } else {
       console.log('INSTRUMENT pushNotify createRealisasi - fallback task', { taskId: (task as any).id, woId: task.workOrder?.id, woDoc: task.workOrder?.doc_no });
       pushNotify('', `Realisasi submitted for WO ${task.workOrder?.doc_no}`);
+      // also notify shift leaders for fallback case
+      try {
+        console.log('INSTRUMENT pushNotify createRealisasi - lead_shift (fallback)', { woId: task.workOrder?.id, woDoc: task.workOrder?.doc_no });
+        pushNotify('lead_shift', `New realisasi submitted for WO ${task.workOrder?.doc_no}`);
+      } catch (e) {
+        console.warn('Failed to pushNotify lead_shift for createRealisasi (fallback)', e);
+      }
     }
   } catch (e) {
     pushNotify('', `Realisasi submitted for WO ${task.workOrder?.doc_no}`);
+    try {
+      pushNotify('lead_shift', `New realisasi submitted for WO ${task.workOrder?.doc_no}`);
+    } catch (ee) {
+      console.warn('Failed to pushNotify lead_shift for createRealisasi (catch)', ee);
+    }
   }
 
   return res.status(201).json({ id: realisasi.id });
