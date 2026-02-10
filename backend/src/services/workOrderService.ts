@@ -281,7 +281,8 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
 
   if (q && q.trim().length) {
     const like = `%${q.trim()}%`;
-    qb.where('(wo.doc_no ILIKE :like OR wo.asset_name ILIKE :like OR wo.description ILIKE :like)', { like });
+    // Also search common fields that may be stored inside the raw JSON payload
+    qb.where("(wo.doc_no ILIKE :like OR wo.asset_name ILIKE :like OR wo.description ILIKE :like OR COALESCE(wo.raw->>'doc_no','') ILIKE :like OR COALESCE(wo.raw->>'asset_name','') ILIKE :like OR COALESCE(wo.raw->>'description','') ILIKE :like OR COALESCE(wo.raw->>'asset','') ILIKE :like)", { like });
   }
 
   // optional site filtering: try matching raw->>'vendor_cabang' or raw->>'site'
@@ -318,7 +319,8 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
 
   // optional exclude_work_type: e.g., exclude DAILY
   if (exclude_work_type && String(exclude_work_type).trim().length) {
-    qb.andWhere('wo.work_type IS NULL OR wo.work_type != :exwt', { exwt: String(exclude_work_type).trim() });
+    // parenthesize to ensure correct operator precedence when combined with other WHERE clauses
+    qb.andWhere('(wo.work_type IS NULL OR wo.work_type != :exwt)', { exwt: String(exclude_work_type).trim() });
   }
 
   // exclude soft-deleted
@@ -327,6 +329,15 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
   qb.orderBy('wo.created_at', 'DESC')
     .skip((page - 1) * pageSize)
     .take(pageSize);
+
+  // debug: log built SQL and parameters to help diagnose search issues
+  try {
+    const qp = qb.getQueryAndParameters();
+    console.debug('[getWorkOrdersPaginated] built query:', qp[0]);
+    console.debug('[getWorkOrdersPaginated] query params:', qp[1]);
+  } catch (e) {
+    console.debug('[getWorkOrdersPaginated] failed to get query string', e);
+  }
 
   // inside getWorkOrdersPaginated after fetching rows...  
   const [rows, total] = await qb.getManyAndCount();
