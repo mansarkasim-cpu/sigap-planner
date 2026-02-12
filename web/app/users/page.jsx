@@ -36,7 +36,7 @@ export default function UsersPage() {
   const [roles, setRoles] = useState([]);
   const [sites, setSites] = useState([]);
   // fixed role options
-  const ROLE_OPTIONS = ['admin', 'planner', 'technician'];
+  const ROLE_OPTIONS = ['admin', 'planner', 'technician', 'terminal'];
   const combinedRoles = Array.from(new Set([...(ROLE_OPTIONS || []), ...(roles || [])]));
   const [roleFilter, setRoleFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
