@@ -49,6 +49,7 @@ function hasRole(raw, roleName) {
 export default function Nav(){
   const pathname = usePathname()
   const [showMaster, setShowMaster] = useState(false)
+  const [roleRaw, setRoleRaw] = useState(null)
 
   useEffect(()=>{
     let mounted = true
@@ -71,7 +72,10 @@ export default function Nav(){
           }
         }
         // show master menu for admin only
-        if (mounted) setShowMaster(isAdminRole(raw))
+        if (mounted) {
+          setShowMaster(isAdminRole(raw))
+          setRoleRaw(raw)
+        }
       }catch(e){ if (mounted) setIsAdmin(false) }
     }
     loadRole()
@@ -80,6 +84,8 @@ export default function Nav(){
 
   // hide nav on login page
   if (typeof pathname === 'string' && pathname === '/login') return null
+  const isTerminal = hasRole(roleRaw, 'terminal')
+
   return (
     <nav className="nav">
       <ul className="nav-menu">
@@ -98,29 +104,32 @@ export default function Nav(){
             </ul>
           </li>
         )}
+        {!isTerminal && (
+          <>
+            <li className="nav-item has-sub">
+              <span className="nav-link">Konfigurasi</span>
+              <ul className="sub-menu">
+                <li><Link href="/shifts" className="nav-link">Shift</Link></li>
+              </ul>
+            </li>
 
-        <li className="nav-item has-sub">
-          <span className="nav-link">Konfigurasi</span>
-          <ul className="sub-menu">
-            <li><Link href="/shifts" className="nav-link">Shift</Link></li>
-          </ul>
-        </li>
-
-        <li className="nav-item has-sub">
-          <span className="nav-link">Daily Checklist</span>
-          <ul className="sub-menu">
-            <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
-            <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li>
-          </ul>
-        </li>
+            <li className="nav-item has-sub">
+              <span className="nav-link">Daily Checklist</span>
+              <ul className="sub-menu">
+                <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+                <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li>
+              </ul>
+            </li>
+          </>
+        )}
 
         <li className="nav-item has-sub">
           <span className="nav-link">Work Order</span>
             <ul className="sub-menu">
-              <li><Link href="/work-orders" className="nav-link">List</Link></li>
+              {!isTerminal && (<li><Link href="/work-orders" className="nav-link">List</Link></li>)}
               <li><Link href="/gantt" className="nav-link">Gantt Chart</Link></li>
-            <li><Link href="/monitor" className="nav-link">Monitoring</Link></li>
-            <li><Link href="/realisasi" className="nav-link">Realisasi</Link></li>
+              {!isTerminal && (<li><Link href="/monitor" className="nav-link">Monitoring</Link></li>)}
+              <li><Link href="/realisasi" className="nav-link">Realisasi</Link></li>
            </ul>
         </li>
 

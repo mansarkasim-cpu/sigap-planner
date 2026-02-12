@@ -4,6 +4,7 @@ import * as siteCtrl from '../controllers/masterSiteController';
 import * as jenisCtrl from '../controllers/masterJenisAlatController';
 import * as alatCtrl from '../controllers/masterAlatController';
 import * as qCtrl from '../controllers/masterQuestionController';
+import * as rolesCtrl from '../controllers/masterRolesController';
 import { authMiddleware, requireRole } from '../middleware/auth';
 
 const router = Router();
@@ -48,5 +49,8 @@ router.patch('/master/options/:id', authMiddleware, requireRole(['admin']), qCtr
 router.delete('/master/options/:id', authMiddleware, requireRole(['admin']), qCtrl.deleteOption);
 // allow listing options (used by mobile client to fetch options per question)
 router.get('/master/options', authMiddleware, requireRole(['admin','technician']), qCtrl.listOptions);
+
+// Roles (simple master data)
+router.get('/master/roles', authMiddleware, requireRole(['admin','technician']), rolesCtrl.listRoles);
 
 export default router;
