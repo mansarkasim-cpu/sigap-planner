@@ -33,6 +33,26 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 
+function hasRole(raw: any, roleName: string) {
+  if (!raw) return false;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(String).some((r: string) => r.toLowerCase() === roleName);
+        if (typeof parsed === 'string') return parsed.toLowerCase() === roleName;
+        if (parsed && parsed.role) return String(parsed.role).toLowerCase() === roleName;
+      }
+      return raw.toLowerCase() === roleName;
+    }
+    if (Array.isArray(raw)) return raw.map(String).some((r: string) => r.toLowerCase() === roleName);
+    if (typeof raw === 'object') {
+      if (raw.role) return String(raw.role).toLowerCase() === roleName;
+    }
+  } catch (e) {}
+  return false;
+}
+
 export type Activity = {
   id?: string;
   task_name?: string;
@@ -134,6 +154,9 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     setSnackSeverity(severity);
     setSnackOpen(true);
   }
+
+  const roleRaw = typeof window !== 'undefined' ? localStorage.getItem('sigap_role') : null;
+  const isTerminal = hasRole(roleRaw, 'terminal');
 
   async function load(p = page, query = q, location = locationFilter, date = dateFilter) {
     setLoading(true);
@@ -657,6 +680,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
   function shouldShowAssignColumn(wo: WorkOrder | null) {
     const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
+    if (isTerminal) return false;
     return !(s === 'COMPLETED');
   }
 
@@ -868,18 +892,20 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                             </IconButton>
                           </Tooltip>
                         )}
-                        {!(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                        {!isTerminal && !(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
                           <Tooltip title="Edit Tanggal">
                             <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
                               <EditOutlinedIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         )}
-                        <Tooltip title="Hapus Work Order">
-                          <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        {!isTerminal && (
+                          <Tooltip title="Hapus Work Order">
+                            <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Box>
                       <div style={{ color: '#666', fontSize: 12 }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</div>
                     </Box>
@@ -934,18 +960,20 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              {!(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
+                              {!isTerminal && !(statusNorm === 'COMPLETED' || statusNorm === 'DEPLOYED') && (
                                 <Tooltip title="Edit Tanggal">
                                   <IconButton size="small" color="secondary" onClick={() => openEdit(w)} aria-label="Edit Dates">
                                     <EditOutlinedIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              <Tooltip title="Hapus Work Order">
-                                <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
-                                  <DeleteOutlineIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
+                              {!isTerminal && (
+                                <Tooltip title="Hapus Work Order">
+                                  <IconButton size="small" color="error" onClick={() => handleDeleteWorkOrder(w.id)} aria-label="Hapus">
+                                    <DeleteOutlineIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                             </Box>
                         </TableCell>
                       </TableRow>
@@ -1107,7 +1135,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                     style={{ background: '#eef2ff', padding: '4px 8px', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'center' }}
                                   >
                                     <span style={{ fontSize: 13, fontWeight: 600 }}>{asgn.user?.name ?? asgn.user?.nipp ?? asgn.user?.email ?? asgn.assigned_to ?? 'Unknown'}</span>
-                                    {currentUser && !['DEPLOYED'].includes(((taskModal.wo as any)?.status ?? '').toString()) && (
+                                    {currentUser && !isTerminal && !['DEPLOYED'].includes(((taskModal.wo as any)?.status ?? '').toString()) && (
                                       <button onClick={async () => {
                                         try {
                                           await apiClient(`/tasks/${encodeURIComponent(act.id)}/assign/${encodeURIComponent(asgn.id)}`, { method: 'DELETE' });
@@ -1130,7 +1158,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                               </div>
                             )}
                               <div style={{ marginTop: 8 }}>
-                                {currentUser ? (
+                                {currentUser && !isTerminal ? (
                                   <button onClick={async () => {
                                     const tid = act.id ?? act.task_id ?? String(idx);
                                     if (!tid) { showToast('Task id tidak tersedia', 'error'); return; }
@@ -1277,11 +1305,13 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         </DialogContent>
         <DialogActions>
           <Button onClick={closeRowModal}>Close</Button>
-          <Tooltip title="Edit Tanggal">
-            <IconButton onClick={() => { if (!modalRow) return; openEdit(modalRow); closeRowModal(); }} aria-label="Edit Dates">
-              <EditOutlinedIcon />
-            </IconButton>
-          </Tooltip>
+          {!isTerminal && (
+            <Tooltip title="Edit Tanggal">
+              <IconButton onClick={() => { if (!modalRow) return; openEdit(modalRow); closeRowModal(); }} aria-label="Edit Dates">
+                <EditOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           {modalRow && Array.isArray(modalRow.raw?.activities) && modalRow.raw.activities.length > 0 && (
             <Tooltip title={`Lihat Task (${(modalRow.raw?.activities || []).length})`}>
               <IconButton onClick={() => { if (modalRow) { openTaskModal(modalRow); closeRowModal(); } }} aria-label="Lihat Task">
