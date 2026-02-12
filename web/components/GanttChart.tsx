@@ -1242,7 +1242,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   const canResizeLeft = canMove;
                   const canResizeRight = canMove || statusNorm === 'DEPLOYED' || statusNorm === 'IN_PROGRESS';
                   const interactive = canMove || canResizeRight;
-                  const cursorStyle = canMove ? 'grab' : (canResizeRight ? 'ew-resize' : 'pointer');
+                  const cursorStyle = isTerminal ? 'default' : (canMove ? 'grab' : (canResizeRight ? 'ew-resize' : 'pointer'));
 
                   return (
                     <g
@@ -1270,6 +1270,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                       }}
                       onMouseDown={(ev) => {
                         try {
+                          if (isTerminal) return;
                           if (!interactive) return;
                           ev.stopPropagation();
                           const rect = (ev.currentTarget as SVGGElement).ownerSVGElement?.getBoundingClientRect();
