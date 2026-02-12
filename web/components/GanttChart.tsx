@@ -143,6 +143,26 @@ function isDarkColor(hex: string) {
   return lum < 140;
 }
 
+function hasRole(raw: any, roleName: string) {
+  if (!raw) return false;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(String).some((r: string) => r.toLowerCase() === roleName);
+        if (typeof parsed === 'string') return parsed.toLowerCase() === roleName;
+        if (parsed && parsed.role) return String(parsed.role).toLowerCase() === roleName;
+      }
+      return raw.toLowerCase() === roleName;
+    }
+    if (Array.isArray(raw)) return raw.map(String).some((r: string) => r.toLowerCase() === roleName);
+    if (typeof raw === 'object') {
+      if (raw.role) return String(raw.role).toLowerCase() === roleName;
+    }
+  } catch (e) {}
+  return false;
+}
+
 function pickColorForWork(w: WO) {
   // prefer top-level status if present (set by backend), fallback to raw payload fields
   const statusRaw = (w as any).status || (w.raw && (w.raw.doc_status || w.raw.status || w.raw.state)) || null;
@@ -286,6 +306,8 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const [techLoading, setTechLoading] = useState<boolean>(false);
   const [taskLoading, setTaskLoading] = useState<boolean>(false);
   const [assignLoading, setAssignLoading] = useState<Record<string, boolean>>({});
+  const roleRaw = typeof window !== 'undefined' ? localStorage.getItem('sigap_role') : null;
+  const isTerminal = hasRole(roleRaw, 'terminal');
   // displayMode: 'both' | 'planned' | 'actual'
   const [displayMode, setDisplayMode] = useState<string>('both');
 
@@ -532,6 +554,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
   function shouldShowAssignColumn(wo: WO | null) {
     const s = ((wo as any)?.status ?? wo?.raw?.status ?? '').toString().toUpperCase().replace(/[-\s]/g, '_');
+    if (isTerminal) return false;
     return !(s === 'COMPLETED');
   }
 
@@ -1400,7 +1423,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSelected(null)}>Close</Button>
-          {selected && normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') !== 'COMPLETED' && (
+          {selected && !isTerminal && normalizeStatusRaw((selected as any).status ?? selected.raw?.status ?? '') !== 'COMPLETED' && (
             <Tooltip title="Edit Tanggal">
               <IconButton onClick={() => {
                 if (!selected) return;
