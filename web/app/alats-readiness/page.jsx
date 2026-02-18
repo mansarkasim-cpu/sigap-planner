@@ -268,8 +268,12 @@ export default function AlatReadiness(){
 
           {pageItems.map((a)=> (
             <Grid key={a.id} item xs={3}>
-              <Card variant="outlined" sx={{height:'100%'}} onClick={() => router.push(`/master/alats?q=${encodeURIComponent(String(a.nama||a.kode||a.serial_no||a.id))}`)}>
-                <CardContent sx={{display:'flex',gap:1,alignItems:'center',flexDirection:'column',py:2}}>
+              <Card
+                variant="outlined"
+                sx={{height:250, display:'flex', flexDirection:'column'}}
+                onClick={() => router.push(`/master/alats?q=${encodeURIComponent(String(a.nama||a.kode||a.serial_no||a.id))}`)}
+              >
+                <CardContent sx={{display:'flex',gap:1,alignItems:'center',flexDirection:'column',py:1, px:2, flex:'0 0 auto'}}>
                   {a.__status !== 'NOT_READY' && (
                     <Avatar sx={{bgcolor: 'success.main', width:56, height:56}}>
                       {String((a.nama||a.name||'')[0]||'A').toUpperCase()}
@@ -280,10 +284,13 @@ export default function AlatReadiness(){
                   <Box sx={{mt:1}}>
                     <Chip label={a.__status === 'NOT_READY' ? 'Not Ready' : 'Ready'} color={a.__status === 'NOT_READY' ? 'error' : 'success'} size="small" />
                   </Box>
+                </CardContent>
+
+                <CardContent sx={{flex:'1 1 auto', overflowY:'auto', px:2, pt:0}}>
                   {a.__status === 'NOT_READY' && a.__wo && (
-                    <Box sx={{mt:1, width:'100%', textAlign:'center'}}>
+                    <Box sx={{width:'100%', textAlign:'center'}}>
                       <Typography variant="caption" sx={{display:'block',fontWeight:700}}>{a.__wo.doc_no || a.__wo.name || a.__wo.id}</Typography>
-                      <Typography variant="caption" sx={{display:'block',color:'text.secondary',whiteSpace:'normal',wordBreak:'break-word', fontSize:10, maxHeight:96, overflowY:'auto', width:'100%', px:1}}>
+                      <Typography variant="caption" sx={{display:'block',color:'text.secondary',whiteSpace:'normal',wordBreak:'break-word', fontSize:10}}>
                         {a.__wo.description || a.__wo.raw?.description || a.__wo.raw?.desc || '-'}
                       </Typography>
                       <Box sx={{display:'flex',justifyContent:'center',alignItems:'center',gap:1,mt:0.5}}>
