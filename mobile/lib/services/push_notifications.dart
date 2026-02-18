@@ -152,4 +152,30 @@ class PushNotifications {
       debugPrintStack(label: '_sendTokenToServer stacktrace', maxFrames: 10);
     }
   }
+
+  // Unregister token from backend for current authenticated user
+  static Future<void> unregisterAndSendToken() async {
+    try {
+      debugPrint('=== unregisterAndSendToken: START ===');
+      final prefs = await SharedPreferences.getInstance();
+      final apiToken = prefs.getString('api_token') ?? '';
+      if (apiToken.isEmpty) {
+        debugPrint('❌ unregister: no api token available; skipping');
+        return;
+      }
+
+      final token = await getToken();
+      if (token == null || token.isEmpty) {
+        debugPrint('❌ unregister: fcm token missing; skipping');
+        return;
+      }
+
+      final api = ApiClient(baseUrl: API_BASE, token: apiToken);
+      debugPrint('→ Sending delete device token to /device-tokens');
+      await api.delete('/device-tokens', {'token': token});
+      debugPrint('✓ unregisterAndSendToken: completed');
+    } catch (e) {
+      debugPrint('❌ unregisterAndSendToken error: $e');
+    }
+  }
 }

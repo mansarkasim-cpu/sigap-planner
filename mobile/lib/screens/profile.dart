@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../config.dart';
+import '../services/push_notifications.dart';
 import 'login.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -43,9 +44,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove('api_token');
-    await p.remove('tech_id');
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: const Text('Confirm logout'),
+              content: const Text('Are you sure you want to logout?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.of(c).pop(true), child: const Text('Logout')),
+              ],
+            ));
+    if (confirmed != true) return;
+    // show loading dialog while unregistering and clearing prefs
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => WillPopScope(
+              onWillPop: () async => false,
+              child: Dialog(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Text('Logging out...'),
+                    ],
+                  ),
+                ),
+              ),
+            ));
+    try {
+      await PushNotifications.unregisterAndSendToken();
+    } catch (e) {
+      debugPrint('Profile: failed to unregister device token: $e');
+    }
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove('api_token');
+      await p.remove('tech_id');
+    } catch (e) {
+      debugPrint('Profile: failed to clear prefs: $e');
+    }
+    try {
+      Navigator.of(context, rootNavigator: true).pop();
+    } catch (_) {}
     Navigator.pushAndRemoveUntil(context,
         MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
   }
