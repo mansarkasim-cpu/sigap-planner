@@ -466,3 +466,102 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
 }
 
 export { RealisasiCreateDTO };
+
+export async function updateRealisasi(req: Request, res: Response) {
+  const user = (req as any).user;
+  if (!user) return res.status(403).json({ message: 'Forbidden' });
+
+  const woId = req.params.woId || req.params.id || null;
+  const rid = req.params.rid || req.params.id || null;
+  if (!rid) return res.status(400).json({ message: 'realisasi id required' });
+
+  try {
+    const r = await realisasiRepo().findOne({ where: { id: rid }, relations: ['task', 'task.workOrder'] as any });
+    if (!r) return res.status(404).json({ message: 'Realisasi not found' });
+    if (woId && r.task && r.task.workOrder && String(r.task.workOrder.id) !== String(woId)) {
+      return res.status(400).json({ message: 'WorkOrder id mismatch' });
+    }
+
+    // role check: allow admin, planned, planner (flexible checks)
+    const role = (user?.role || '').toString();
+    const rolesArr = Array.isArray(user?.roles) ? user.roles : [];
+    const allowed = role === 'admin' || role === 'planned' || role === 'planner' || rolesArr.includes('admin') || rolesArr.includes('planned') || rolesArr.includes('planner');
+    if (!allowed) return res.status(403).json({ message: 'Forbidden' });
+
+    const oldStart = r.startTime ? new Date(r.startTime) : null;
+    const oldEnd = r.endTime ? new Date(r.endTime) : null;
+
+    const body: any = req.body || {};
+    const newStart = body.start ? new Date(body.start) : null;
+    const newEnd = body.end ? new Date(body.end) : null;
+    const note = body.note || null;
+
+    // apply changes
+    if (newStart !== null) r.startTime = newStart; else r.startTime = null;
+    if (newEnd !== null) r.endTime = newEnd; else r.endTime = null;
+    if (note !== null) r.notes = note;
+
+    await realisasiRepo().save(r);
+
+    // ensure history table exists (best-effort) and insert history row
+    try {
+      await AppDataSource.query(`
+        CREATE TABLE IF NOT EXISTS realisasi_history (
+          id uuid PRIMARY KEY,
+          realisasi_id uuid,
+          work_order_id uuid,
+          task_id uuid,
+          changed_by varchar(255),
+          changed_at timestamptz DEFAULT now(),
+          old_start timestamptz,
+          old_end timestamptz,
+          new_start timestamptz,
+          new_end timestamptz,
+          note text
+        )
+      `);
+      const histId = uuidv4();
+      const params = [histId, rid, r.task?.workOrder?.id || null, r.task?.id || null, user?.id || user?.name || null, oldStart, oldEnd, r.startTime || null, r.endTime || null, note];
+      await AppDataSource.query(
+        `INSERT INTO realisasi_history(id, realisasi_id, work_order_id, task_id, changed_by, old_start, old_end, new_start, new_end, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        params
+      );
+    } catch (e) {
+      console.warn('Failed to record realisasi_history', e);
+    }
+
+    return res.json({ id: r.id, start: r.startTime || null, end: r.endTime || null, notes: r.notes || null });
+  } catch (e) {
+    console.error('updateRealisasi error', e);
+    return res.status(500).json({ message: 'Failed to update realisasi' });
+  }
+}
+
+export async function getRealisasiHistory(req: Request, res: Response) {
+  const rid = req.params.rid || req.params.id;
+  if (!rid) return res.status(400).json({ message: 'realisasi id required' });
+  try {
+    const rows: any[] = await AppDataSource.query(
+      `SELECT id, realisasi_id, work_order_id, task_id, changed_by, changed_at, old_start, old_end, new_start, new_end, note FROM realisasi_history WHERE realisasi_id = $1 ORDER BY changed_at DESC`,
+      [rid]
+    );
+    const out: any[] = [];
+    const userRepo = AppDataSource.getRepository(User);
+    for (const r of rows || []) {
+      let userObj: any = null;
+      try {
+        if (r.changed_by) {
+          const u = await userRepo.findOneBy({ id: r.changed_by } as any);
+          if (u) userObj = { id: u.id, name: u.name, email: u.email, nipp: u.nipp };
+        }
+      } catch (e) {
+        // ignore lookup errors
+      }
+      out.push({ id: r.id, changed_at: r.changed_at, user: userObj || r.changed_by, old_start: r.old_start, new_start: r.new_start, old_end: r.old_end, new_end: r.new_end, note: r.note });
+    }
+    return res.json(out);
+  } catch (e) {
+    console.error('getRealisasiHistory error', e);
+    return res.status(500).json({ message: 'Failed to load realisasi history' });
+  }
+}

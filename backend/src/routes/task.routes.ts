@@ -5,6 +5,7 @@ import { Assignment } from '../entities/Assignment';
 import { TaskAssignment } from '../entities/TaskAssignment';
 import { WorkOrder } from '../entities/WorkOrder';
 import { authMiddleware } from '../middleware/auth';
+import { updateRealisasi, getRealisasiHistory } from '../dto/realisasi.dto';
 import { validate, IsNotEmpty, IsOptional, IsInt } from 'class-validator';
 
 const router = Router();
@@ -167,6 +168,12 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       return res.status(500).json({ message: 'Failed to fetch realisasi entries' });
     }
   });
+
+    // PATCH /api/work-orders/:woId/realisasi/:rid - update realisasi (start/end/notes) and record history
+    router.patch('/work-orders/:woId/realisasi/:rid', authMiddleware, async (req: Request, res: Response) => updateRealisasi(req as any, res as any));
+
+    // GET /api/work-orders/:woId/realisasi/:rid/history - fetch edit history for a realisasi
+    router.get('/work-orders/:woId/realisasi/:rid/history', authMiddleware, async (req: Request, res: Response) => getRealisasiHistory(req as any, res as any));
 class CreateTaskDTO {
   @IsNotEmpty()
   name!: string;

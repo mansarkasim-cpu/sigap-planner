@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import apiClient from '../../lib/api-client'
-import { formatUtcToZone } from '../../lib/date-utils'
+import { formatUtcToZone, toInputDatetime } from '../../lib/date-utils'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
@@ -32,6 +32,8 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Divider from '@mui/material/Divider'
 import VisibilityIcon from '@mui/icons-material/Visibility'
+import EditIcon from '@mui/icons-material/Edit'
+import HistoryIcon from '@mui/icons-material/History'
  
 
 function getSiteTimezone(wo) {
@@ -111,6 +113,26 @@ function computeRangeFromItems(items) {
   return { minStart: min, maxEnd: max }
 }
 
+function hasRole(raw, roleName) {
+  if (!raw) return false
+  try {
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed.map(String).some(r => r.toLowerCase() === roleName)
+        if (typeof parsed === 'string') return parsed.toLowerCase() === roleName
+        if (parsed && parsed.role) return String(parsed.role).toLowerCase() === roleName
+      }
+      return raw.toLowerCase() === roleName
+    }
+    if (Array.isArray(raw)) return raw.map(String).some(r => r.toLowerCase() === roleName)
+    if (typeof raw === 'object') {
+      if (raw.role) return String(raw.role).toLowerCase() === roleName
+    }
+  } catch (e) {}
+  return false
+}
+
 export default function Page() {
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState([])
@@ -118,6 +140,16 @@ export default function Page() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [modalData, setModalData] = useState(null)
+  const [modalHistory, setModalHistory] = useState({})
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editRealisasi, setEditRealisasi] = useState(null)
+  const [editStartInput, setEditStartInput] = useState('')
+  const [editEndInput, setEditEndInput] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editNote, setEditNote] = useState('')
+  const [modalHistoryVisible, setModalHistoryVisible] = useState({})
+  const roleRaw = (typeof window !== 'undefined') ? localStorage.getItem('sigap_role') : null
+  const canEdit = hasRole(roleRaw, 'planned') || hasRole(roleRaw, 'planner') || hasRole(roleRaw, 'admin')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
@@ -273,11 +305,68 @@ export default function Page() {
     try {
       const res = await loadDetails(wo.id)
       setModalData({ wo, tasks: res.tasks || [], relByTask: res.relByTask || {} })
+      // prefetch nothing else; history will be fetched on demand per realisasi
     } catch (e) {
       console.error('openModal error', e)
       setModalData({ wo, tasks: [], relByTask: {} })
     } finally {
       setModalLoading(false)
+    }
+  }
+
+  async function fetchRealisasiHistory(woId, realisasiId) {
+    if (!woId || !realisasiId) return []
+    try {
+      const res = await apiClient(`/work-orders/${encodeURIComponent(woId)}/realisasi/${encodeURIComponent(realisasiId)}/history`)
+      const rows = res?.data ?? res
+      if (Array.isArray(rows)) {
+        setModalHistory(prev => ({ ...prev, [realisasiId]: rows }))
+        return rows
+      }
+    } catch (e) {
+      console.error('fetch history', e)
+    }
+    setModalHistory(prev => ({ ...prev, [realisasiId]: [] }))
+    return []
+  }
+
+  function openEditDialog(realisasi) {
+    setEditRealisasi(realisasi)
+    // convert to input-friendly values (datetime-local expects YYYY-MM-DDTHH:MM)
+    const tz = getSiteTimezone(modalData?.wo) || undefined
+    setEditStartInput(toInputDatetime(realisasi.start || realisasi.start_time || realisasi.startTime, tz))
+    setEditEndInput(toInputDatetime(realisasi.end || realisasi.end_time || realisasi.endTime, tz))
+    setEditNote(realisasi.note ?? realisasi.notes ?? '')
+    setEditDialogOpen(true)
+  }
+
+  async function saveEdit() {
+    if (!editRealisasi) return
+    setEditSaving(true)
+    try {
+      const payload = {}
+      if (editStartInput) payload.start = new Date(editStartInput).toISOString()
+      else payload.start = null
+      if (editEndInput) payload.end = new Date(editEndInput).toISOString()
+      else payload.end = null
+      if (typeof editNote !== 'undefined') payload.note = editNote
+      // call backend to update realisasi; backend should record change in audit log
+      const woId = modalData?.wo?.id
+      const rid = editRealisasi.id || editRealisasi._id || editRealisasi.realisasi_id
+      await apiClient(`/work-orders/${encodeURIComponent(woId)}/realisasi/${encodeURIComponent(rid)}`, { method: 'PATCH', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+      // refresh details and history
+      await loadDetails(woId)
+      await fetchRealisasiHistory(woId, rid)
+      // update modalData by reloading
+      const res = await loadDetails(woId)
+      setModalData({ wo: modalData.wo, tasks: res.tasks || [], relByTask: res.relByTask || {} })
+      setEditDialogOpen(false)
+      setEditRealisasi(null)
+    } catch (e) {
+      console.error('saveEdit error', e)
+      alert('Gagal menyimpan perubahan')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -420,9 +509,53 @@ export default function Page() {
                                     <Chip label={`Start: ${formatDateDisplay(chosen.start, getSiteTimezone(modalData.wo))}`} size="small" />
                                     <Chip label={`End: ${formatDateDisplay(chosen.end, getSiteTimezone(modalData.wo))}`} size="small" />
                                   </Stack>
-                                  <Chip label={getSubmitterName(chosen)} size="small" avatar={chosen.user ? <Avatar alt={chosen.user.name || chosen.user.id}>{(chosen.user.name || chosen.user.email || '').charAt(0)}</Avatar> : undefined} />
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Chip label={getSubmitterName(chosen)} size="small" avatar={chosen.user ? <Avatar alt={chosen.user.name || chosen.user.id}>{(chosen.user.name || chosen.user.email || '').charAt(0)}</Avatar> : undefined} />
+                                    {canEdit ? (
+                                      <IconButton size="small" onClick={() => openEditDialog(chosen)} title="Edit start/end"><EditIcon fontSize="small" /></IconButton>
+                                    ) : null}
+                                    <IconButton size="small" onClick={async () => {
+                                      const rid = chosen.id || chosen._id || chosen.realisasi_id
+                                      const woId = modalData?.wo?.id
+                                      if (!rid || !woId) return
+                                      if (!modalHistory[rid] || (modalHistory[rid] && modalHistory[rid].length === 0)) {
+                                        await fetchRealisasiHistory(woId, rid)
+                                      }
+                                      setModalHistoryVisible(prev => ({ ...prev, [rid]: !prev[rid] }))
+                                    }} title="History"><HistoryIcon fontSize="small" /></IconButton>
+                                  </Box>
                                 </Box>
                                 {chosen.notes ? <Typography sx={{ mt: 1 }}>{chosen.notes}</Typography> : null}
+                                {(() => {
+                                  const rid = chosen.id || chosen._id || chosen.realisasi_id
+                                  const rows = modalHistory[rid] || []
+                                  if (!rid) return null
+                                  if (!modalHistoryVisible[rid]) return null
+                                  return (
+                                    <Box sx={{ mt: 1 }}>
+                                      <Divider />
+                                      <Typography variant="subtitle2" sx={{ mt: 1 }}>Change History</Typography>
+                                      {rows.length === 0 ? <div style={{ color: '#666' }}>No history available.</div> : rows.map((h, idx) => (
+                                        <Paper key={idx} variant="outlined" sx={{ p: 1, mt: 1 }}>
+                                          {(() => {
+                                            const tz = getSiteTimezone(modalData?.wo)
+                                            const fmt = (v) => v ? formatUtcToZone(v, tz) : ''
+                                            return (
+                                              <div>
+                                                <div style={{ fontSize: 12, color: '#666' }}>{fmt(h.changed_at || h.created_at || h.timestamp)} — {h.user?.name || h.user?.email || h.user || ''}</div>
+                                                <div style={{ fontSize: 13 }}>{h.old_start || h.from_start || h.prev_start ? `Start: ${fmt(h.old_start || h.from_start || h.prev_start)}` : ''}</div>
+                                                <div style={{ fontSize: 13 }}>{h.new_start || h.to_start || h.start ? `New: ${fmt(h.new_start || h.to_start || h.start)}` : ''}</div>
+                                                <div style={{ fontSize: 13 }}>{h.old_end || h.from_end || h.prev_end ? `End: ${fmt(h.old_end || h.from_end || h.prev_end)}` : ''}</div>
+                                                <div style={{ fontSize: 13 }}>{h.new_end || h.to_end || h.end ? `New: ${fmt(h.new_end || h.to_end || h.end)}` : ''}</div>
+                                              </div>
+                                            )
+                                          })()}
+                                          {h.note ? <div style={{ marginTop: 6 }}>{h.note}</div> : null}
+                                        </Paper>
+                                      ))}
+                                    </Box>
+                                  )
+                                })()}
                               </Box>
                             </Paper>
                           )
@@ -443,6 +576,20 @@ export default function Page() {
         </DialogContent>
         <DialogActions>
           <Button onClick={closeModal}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog fullWidth maxWidth="sm" open={editDialogOpen} onClose={() => setEditDialogOpen(false)}>
+        <DialogTitle>Edit Realisasi</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField label="Start" type="datetime-local" InputLabelProps={{ shrink: true }} value={editStartInput} onChange={(e) => setEditStartInput(e.target.value)} />
+            <TextField label="End" type="datetime-local" InputLabelProps={{ shrink: true }} value={editEndInput} onChange={(e) => setEditEndInput(e.target.value)} />
+            <TextField label="Keterangan" placeholder="Keterangan / alasan (opsional)" multiline rows={3} value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setEditDialogOpen(false); setEditRealisasi(null); }}>Cancel</Button>
+          <Button variant="contained" onClick={saveEdit} disabled={editSaving}>{editSaving ? 'Saving...' : 'Save'}</Button>
         </DialogActions>
       </Dialog>
     </main>
