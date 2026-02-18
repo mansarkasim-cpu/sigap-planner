@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/logout_notifier.dart';
+import 'login.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
@@ -35,6 +37,7 @@ class _InboxScreenState extends State<InboxScreen> {
   List<String> currentUserIdentifiers = [];
   String leaderGroupId = '';
   Map<String, String> assigneeNames = {};
+  StreamSubscription? _logoutSub;
 
   Future<void> loadAssignments() async {
     final base = API_BASE;
@@ -575,6 +578,18 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void initState() {
     super.initState();
+    // subscribe to global logout events (triggered on 401)
+    _logoutSub = LogoutNotifier.instance.stream.listen((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => LoginScreen()),
+              (r) => false);
+        } catch (e) {}
+      });
+    });
+
     _loadPrefs();
     // start background uploader to retry queued realisasi
     RetryUploader.instance.start(base: API_BASE);
@@ -585,6 +600,7 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _logoutSub?.cancel();
     RetryUploader.instance.stop();
     super.dispose();
   }

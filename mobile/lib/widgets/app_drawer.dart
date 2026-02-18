@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/api.dart';
 import '../config.dart';
+import '../services/push_notifications.dart';
 import '../screens/profile.dart';
 import '../screens/checklist.dart';
 import '../screens/checklist_history.dart';
@@ -239,9 +240,43 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _logout() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove('api_token');
-    await p.remove('tech_id');
+    try {
+      // attempt to unregister device token on backend before clearing local auth
+      // show loading dialog while unregistering
+      showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (c) => WillPopScope(
+                onWillPop: () async => false,
+                child: Dialog(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        CircularProgressIndicator(),
+                        SizedBox(width: 16),
+                        Text('Logging out...'),
+                      ],
+                    ),
+                  ),
+                ),
+              ));
+      await PushNotifications.unregisterAndSendToken();
+    } catch (e) {
+      debugPrint('AppDrawer: failed to unregister device token: $e');
+    }
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove('api_token');
+      await p.remove('tech_id');
+    } catch (e) {
+      debugPrint('AppDrawer: failed to clear prefs: $e');
+    }
+    // dismiss loading dialog if still shown
+    try {
+      Navigator.of(context, rootNavigator: true).pop();
+    } catch (_) {}
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(context,
         MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
@@ -360,7 +395,21 @@ class _AppDrawerState extends State<AppDrawer> {
                 title: const Text('Logout'),
                 onTap: () async {
                   Navigator.pop(context);
-                  await _logout();
+                  final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                            title: const Text('Confirm logout'),
+                            content: const Text('Are you sure you want to logout?'),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.of(c).pop(false),
+                                  child: const Text('Cancel')),
+                              TextButton(
+                                  onPressed: () => Navigator.of(c).pop(true),
+                                  child: const Text('Logout')),
+                            ],
+                          ));
+                  if (confirmed == true) await _logout();
                 }),
             const Spacer(),
             Padding(
