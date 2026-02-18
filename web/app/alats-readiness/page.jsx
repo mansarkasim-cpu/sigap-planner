@@ -120,8 +120,8 @@ export default function AlatReadiness(){
           continue
         }
 
-        // if work type is breakdown/failure and not completed, consider not ready
-        if (/(breakdown|failure|bd)/i.test(wt) && !(statusRaw.includes('completed') || statusRaw.includes('done'))){
+        // if work type is breakdown/failure/accident and not completed, consider not ready
+        if (/(breakdown|failure|bd|accident|accid)/i.test(wt) && !(statusRaw.includes('completed') || statusRaw.includes('done'))){
           recordMatch(r.asset_id, r.asset_name)
           continue
         }
@@ -283,7 +283,7 @@ export default function AlatReadiness(){
                   {a.__status === 'NOT_READY' && a.__wo && (
                     <Box sx={{mt:1, width:'100%', textAlign:'center'}}>
                       <Typography variant="caption" sx={{display:'block',fontWeight:700}}>{a.__wo.doc_no || a.__wo.name || a.__wo.id}</Typography>
-                      <Typography variant="caption" sx={{display:'block',color:'text.secondary',whiteSpace:'normal',wordBreak:'break-word', fontSize:10}}>
+                      <Typography variant="caption" sx={{display:'block',color:'text.secondary',whiteSpace:'normal',wordBreak:'break-word', fontSize:10, maxHeight:96, overflowY:'auto', width:'100%', px:1}}>
                         {a.__wo.description || a.__wo.raw?.description || a.__wo.raw?.desc || '-'}
                       </Typography>
                       <Box sx={{display:'flex',justifyContent:'center',alignItems:'center',gap:1,mt:0.5}}>
