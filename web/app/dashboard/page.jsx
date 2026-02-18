@@ -35,6 +35,8 @@ export default function Dashboard(){
   const [readyAssets, setReadyAssets] = useState([])
   const [notReadyAssets, setNotReadyAssets] = useState([])
   const [lastUpdated, setLastUpdated] = useState(null)
+  // toggle to show/hide readiness table on main dashboard
+  const SHOW_READINESS_ON_DASHBOARD = false
 
   useEffect(()=>{
     if (typeof window === 'undefined') return
@@ -230,37 +232,39 @@ export default function Dashboard(){
         {/* Gantt preview removed */}
       </Grid>
 
-        <Box sx={{mt:2}}>
-          <Typography variant="h6" sx={{mb:1}}>Kesiapan Alat</Typography>
-          <Paper sx={{p:2}}>
-            <Box sx={{display:'flex',gap:2}}>
-              <Box sx={{flex:1}}>
-                <Typography variant="subtitle1">Not Ready ({notReadyAssets.length})</Typography>
-                <Divider sx={{my:1}} />
-                {notReadyAssets.length === 0 && <Typography sx={{color:'#666'}}>Semua alat siap</Typography>}
-                <List dense>
-                  {notReadyAssets.map((a)=> (
-                    <ListItem key={a.id} button>
-                      <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
+        {SHOW_READINESS_ON_DASHBOARD && (
+          <Box sx={{mt:2}}>
+            <Typography variant="h6" sx={{mb:1}}>Kesiapan Alat</Typography>
+            <Paper sx={{p:2}}>
+              <Box sx={{display:'flex',gap:2}}>
+                <Box sx={{flex:1}}>
+                  <Typography variant="subtitle1">Not Ready ({notReadyAssets.length})</Typography>
+                  <Divider sx={{my:1}} />
+                  {notReadyAssets.length === 0 && <Typography sx={{color:'#666'}}>Semua alat siap</Typography>}
+                  <List dense>
+                    {notReadyAssets.map((a)=> (
+                      <ListItem key={a.id} button>
+                        <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Box>
 
-              <Box sx={{flex:1}}>
-                <Typography variant="subtitle1">Ready ({readyAssets.length})</Typography>
-                <Divider sx={{my:1}} />
-                <List dense>
-                  {readyAssets.map((a)=> (
-                    <ListItem key={a.id} button>
-                      <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
-                    </ListItem>
-                  ))}
-                </List>
+                <Box sx={{flex:1}}>
+                  <Typography variant="subtitle1">Ready ({readyAssets.length})</Typography>
+                  <Divider sx={{my:1}} />
+                  <List dense>
+                    {readyAssets.map((a)=> (
+                      <ListItem key={a.id} button>
+                        <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Box>
               </Box>
-            </Box>
-          </Paper>
-        </Box>
+            </Paper>
+          </Box>
+        )}
 
       <Box sx={{mt:2, fontSize:12, color:'#666'}}>Last updated: {lastUpdated || '-'}</Box>
     </Box>
