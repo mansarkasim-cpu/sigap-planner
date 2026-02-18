@@ -142,7 +142,7 @@ export function formatUtcToZone(dateLike, timeZone, fallback = '-') {
   }
 }
 
-export function toInputDatetime(dateLike) {
+export function toInputDatetime(dateLike, timeZone) {
   if (dateLike == null) return '';
   const s = String(dateLike).trim();
   if (s === '') return '';
@@ -158,13 +158,15 @@ export function toInputDatetime(dateLike) {
     return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
   }
 
-  // Otherwise render the value in the client's timezone (or caller-provided tz via Intl resolvedOptions)
+  // Otherwise render the value in the provided timezone (if given) or the client's timezone
   const d = parseToUtcDate(dateLike);
   if (!d) return '';
-  let tz;
+  let tz = timeZone;
   try {
-    const ro = Intl.DateTimeFormat().resolvedOptions();
-    if (ro && ro.timeZone) tz = ro.timeZone;
+    if (!tz) {
+      const ro = Intl.DateTimeFormat().resolvedOptions();
+      if (ro && ro.timeZone) tz = ro.timeZone;
+    }
   } catch (e) { tz = 'Asia/Jakarta'; }
   if (!tz) tz = 'Asia/Jakarta';
   try {

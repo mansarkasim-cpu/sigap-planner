@@ -10,29 +10,29 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 const router = Router();
 
 // Hubs (protected)
-router.get('/master/hubs', authMiddleware, requireRole(['admin','technician']), hubCtrl.listHubs);
-router.get('/master/hubs/:id', authMiddleware, requireRole(['admin','technician']), hubCtrl.getHub);
+router.get('/master/hubs', authMiddleware, requireRole(['admin','technician','planner','terminal']), hubCtrl.listHubs);
+router.get('/master/hubs/:id', authMiddleware, requireRole(['admin','technician','planner','terminal']), hubCtrl.getHub);
 router.post('/master/hubs', authMiddleware, requireRole(['admin']), hubCtrl.createHub);
 router.patch('/master/hubs/:id', authMiddleware, requireRole(['admin']), hubCtrl.updateHub);
 router.delete('/master/hubs/:id', authMiddleware, requireRole(['admin']), hubCtrl.deleteHub);
 
 // Sites (protected)
-router.get('/master/sites', authMiddleware, requireRole(['admin','technician']), siteCtrl.listSites);
-router.get('/master/sites/:id', authMiddleware, requireRole(['admin','technician']), siteCtrl.getSite);
+router.get('/master/sites', authMiddleware, requireRole(['admin','technician','planner','terminal']), siteCtrl.listSites);
+router.get('/master/sites/:id', authMiddleware, requireRole(['admin','technician','planner','terminal']), siteCtrl.getSite);
 router.post('/master/sites', authMiddleware, requireRole(['admin']), siteCtrl.createSite);
 router.patch('/master/sites/:id', authMiddleware, requireRole(['admin']), siteCtrl.updateSite);
 router.delete('/master/sites/:id', authMiddleware, requireRole(['admin']), siteCtrl.deleteSite);
 
 // Jenis Alat (protected)
-router.get('/master/jenis-alat', authMiddleware, requireRole(['admin','technician']), jenisCtrl.listJenis);
-router.get('/master/jenis-alat/:id', authMiddleware, requireRole(['admin','technician']), jenisCtrl.getJenis);
+router.get('/master/jenis-alat', authMiddleware, requireRole(['admin','technician','planner','terminal']), jenisCtrl.listJenis);
+router.get('/master/jenis-alat/:id', authMiddleware, requireRole(['admin','technician','planner','terminal']), jenisCtrl.getJenis);
 router.post('/master/jenis-alat', authMiddleware, requireRole(['admin']), jenisCtrl.createJenis);
 router.patch('/master/jenis-alat/:id', authMiddleware, requireRole(['admin']), jenisCtrl.updateJenis);
 router.delete('/master/jenis-alat/:id', authMiddleware, requireRole(['admin']), jenisCtrl.deleteJenis);
 
 // Alat (protected)
-router.get('/master/alats', authMiddleware, requireRole(['admin','technician']), alatCtrl.listAlats);
-router.get('/master/alats/:id', authMiddleware, requireRole(['admin','technician']), alatCtrl.getAlat);
+router.get('/master/alats', authMiddleware, requireRole(['admin','technician','planner','terminal']), alatCtrl.listAlats);
+router.get('/master/alats/:id', authMiddleware, requireRole(['admin','technician','planner','terminal']), alatCtrl.getAlat);
 router.post('/master/alats', authMiddleware, requireRole(['admin']), alatCtrl.createAlat);
 router.patch('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.deleteAlat);

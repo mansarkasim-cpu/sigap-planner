@@ -31,6 +31,9 @@ export default function Dashboard(){
   const [stats, setStats] = useState({ total:0, new:0, assigned:0, ready_to_deploy:0, deployed:0, in_progress:0, completed:0, overdue:0 })
   const [upcoming, setUpcoming] = useState([])
   const [overdueList, setOverdueList] = useState([])
+  const [assets, setAssets] = useState([])
+  const [readyAssets, setReadyAssets] = useState([])
+  const [notReadyAssets, setNotReadyAssets] = useState([])
   const [lastUpdated, setLastUpdated] = useState(null)
 
   useEffect(()=>{
@@ -90,6 +93,37 @@ export default function Dashboard(){
       setStats(cnt)
       setUpcoming(up.slice(0,10))
       setOverdueList(od.slice(0,10))
+      // fetch master alats and compute readiness based on IN_PROGRESS work orders
+      try{
+        const alatRes = await apiClient('/master/alats')
+        const alats = Array.isArray(alatRes) ? alatRes : (alatRes?.data || [])
+        setAssets(alats)
+
+        // collect assets that have at least one IN_PROGRESS work order
+        const inProgressSet = new Set()
+        for (const r of (rows || [])){
+          const status = normalizeStatus(r.status || r.raw?.status || r.raw?.doc_status || '')
+          if (status === 'IN_PROGRESS' || status === 'IN-PROGRESS'){
+            if (r.asset_id) inProgressSet.add(String(r.asset_id))
+            if (r.asset_name) inProgressSet.add(String((r.asset_name||'').toLowerCase()))
+          }
+        }
+
+        const notReady = []
+        const ready = []
+        for (const a of (alats || [])){
+          const idKey = String(a.id)
+          const nameKey = String((a.nama||'').toLowerCase())
+          if (inProgressSet.has(idKey) || inProgressSet.has(nameKey)) notReady.push(a)
+          else ready.push(a)
+        }
+
+        setNotReadyAssets(notReady)
+        setReadyAssets(ready)
+      }catch(err){
+        console.error('failed to fetch master alats', err)
+      }
+
       setLastUpdated(new Date().toLocaleString())
     }catch(err){
       console.error('load dashboard', err)
@@ -101,6 +135,7 @@ export default function Dashboard(){
       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:2}}>
         <Typography variant="h5">Planner Dashboard</Typography>
         <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
+          <Button size="small" variant="contained" onClick={() => router.push('/alats-readiness')}>Kesiapan Alat</Button>
           <Typography>Halo, <strong>{user}</strong></Typography>
           <IconButton size="small" onClick={logout} aria-label="Logout">
             <LogoutIcon fontSize="small" />
@@ -194,6 +229,38 @@ export default function Dashboard(){
 
         {/* Gantt preview removed */}
       </Grid>
+
+        <Box sx={{mt:2}}>
+          <Typography variant="h6" sx={{mb:1}}>Kesiapan Alat</Typography>
+          <Paper sx={{p:2}}>
+            <Box sx={{display:'flex',gap:2}}>
+              <Box sx={{flex:1}}>
+                <Typography variant="subtitle1">Not Ready ({notReadyAssets.length})</Typography>
+                <Divider sx={{my:1}} />
+                {notReadyAssets.length === 0 && <Typography sx={{color:'#666'}}>Semua alat siap</Typography>}
+                <List dense>
+                  {notReadyAssets.map((a)=> (
+                    <ListItem key={a.id} button>
+                      <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+
+              <Box sx={{flex:1}}>
+                <Typography variant="subtitle1">Ready ({readyAssets.length})</Typography>
+                <Divider sx={{my:1}} />
+                <List dense>
+                  {readyAssets.map((a)=> (
+                    <ListItem key={a.id} button>
+                      <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            </Box>
+          </Paper>
+        </Box>
 
       <Box sx={{mt:2, fontSize:12, color:'#666'}}>Last updated: {lastUpdated || '-'}</Box>
     </Box>
