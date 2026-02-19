@@ -26,8 +26,10 @@ const FRONTEND_ORIGIN = process.env.NODE_ENV !== 'production'
   ? true
   : (process.env.FRONTEND_URL || 'http://localhost:3000');
 
-app.use(bodyParser.json({ limit: "20mb" }));
-app.use(bodyParser.urlencoded({ extended: true }));
+// Increase request body size limits to match nginx `client_max_body_size`
+// (nginx configured to 50M in deploy/nginx/sigap.jasamaritim.co.id.conf)
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 
 // enable CORS
 app.use(cors({
