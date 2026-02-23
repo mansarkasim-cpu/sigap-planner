@@ -346,9 +346,19 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
   // exclude soft-deleted
   qb.andWhere('wo.deleted_at IS NULL');
 
+  // Enforce a server-side maximum page size to avoid N+1 storms when clients
+  // request extremely large pages (e.g., 2000). Use `MAX_PAGE_SIZE` env or
+  // default to 100.
+  const MAX_PAGE_SIZE = Number(process.env.MAX_PAGE_SIZE || 100);
+  const requestedPageSize = Number(pageSize) || 10;
+  const cappedPageSize = Math.max(1, Math.min(requestedPageSize, MAX_PAGE_SIZE));
+  if (requestedPageSize !== cappedPageSize) {
+    console.warn('[getWorkOrdersPaginated] requested pageSize too large, capped to', cappedPageSize, 'requested=', requestedPageSize);
+  }
+
   qb.orderBy('wo.created_at', 'DESC')
-    .skip((page - 1) * pageSize)
-    .take(pageSize);
+    .skip((page - 1) * cappedPageSize)
+    .take(cappedPageSize);
 
   // debug: log built SQL and parameters to help diagnose search issues
   try {
@@ -387,25 +397,33 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
     end_date: formatDateToDisplay(r.end_date),
   }));
   console.log('  data count:', rows.length);
-  // attach workorder-level assignments (user names and ids) for convenience to the API consumer
+  // attach workorder-level assignments (user names and ids) in a single batched
+  // query to avoid N+1 queries when returning many rows.
   try {
-    const repo = AppDataSource.getRepository(WorkOrder);
-    await Promise.all(serialized.map(async (r: any) => {
-      try {
-        const assigns = await AppDataSource.query(
-          `SELECT a.assignee_id AS assignee_id, u.name AS user_name
-           FROM assignment a
-           LEFT JOIN "user" u ON u.id = a.assignee_id
-           WHERE a.wo_id = $1 AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')`,
-          [r.id]
-        );
-        r.assigned_users = Array.isArray(assigns) ? assigns.map((x: any) => ({ id: x.assignee_id, name: x.user_name })) : [];
-      } catch (e) {
-        r.assigned_users = [];
+    const woIds = serialized.map((r: any) => r.id).filter(Boolean);
+    const assignsMap = new Map<string, Array<{ id: any; name: any }>>();
+    if (woIds.length > 0) {
+      // Use a single query with WHERE a.wo_id = ANY($1)
+      const assigns = await AppDataSource.query(
+        `SELECT a.wo_id AS wo_id, a.assignee_id AS assignee_id, u.name AS user_name
+         FROM assignment a
+         LEFT JOIN "user" u ON u.id = a.assignee_id
+         WHERE a.wo_id = ANY($1) AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')`,
+        [woIds]
+      );
+      for (const a of assigns || []) {
+        const wid = String(a.wo_id);
+        const list = assignsMap.get(wid) || [];
+        list.push({ id: a.assignee_id, name: a.user_name });
+        assignsMap.set(wid, list);
       }
-    }));
+    }
+    for (const r of serialized) {
+      r.assigned_users = assignsMap.get(String(r.id)) || [];
+    }
   } catch (e) {
-    console.warn('failed to attach workorder-level assignments', e);
+    console.warn('failed to attach workorder-level assignments (batched)', e);
+    for (const r of serialized) r.assigned_users = [];
   }
   // compute progress for each workorder (sum of task durations completed via realisasi)
   const withProgress = await Promise.all(serialized.map(async (r: any) => {
