@@ -50,4 +50,9 @@ export const AppDataSource = new DataSource({
   entities: [entitiesGlob],
   migrations: [migrationsGlob],
   subscribers: [subscribersGlob],
+  // Configure underlying driver pool size (pg.Pool `max`) via env var
+  // Prevent unbounded connections; default to 20 if not set.
+  extra: {
+    max: Number(process.env.DB_POOL_MAX || 20),
+  },
 });
