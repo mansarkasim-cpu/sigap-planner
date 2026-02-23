@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS task (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   work_order_id uuid REFERENCES work_order(id) ON DELETE CASCADE,
+  task_number integer,
   external_id varchar(200),
   name text NOT NULL,
   duration_min integer,

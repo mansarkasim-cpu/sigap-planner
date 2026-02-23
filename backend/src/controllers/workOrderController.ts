@@ -463,6 +463,7 @@ export async function deployWorkOrder(req: Request, res: Response) {
       .leftJoinAndSelect('t.assignments', 'ta')
       .leftJoinAndSelect('ta.user', 'u')
       .where('t.workOrder = :wo', { wo: id })
+      .orderBy('t.task_number', 'ASC')
       .getMany();
 
     if (!tasks || tasks.length === 0) {

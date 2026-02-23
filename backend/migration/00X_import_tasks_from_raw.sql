@@ -1,7 +1,7 @@
 -- Import tasks from existing work_order.raw->'activities' into normalized task table
 -- Make sure you have applied the `00X_add_tasks_tables.sql` migration first.
 
-INSERT INTO task (work_order_id, external_id, name, duration_min, description, status, created_at, updated_at)
+INSERT INTO task (work_order_id, external_id, name, duration_min, description, status, task_number, created_at, updated_at)
 SELECT
   wo.id as work_order_id,
   (act->>'task_id')::text as external_id,
@@ -9,6 +9,7 @@ SELECT
   NULLIF((act->>'task_duration')::int, 0) as duration_min,
   COALESCE(act->>'description', NULL) as description,
   'NEW' as status,
+  NULLIF((act->>'task_number')::int, 0) as task_number,
   now() as created_at,
   now() as updated_at
 FROM work_order wo,

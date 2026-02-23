@@ -228,6 +228,8 @@ async function upsertTasksForWorkOrder(workOrder: WorkOrder, rawActivities: any)
     const externalId = a.id ?? a.task_id ?? a.activity_id ?? a.external_id ?? null;
     const name = a.task_name ?? a.name ?? a.activity_name ?? a.title ?? (externalId ? `Task ${externalId}` : 'Task');
     const durRaw = a.task_duration ?? a.duration_min ?? a.duration ?? null;
+    const tnRaw = a.task_number ?? a.task_no ?? a.number ?? null;
+    const taskNumber = tnRaw !== null && tnRaw !== undefined ? (Number(tnRaw) || null) : null;
     const duration = durRaw !== null && durRaw !== undefined ? (Number(durRaw) || null) : null;
     const desc = a.description ?? a.detail ?? a.note ?? null;
 
@@ -239,20 +241,21 @@ async function upsertTasksForWorkOrder(workOrder: WorkOrder, rawActivities: any)
       if (existingByKey.has(key)) existingTask = existingByKey.get(key);
     }
 
-    if (existingTask) {
+      if (existingTask) {
       // update if changed
       let changed = false;
       if ((existingTask.external_id || null) !== (externalId ? String(externalId) : null)) { existingTask.external_id = externalId ? String(externalId) : undefined; changed = true; }
       if ((existingTask.name || '') !== (name || '')) { existingTask.name = name || ''; changed = true; }
       if ((existingTask.duration_min || null) !== (duration || null)) { existingTask.duration_min = duration as any; changed = true; }
       if ((existingTask.description || null) !== (desc || null)) { existingTask.description = desc ?? undefined; changed = true; }
+      if ((existingTask.task_number || null) !== (taskNumber || null)) { existingTask.task_number = taskNumber as any; changed = true; }
       if (changed) {
         toSave.push(existingTask);
         actions.push({ action: 'update', externalId: externalId ? String(externalId) : null, name, duration, existingId: existingTask.id });
       } else {
         actions.push({ action: 'update', externalId: externalId ? String(externalId) : null, name, duration, existingId: existingTask.id });
       }
-    } else {
+      } else {
       // create new
       const t = taskRepo.create({
         workOrder: { id: workOrder.id } as any,
@@ -260,6 +263,7 @@ async function upsertTasksForWorkOrder(workOrder: WorkOrder, rawActivities: any)
         name: name || 'Task',
         duration_min: duration as any,
         description: desc ?? undefined,
+        task_number: taskNumber as any,
         status: 'NEW'
       } as any);
       toSave.push(t as unknown as Task);
