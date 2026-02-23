@@ -20,6 +20,9 @@ export class Task {
   @Column({ type: 'int', nullable: true })
   duration_min?: number;
 
+  @Column({ type: 'int', nullable: true })
+  task_number?: number;
+
   @Column({ type: 'text', nullable: true })
   description?: string;
 

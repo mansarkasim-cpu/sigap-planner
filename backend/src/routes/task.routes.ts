@@ -19,6 +19,7 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       .leftJoinAndSelect('t.assignments', 'a')
       .leftJoinAndSelect('a.user', 'u')
       .where('t.workOrder = :wo', { wo: workOrderId })
+      .orderBy('t.task_number', 'ASC')
       .getMany();
 
     // compute per-task realisasi counts by joining task->realisasi for this workorder
@@ -96,7 +97,8 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       }
     }
 
-    return res.json(rows);
+    // ensure `task_number` is present in response objects (explicitly include null when missing)
+    return res.json((rows || []).map(r => ({ ...(r as any), task_number: (r as any).task_number ?? null })));
   } catch (err) {
     console.error('list tasks', err);
     return res.status(500).json({ message: 'Failed to list tasks' });
@@ -237,6 +239,7 @@ router.post('/tasks/:id/assign', authMiddleware, async (req: Request, res: Respo
         const tasks = await taskRepo.createQueryBuilder('t')
           .leftJoinAndSelect('t.assignments', 'a')
           .where('t.workOrder = :wo', { wo: woId })
+          .orderBy('t.task_number', 'ASC')
           .getMany();
         const total = tasks.length;
         const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
@@ -305,6 +308,7 @@ router.delete('/tasks/:id/assign/:assignId', authMiddleware, async (req: Request
           const tasks = await taskRepo.createQueryBuilder('t')
             .leftJoinAndSelect('t.assignments', 'a')
             .where('t.workOrder = :wo', { wo: woId })
+            .orderBy('t.task_number', 'ASC')
             .getMany();
           const total = tasks.length;
           const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
@@ -377,6 +381,7 @@ router.delete('/tasks/:id', authMiddleware, async (req: Request, res: Response) 
         const tasks = await taskRepo.createQueryBuilder('t')
           .leftJoinAndSelect('t.assignments', 'a')
           .where('t.workOrder = :wo', { wo: woId })
+          .orderBy('t.task_number', 'ASC')
           .getMany();
         const total = tasks.length;
         const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;

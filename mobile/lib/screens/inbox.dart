@@ -1918,6 +1918,38 @@ class _InboxScreenState extends State<InboxScreen> {
                 }
 
                 final tgEntries = taskGroups.entries.toList();
+                // sort task groups by task_number (ascending). Tasks without a number go last.
+                tgEntries.sort((a, b) {
+                  int? extractNum(MapEntry<String, List<dynamic>> e) {
+                    try {
+                      String key = e.key;
+                      String tid = '';
+                      if (key.startsWith('__no_task__')) {
+                        if (e.value.isNotEmpty) {
+                          final first = e.value.first;
+                          tid = (first['task_id'] ?? first['task'] ?? '')?.toString() ?? '';
+                        }
+                      } else {
+                        tid = key;
+                      }
+                      if (tid.isEmpty) return null;
+                      final t = tasksById[tid];
+                      if (t is Map) {
+                        final tn = t['task_number'] ?? t['task_no'] ?? t['number'];
+                        if (tn != null) return int.tryParse(tn.toString());
+                      }
+                    } catch (_) {}
+                    return null;
+                  }
+
+                  final na = extractNum(a);
+                  final nb = extractNum(b);
+                  if (na == null && nb == null) return 0;
+                  if (na == null) return 1; // a after b
+                  if (nb == null) return -1; // a before b
+                  return na.compareTo(nb);
+                });
+
                 return Column(
                     children: tgEntries.asMap().entries.map<Widget>((entry) {
                   final idx = entry.key;
