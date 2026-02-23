@@ -29,9 +29,17 @@ export class AssignmentSubscriber implements EntitySubscriberInterface<Assignmen
         // fall through
       }
 
-      // create TaskAssignment mirror
-      const ta: any = taRepo.create({ task: { id: String(taskId) } as Task, user: { id: String(userId) }, assignedBy: a.assignedBy || a.assigned_by || null });
-      await taRepo.save(ta);
+      // create TaskAssignment mirror. Do this asynchronously so that the
+      // parent Assignment insert/transaction is not held open by additional
+      // DB work or subscribers. We intentionally do not await here.
+      try {
+        const ta: any = taRepo.create({ task: { id: String(taskId) } as Task, user: { id: String(userId) }, assignedBy: a.assignedBy || a.assigned_by || null });
+        setImmediate(() => {
+          taRepo.save(ta).catch((e) => console.warn('async taRepo.save failed in AssignmentSubscriber', e));
+        });
+      } catch (e) {
+        console.warn('AssignmentSubscriber failed to schedule TaskAssignment save', e);
+      }
     } catch (e) {
       console.warn('AssignmentSubscriber failed to mirror assignment to TaskAssignment', e);
     }
