@@ -419,11 +419,11 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
       }
     }
     for (const r of serialized) {
-      r.assigned_users = assignsMap.get(String(r.id)) || [];
+      (r as any).assigned_users = assignsMap.get(String(r.id)) || [];
     }
-  } catch (e) {
+    } catch (e) {
     console.warn('failed to attach workorder-level assignments (batched)', e);
-    for (const r of serialized) r.assigned_users = [];
+    for (const r of serialized) (r as any).assigned_users = [];
   }
   // compute progress for each workorder (sum of task durations completed via realisasi)
   const withProgress = await Promise.all(serialized.map(async (r: any) => {
