@@ -38,20 +38,28 @@ export class TaskAssignmentSubscriber implements EntitySubscriberInterface<TaskA
       ass.status = (String((wo as any).status || '').toUpperCase() === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'ASSIGNED';
       if (ass.status === 'IN_PROGRESS') ass.startedAt = new Date();
 
-      const savedAss = await assignmentRepo.save(ass);
-      // If the related WorkOrder is already IN_PROGRESS, notify the newly assigned technician
-      try {
-        const woStatus = String((wo as any).status || '').toUpperCase();
-        if (woStatus === 'IN_PROGRESS') {
-          try {
-            await pushNotify(String(userId), `Anda ditugaskan pada Work Order ${wo.doc_no ?? wo.id}`);
-          } catch (e) {
-            console.warn('pushNotify failed for assignment', e);
-          }
-        }
-      } catch (e) {
-        // ignore notification errors
-      }
+      // perform save and notification asynchronously to avoid blocking the
+      // originating DB transaction (subscribers run inside the same query
+      // execution context). Use setImmediate to schedule work off the
+      // current stack — do not await here.
+      setImmediate(() => {
+        assignmentRepo.save(ass)
+          .then((savedAss) => {
+            try {
+              const woStatus = String((wo as any).status || '').toUpperCase();
+              if (woStatus === 'IN_PROGRESS') {
+                // fire-and-forget notification; log errors
+                pushNotify(String(userId), `Anda ditugaskan pada Work Order ${wo.doc_no ?? wo.id}`)
+                  .catch((e) => console.warn('pushNotify failed for assignment (async)', e));
+              }
+            } catch (e) {
+              console.warn('post-save notification scheduling failed', e);
+            }
+          })
+          .catch((e) => {
+            console.warn('async assignmentRepo.save failed in TaskAssignmentSubscriber', e);
+          });
+      });
     } catch (e) {
       console.warn('TaskAssignmentSubscriber failed to create mirror Assignment', e);
     }
