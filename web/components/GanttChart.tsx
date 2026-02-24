@@ -464,24 +464,69 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     setLoading(true);
     setError(null);
     try {
-      const baseUrl = `/work-orders?q=&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
-      const res = await apiClient(baseUrl);
-      const rows = res?.data ?? res;
+      // helper: fetch pages until fewer-than-pageSize returned or safety cap reached
+      async function fetchAllPages(urlTemplate: string) {
+        const out: any[] = [];
+        let effectivePageSize = Math.max(1, Math.floor(Number(pageSize) || 100));
+        const MAX_PAGES = 50; // safety guard to avoid infinite loops
+        let page = 1;
+        while (page <= MAX_PAGES) {
+          const url = urlTemplate.replace('{page}', String(page)).replace('{pageSize}', String(effectivePageSize));
+          try {
+            const r = await apiClient(url);
+            const rows = r?.data ?? r ?? [];
+            const meta = r?.meta ?? null;
+            if (!Array.isArray(rows)) break;
+            if (rows.length === 0) break;
+            out.push(...rows);
+
+            // If API returns meta, honor its pagination info.
+            if (meta) {
+              const metaPage = Number(meta.page ?? meta.currentPage ?? page);
+              const metaTotalPages = Number(meta.totalPages ?? meta.total_pages ?? meta.pages ?? 0);
+              const metaPageSize = Number(meta.pageSize ?? meta.page_size ?? meta.limit ?? 0);
+              if (metaPageSize > 0) effectivePageSize = metaPageSize;
+              if (metaTotalPages > 0) {
+                if (metaPage >= metaTotalPages) break;
+                page = metaPage + 1;
+                continue;
+              }
+            }
+
+            // Heuristic: if server caps pageSize, adjust to returned length and keep paging.
+            if (page === 1 && rows.length < effectivePageSize) {
+              effectivePageSize = rows.length;
+            }
+
+            if (rows.length < effectivePageSize) break;
+            page += 1;
+          } catch (e) {
+            break;
+          }
+        }
+        // dedupe by id
+        const map = new Map<string, any>();
+        out.forEach((r: any) => { if (r && r.id != null) map.set(String(r.id), r); });
+        return Array.from(map.values());
+      }
+
+      const siteParam = site ? `&site=${encodeURIComponent(site)}` : '';
+      const baseTemplate = `/work-orders?q=&page={page}&pageSize={pageSize}` + siteParam;
+      const rows = await fetchAllPages(baseTemplate);
+
       // Also explicitly fetch DAILY work orders and merge to ensure they appear on the Gantt
       let dailyRows: any[] = [];
       try {
-        const dailyUrl = `/work-orders?work_type=DAILY&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
-        const dres = await apiClient(dailyUrl);
-        dailyRows = dres?.data ?? dres ?? [];
+        const dailyTemplate = `/work-orders?work_type=DAILY&page={page}&pageSize={pageSize}` + siteParam;
+        dailyRows = await fetchAllPages(dailyTemplate);
       } catch (e) {
         dailyRows = [];
       }
       // Also fetch items where type_work='DAILY_CHECKLIST' (legacy or alternative column)
       let typeWorkRows: any[] = [];
       try {
-        const twUrl = `/work-orders?type_work=DAILY_CHECKLIST&page=1&pageSize=${pageSize}` + (site ? `&site=${encodeURIComponent(site)}` : '');
-        const tres = await apiClient(twUrl);
-        typeWorkRows = tres?.data ?? tres ?? [];
+        const twTemplate = `/work-orders?type_work=DAILY_CHECKLIST&page={page}&pageSize={pageSize}` + siteParam;
+        typeWorkRows = await fetchAllPages(twTemplate);
       } catch (e) {
         typeWorkRows = [];
       }
