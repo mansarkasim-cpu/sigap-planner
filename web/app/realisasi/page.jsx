@@ -461,11 +461,8 @@ export default function Page() {
                   const tz = getSiteTimezone(wo)
                   const range = (ranges && ranges[wo.id]) ? ranges[wo.id] : (expanded[wo.id] ? getRealisasiRange(expanded, wo.id) : { minStart: null, maxEnd: null })
                   if (range.minStart) {
-                    const d = range.minStart
-                    const pad = (n) => String(n).padStart(2, '0')
-                    // use UTC components to produce naive SQL datetime matching backend UTC moments
-                    const naive = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
-                    return formatDateDisplay(naive, tz)
+                    // use ISO string so formatter applies timezone conversion correctly
+                    return formatDateDisplay(range.minStart.toISOString(), tz)
                   }
                   const hdrStart = formatDateDisplay(wo.start_date || wo.raw?.start_date, tz)
                   return hdrStart
@@ -474,10 +471,8 @@ export default function Page() {
                   const tz = getSiteTimezone(wo)
                   const range = (ranges && ranges[wo.id]) ? ranges[wo.id] : (expanded[wo.id] ? getRealisasiRange(expanded, wo.id) : { minStart: null, maxEnd: null })
                   if (range.maxEnd) {
-                    const d = range.maxEnd
-                    const pad = (n) => String(n).padStart(2, '0')
-                    const naive = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
-                    return formatDateDisplay(naive, tz)
+                    // use ISO string so formatter applies timezone conversion correctly
+                    return formatDateDisplay(range.maxEnd.toISOString(), tz)
                   }
                   const hdrEnd = formatDateDisplay(wo.end_date || wo.raw?.end_date, tz)
                   return hdrEnd
