@@ -242,9 +242,11 @@ class _AppDrawerState extends State<AppDrawer> {
   Future<void> _logout() async {
     try {
       // attempt to unregister device token on backend before clearing local auth
-      // show loading dialog while unregistering
+      // show loading dialog while unregistering (use root navigator so it appears
+      // even when the drawer's context has been popped)
       showDialog(
           context: context,
+          useRootNavigator: true,
           barrierDismissible: false,
           builder: (c) => WillPopScope(
                 onWillPop: () async => false,
@@ -394,7 +396,7 @@ class _AppDrawerState extends State<AppDrawer> {
                 leading: const Icon(Icons.logout),
                 title: const Text('Logout'),
                 onTap: () async {
-                  Navigator.pop(context);
+                  // Show confirmation while drawer is still mounted.
                   final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (c) => AlertDialog(
@@ -409,7 +411,11 @@ class _AppDrawerState extends State<AppDrawer> {
                                   child: const Text('Logout')),
                             ],
                           ));
-                  if (confirmed == true) await _logout();
+                  if (confirmed == true) {
+                    // close the drawer then perform logout using root navigator
+                    Navigator.pop(context);
+                    await _logout();
+                  }
                 }),
             const Spacer(),
             Padding(

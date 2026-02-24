@@ -8,6 +8,9 @@ const router = Router();
 // daftar paginated & search: GET /api/work-orders?q=&page=&pageSize=
 router.get('/', ctrl.listWorkOrdersPaginated);
 
+// GET /api/work-orders/completed-with-realisasi?start=&end=&page=&pageSize=
+router.get('/completed-with-realisasi', ctrl.listCompletedWorkOrdersWithRealisasi);
+
 // tambah dari SIGAP (existing)
 router.post('/add', ctrl.fetchAndCreateFromSigap);
 router.post('/fetch-and-create', ctrl.fetchAndCreateFromSigap);

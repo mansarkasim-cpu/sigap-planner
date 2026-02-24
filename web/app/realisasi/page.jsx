@@ -154,12 +154,45 @@ export default function Page() {
   const [pageSize, setPageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const todayStr = (() => {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
+  })()
+  const [startDate, setStartDate] = useState(todayStr)
+  const [endDate, setEndDate] = useState(todayStr)
+  const [site, setSite] = useState('')
+  const [sites, setSites] = useState([])
+  const [sitesLoading, setSitesLoading] = useState(false)
   const [expanded, setExpanded] = useState({})
   const [loadingDetails, setLoadingDetails] = useState({})
 
   useEffect(() => { load(); }, [page, pageSize])
+
+  // load master sites for site filter select
+  useEffect(() => {
+    let mounted = true
+    async function loadSites() {
+      setSitesLoading(true)
+      try {
+        const res = await apiClient('/master/sites')
+        const items = Array.isArray(res) ? res : (res?.data ?? [])
+        if (mounted) setSites(items)
+      } catch (e) {
+        console.error('failed to load sites', e)
+        if (mounted) setSites([])
+      } finally {
+        if (mounted) setSitesLoading(false)
+      }
+    }
+    loadSites()
+    return () => { mounted = false }
+  }, [])
+
+  // when date filters change, reset to first page and reload results
+  useEffect(() => { setPage(1); load(); }, [startDate, endDate])
 
   async function load() {
     setLoading(true)
@@ -168,9 +201,19 @@ export default function Page() {
       qs.push(`page=${encodeURIComponent(page)}`)
       qs.push(`pageSize=${encodeURIComponent(pageSize)}`)
       if (search && search.trim()) qs.push(`q=${encodeURIComponent(search.trim())}`)
-      if (startDate) qs.push(`start=${encodeURIComponent(startDate)}`)
-      if (endDate) qs.push(`end=${encodeURIComponent(endDate)}`)
-      const url = `/work-orders?${qs.join('&')}`
+      if (startDate) {
+        // send start as start of day to make range inclusive
+        const s = `${startDate}T00:00:00`
+        qs.push(`start=${encodeURIComponent(s)}`)
+      }
+      if (endDate) {
+        // send end as end of day to make range inclusive
+        const e = `${endDate}T23:59:59`
+        qs.push(`end=${encodeURIComponent(e)}`)
+      }
+      if (site && String(site).trim()) qs.push(`site=${encodeURIComponent(site.trim())}`)
+      const url = `/work-orders/completed-with-realisasi?${qs.join('&')}`
+      console.debug('Fetching completed work-orders with URL:', url)
       const res = await apiClient(url)
 
       // Normalize responses: support array or { items, total, page, pageSize }
@@ -190,29 +233,18 @@ export default function Page() {
         total = res.length
       }
 
-      const completed = (rows || []).filter(r => ((r.status || r.raw?.status || 'PREPARATION').toString().toUpperCase()) === 'COMPLETED')
-      setList(completed)
-      const computedTotalPages = Math.max(1, Math.ceil((total || completed.length) / pageSize))
+      // API returns completed work orders with aggregated `realisasi` field
+      setList(rows)
+      const computedTotalPages = Math.max(1, Math.ceil((total || rows.length) / pageSize))
       setTotalPages(computedTotalPages)
-      // preload realisasi ranges (min start / max end) for visible work orders
-      setRanges({})
-      const fetches = completed.map(async (wo) => {
-        try {
-          const woId = wo.id
-          if (!woId) return null
-          const relRes = await apiClient(`/work-orders/${encodeURIComponent(woId)}/realisasi/full`)
-          const items = relRes?.items ?? relRes?.data ?? relRes ?? []
-          const range = computeRangeFromItems(Array.isArray(items) ? items : [])
-          return { id: woId, range }
-        } catch (e) {
-          return null
-        }
-      })
-      const settled = await Promise.allSettled(fetches)
+      // derive ranges from returned realisasi aggregation to avoid extra requests
       const newRanges = {}
-      for (const s of settled) {
-        if (s.status === 'fulfilled' && s.value && s.value.id) {
-          newRanges[s.value.id] = s.value.range
+      for (const wo of (rows || [])) {
+        try {
+          const items = (wo && wo.realisasi && Array.isArray(wo.realisasi.items)) ? wo.realisasi.items : []
+          newRanges[wo.id] = computeRangeFromItems(items)
+        } catch (e) {
+          newRanges[wo.id] = { minStart: null, maxEnd: null }
         }
       }
       setRanges(prev => ({ ...prev, ...newRanges }))
@@ -385,8 +417,18 @@ export default function Page() {
           <TextField size="small" label="Search (doc no / id)" value={search} onChange={(e) => setSearch(e.target.value)} />
           <TextField size="small" label="Start date" type="date" InputLabelProps={{ shrink: true }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <TextField size="small" label="End date" type="date" InputLabelProps={{ shrink: true }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel id="site-label">Site</InputLabel>
+            <Select labelId="site-label" label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
+              <MenuItem value="">All sites</MenuItem>
+              {sitesLoading ? <MenuItem disabled>Loading...</MenuItem> : null}
+              {sites && sites.map((s) => (
+                <MenuItem key={s.id ?? s.code ?? s.name} value={s.name || s.code || String(s.id)}>{s.name || s.code || String(s.id)}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Button variant="outlined" onClick={() => { setPage(1); load(); }}>Apply</Button>
-          <Button variant="text" onClick={() => { setSearch(''); setStartDate(''); setEndDate(''); setPage(1); load(); }}>Clear</Button>
+          <Button variant="text" onClick={() => { setSearch(''); setStartDate(todayStr); setEndDate(todayStr); setSite(''); setPage(1); load(); }}>Clear</Button>
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel id="ps-label">Page Size</InputLabel>
             <Select labelId="ps-label" value={pageSize} label="Page Size" onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
@@ -418,13 +460,26 @@ export default function Page() {
                 <TableCell>{(() => {
                   const tz = getSiteTimezone(wo)
                   const range = (ranges && ranges[wo.id]) ? ranges[wo.id] : (expanded[wo.id] ? getRealisasiRange(expanded, wo.id) : { minStart: null, maxEnd: null })
-                  const hdrStart = range.minStart ? formatDateDisplay(range.minStart.toISOString(), tz) : formatDateDisplay(wo.start_date || wo.raw?.start_date, tz)
+                  if (range.minStart) {
+                    const d = range.minStart
+                    const pad = (n) => String(n).padStart(2, '0')
+                    // use UTC components to produce naive SQL datetime matching backend UTC moments
+                    const naive = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
+                    return formatDateDisplay(naive, tz)
+                  }
+                  const hdrStart = formatDateDisplay(wo.start_date || wo.raw?.start_date, tz)
                   return hdrStart
                 })()}</TableCell>
                 <TableCell>{(() => {
                   const tz = getSiteTimezone(wo)
                   const range = (ranges && ranges[wo.id]) ? ranges[wo.id] : (expanded[wo.id] ? getRealisasiRange(expanded, wo.id) : { minStart: null, maxEnd: null })
-                  const hdrEnd = range.maxEnd ? formatDateDisplay(range.maxEnd.toISOString(), tz) : formatDateDisplay(wo.end_date || wo.raw?.end_date, tz)
+                  if (range.maxEnd) {
+                    const d = range.maxEnd
+                    const pad = (n) => String(n).padStart(2, '0')
+                    const naive = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
+                    return formatDateDisplay(naive, tz)
+                  }
+                  const hdrEnd = formatDateDisplay(wo.end_date || wo.raw?.end_date, tz)
                   return hdrEnd
                 })()}</TableCell>
                 <TableCell>

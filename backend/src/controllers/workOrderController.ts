@@ -78,6 +78,97 @@ export async function listWorkOrders(req: Request, res: Response) {
   }
 }
 
+/**
+ * GET /api/work-orders/completed-with-realisasi
+ * Query params: start (ISO or YYYY-MM-DDTHH:MM:SS), end (ISO), page, pageSize
+ * Returns work orders with status = 'COMPLETED' and embedded realisasi details
+ */
+export async function listCompletedWorkOrdersWithRealisasi(req: Request, res: Response) {
+  try {
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const pageSize = Math.max(Number(req.query.pageSize || 20), 20);
+    let start = (req.query.start as string) || null;
+    let end = (req.query.end as string) || null;
+    const site = (req.query.site as string) || null;
+
+    // If provided datetimes don't include timezone info, treat them as UTC by appending 'Z'
+    function normalizeTs(v: string | null) {
+      if (!v) return null;
+      if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v)) return v;
+      return v + 'Z';
+    }
+    start = normalizeTs(start);
+    end = normalizeTs(end);
+
+    const offset = (page - 1) * pageSize;
+
+    // Normalize site param for LIKE queries
+    const siteParam = site && String(site).trim().length ? `%${String(site).toLowerCase().trim()}%` : null;
+
+    // Aggregate realisasi per workorder, joining work_order to filter by status and site when provided
+    const aggSql = `
+      SELECT t.work_order_id AS wo_id,
+             MIN(r.start_time) AS actual_start,
+             MAX(r.end_time) AS actual_end,
+             json_agg(json_build_object(
+               'id', r.id,
+               'start', to_char(r.start_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+               'end', to_char(r.end_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+               'notes', r.notes,
+               'photoUrl', r.photo_url,
+               'taskId', r.task_id
+             ) ORDER BY r.start_time) AS items
+      FROM realisasi r
+      JOIN task t ON r.task_id = t.id
+      JOIN work_order wo ON t.work_order_id = wo.id
+      WHERE wo.status = 'COMPLETED'
+        AND ($1::timestamptz IS NULL OR r.start_time >= $1::timestamptz)
+        AND ($2::timestamptz IS NULL OR r.end_time <= $2::timestamptz)
+        AND ($3::text IS NULL OR LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE $3 OR LOWER(COALESCE(wo.raw->>'site','')) LIKE $3)
+      GROUP BY t.work_order_id
+    `;
+
+    const aggRows = await AppDataSource.query(aggSql, [start, end, siteParam]);
+    const woIds = (aggRows || []).map((r: any) => String(r.wo_id));
+
+    if (!woIds || woIds.length === 0) {
+      return res.json({ data: [], meta: { page, pageSize, total: 0 } });
+    }
+
+    // fetch matching work orders with status COMPLETED and limit/paginate
+    const total = woIds.length;
+    const pageIds = woIds.slice(offset, offset + pageSize);
+    if (pageIds.length === 0) return res.json({ data: [], meta: { page, pageSize, total } });
+
+    const rows = await AppDataSource.query(
+      `SELECT wo.* FROM work_order wo WHERE wo.id = ANY($1) AND wo.status = 'COMPLETED' ORDER BY wo.created_at DESC`,
+      [pageIds]
+    );
+
+    // map aggRows by wo_id for easy lookup
+    const aggByWo: Record<string, any> = {};
+    for (const a of aggRows || []) {
+      aggByWo[String(a.wo_id)] = {
+        actualStart: a.actual_start ? new Date(a.actual_start).toISOString() : null,
+        actualEnd: a.actual_end ? new Date(a.actual_end).toISOString() : null,
+        items: a.items || [],
+      };
+    }
+
+    const out = (rows || []).map((wo: any) => {
+      const serialized = serializeWorkOrder(wo);
+      serialized.status = (wo as any).status ?? 'NEW';
+      const agg = aggByWo[String(wo.id)] || { actualStart: null, actualEnd: null, items: [] };
+      return { ...serialized, realisasi: agg };
+    });
+
+    return res.json({ data: out, meta: { page, pageSize, total } });
+  } catch (err) {
+    console.error('listCompletedWorkOrdersWithRealisasi error', err);
+    return res.status(500).json({ message: 'Failed to list completed work orders' });
+  }
+}
+
 function buildSigapHeaders(): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (SIGAP_BEARER_TOKEN) headers['Authorization'] = `Bearer ${SIGAP_BEARER_TOKEN}`;

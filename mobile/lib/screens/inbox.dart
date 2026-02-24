@@ -580,12 +580,41 @@ class _InboxScreenState extends State<InboxScreen> {
     super.initState();
     // subscribe to global logout events (triggered on 401)
     _logoutSub = LogoutNotifier.instance.stream.listen((_) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
+          // show a root-level loading dialog so user sees logout is happening
+          showDialog(
+              context: context,
+              useRootNavigator: true,
+              barrierDismissible: false,
+              builder: (c) => WillPopScope(
+                    onWillPop: () async => false,
+                    child: Dialog(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            CircularProgressIndicator(),
+                            SizedBox(width: 16),
+                            Text('Logging out...'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ));
+
+          // give the dialog a moment to render, then navigate to login
+          await Future.delayed(const Duration(milliseconds: 120));
           Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (_) => LoginScreen()),
               (r) => false);
+
+          // dismiss the loading dialog if still present
+          try {
+            Navigator.of(context, rootNavigator: true).pop();
+          } catch (e) {}
         } catch (e) {}
       });
     });

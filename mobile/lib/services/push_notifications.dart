@@ -154,25 +154,28 @@ class PushNotifications {
   }
 
   // Unregister token from backend for current authenticated user
-  static Future<void> unregisterAndSendToken() async {
+  static Future<void> unregisterAndSendToken({String? apiToken}) async {
     try {
       debugPrint('=== unregisterAndSendToken: START ===');
-      final prefs = await SharedPreferences.getInstance();
-      final apiToken = prefs.getString('api_token') ?? '';
-      if (apiToken.isEmpty) {
+      String tokenForApi = apiToken ?? '';
+      if (tokenForApi.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        tokenForApi = prefs.getString('api_token') ?? '';
+      }
+      if (tokenForApi.isEmpty) {
         debugPrint('❌ unregister: no api token available; skipping');
         return;
       }
 
-      final token = await getToken();
-      if (token == null || token.isEmpty) {
+      final fcmToken = await getToken();
+      if (fcmToken == null || fcmToken.isEmpty) {
         debugPrint('❌ unregister: fcm token missing; skipping');
         return;
       }
 
-      final api = ApiClient(baseUrl: API_BASE, token: apiToken);
+      final api = ApiClient(baseUrl: API_BASE, token: tokenForApi);
       debugPrint('→ Sending delete device token to /device-tokens');
-      await api.delete('/device-tokens', {'token': token});
+      await api.delete('/device-tokens', {'token': fcmToken});
       debugPrint('✓ unregisterAndSendToken: completed');
     } catch (e) {
       debugPrint('❌ unregisterAndSendToken error: $e');
