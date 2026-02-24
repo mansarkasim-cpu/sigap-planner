@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../services/api.dart';
 import '../widgets/app_drawer.dart';
 import '../utils/date_utils.dart';
+import '../utils/image_compress.dart';
 
 class WODetailScreen extends StatefulWidget {
   final String woId;
@@ -836,7 +837,8 @@ class _WODetailScreenState extends State<WODetailScreen>
           source: imageSource, imageQuality: 75, maxWidth: 1600);
 
       if (photo != null) {
-        final bytes = await photo.readAsBytes();
+        final raw = await photo.readAsBytes();
+        final bytes = await compressImageBytes(raw, quality: 80, maxWidth: 1280);
         setState(() {
           taskPhotoBytes[id] = bytes;
           checkedTasks.add(id);

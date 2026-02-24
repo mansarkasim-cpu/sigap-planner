@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import '../utils/image_compress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'local_db.dart';
@@ -53,7 +54,8 @@ class RetryUploader {
           if (photoPath.isNotEmpty) {
             final f = File(photoPath);
             if (await f.exists()) {
-              bytes = await f.readAsBytes();
+              final raw = await f.readAsBytes();
+              bytes = await compressImageBytes(raw);
             }
           }
           // If queued row didn't store taskId, try to resolve via assignments API.

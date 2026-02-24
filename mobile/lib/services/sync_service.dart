@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import '../utils/image_compress.dart';
 import 'package:http/http.dart' as http;
 
 class SyncService {
@@ -13,9 +15,16 @@ class SyncService {
       File? signature}) async {
     String? photoBase64;
     String? signatureBase64;
-    if (photo != null) photoBase64 = base64Encode(await photo.readAsBytes());
-    if (signature != null)
-      signatureBase64 = base64Encode(await signature.readAsBytes());
+    if (photo != null) {
+      final bytes = await photo.readAsBytes();
+      final compressed = await compressImageBytes(bytes);
+      photoBase64 = base64Encode(compressed);
+    }
+    if (signature != null) {
+      final bytes = await signature.readAsBytes();
+      final compressed = await compressImageBytes(bytes);
+      signatureBase64 = base64Encode(compressed);
+    }
 
     final body = {
       "assignmentId": assignmentId,

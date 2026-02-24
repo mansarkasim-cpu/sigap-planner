@@ -103,6 +103,19 @@ export async function createRealisasi(req: Request, res: Response) {
         .andWhere('a.started_at IS NOT NULL')
         .getRawOne();
       if (row && row.min_start) resolvedStartCreate = new Date(row.min_start);
+      // fallback: if no task-scoped started_at found, try to use any started_at for the same workorder
+      if (!resolvedStartCreate) {
+        try {
+          const row2: any = await aRepo.createQueryBuilder('a')
+            .select('MIN(a.started_at)', 'min_start')
+            .where('a.wo_id = :wo', { wo: (task as any).workOrder?.id })
+            .andWhere('a.started_at IS NOT NULL')
+            .getRawOne();
+          if (row2 && row2.min_start) resolvedStartCreate = new Date(row2.min_start);
+        } catch (e) {
+          // ignore
+        }
+      }
     } catch (e) {
       // ignore lookup errors
     }
