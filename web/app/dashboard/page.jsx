@@ -66,8 +66,40 @@ export default function Dashboard(){
   async function loadDashboard(){
     setLoading(true)
     try{
-      const res = await apiClient('/work-orders?page=1&pageSize=2000')
-      const rows = res?.data ?? res ?? []
+      async function fetchAllWorkOrders(){
+        const out = []
+        let effectivePageSize = 2000
+        const MAX_PAGES = 50
+        let page = 1
+        while (page <= MAX_PAGES){
+          const res = await apiClient(`/work-orders?page=${page}&pageSize=${effectivePageSize}`)
+          const rows = res?.data ?? res ?? []
+          const meta = res?.meta ?? null
+          if (!Array.isArray(rows) || rows.length === 0) break
+          out.push(...rows)
+
+          if (meta){
+            const metaPage = Number(meta.page ?? meta.currentPage ?? page)
+            const metaTotalPages = Number(meta.totalPages ?? meta.total_pages ?? meta.pages ?? 0)
+            const metaPageSize = Number(meta.pageSize ?? meta.page_size ?? meta.limit ?? 0)
+            if (metaPageSize > 0) effectivePageSize = metaPageSize
+            if (metaTotalPages > 0){
+              if (metaPage >= metaTotalPages) break
+              page = metaPage + 1
+              continue
+            }
+          }
+
+          if (page === 1 && rows.length < effectivePageSize) {
+            effectivePageSize = rows.length
+          }
+          if (rows.length < effectivePageSize) break
+          page += 1
+        }
+        return out
+      }
+
+      const rows = await fetchAllWorkOrders()
       const now = Date.now()
       let cnt = { total:0, new:0, assigned:0, ready_to_deploy:0, deployed:0, in_progress:0, completed:0, overdue:0 }
       const up = []
