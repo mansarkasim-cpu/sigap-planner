@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart';
 
 class LocalDB {
   LocalDB._internal();
@@ -53,6 +55,13 @@ class LocalDB {
           createdAt INTEGER
         )
       ''');
+      await db.execute('''
+        CREATE TABLE api_cache (
+          key TEXT PRIMARY KEY,
+          data TEXT,
+          cachedAt INTEGER
+        )
+      ''');
     });
 
     // Ensure runtime migrations: if DB was created before adding startTime/endTime,
@@ -85,6 +94,21 @@ class LocalDB {
         } catch (_) {}
       }
     } catch (_) {}
+
+    // Ensure api_cache table exists
+    try {
+      await _db!.rawQuery("SELECT 1 FROM api_cache LIMIT 1");
+    } catch (_) {
+      try {
+        await _db!.execute('''
+          CREATE TABLE api_cache (
+            key TEXT PRIMARY KEY,
+            data TEXT,
+            cachedAt INTEGER
+          )
+        ''');
+      } catch (_) {}
+    }
   }
 
   Future<String> _savePhotoToFile(Uint8List bytes, String filename) async {
@@ -237,4 +261,61 @@ class LocalDB {
     await _db!.update('queued_realisasi', updates,
         where: 'id = ?', whereArgs: [id]);
   }
+
+  // API Cache methods for WO detail and related data
+  Future<void> cacheApiData(String key, dynamic data) async {
+    await init();
+    try {
+      final jsonStr = data is String ? data : json.encode(data);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await _db!.insert(
+          'api_cache',
+          {
+            'key': key,
+            'data': jsonStr,
+            'cachedAt': now
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      debugPrint('Failed to cache API data: $e');
+    }
+  }
+
+  Future<dynamic> getCachedApiData(String key) async {
+    await init();
+    try {
+      final rows = await _db!.query('api_cache',
+          where: 'key = ?', whereArgs: [key]);
+      if (rows.isEmpty) return null;
+      final data = rows.first['data'] as String?;
+      if (data == null) return null;
+      try {
+        return json.decode(data);
+      } catch (_) {
+        return data;
+      }
+    } catch (e) {
+      debugPrint('Failed to retrieve cached API data: $e');
+      return null;
+    }
+  }
+
+  Future<void> clearApiCache(String key) async {
+    await init();
+    try {
+      await _db!.delete('api_cache', where: 'key = ?', whereArgs: [key]);
+    } catch (e) {
+      debugPrint('Failed to clear API cache: $e');
+    }
+  }
+
+  Future<void> clearAllApiCache() async {
+    await init();
+    try {
+      await _db!.delete('api_cache');
+    } catch (e) {
+      debugPrint('Failed to clear all API cache: $e');
+    }
+  }
 }
+

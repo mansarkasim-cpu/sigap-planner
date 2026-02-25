@@ -7,6 +7,7 @@ class LocalDB {
 
   final List<Map<String, dynamic>> _checklists = [];
   final List<Map<String, dynamic>> _queued = [];
+  final Map<String, dynamic> _apiCache = {};
 
   Future<void> init() async {}
 
@@ -101,4 +102,26 @@ class LocalDB {
     if (v == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(v);
   }
-}
+
+  // API Cache methods (in-memory only for web stub)
+  Future<void> cacheApiData(String key, dynamic data) async {
+    _apiCache[key] = data;
+  }
+
+  Future<dynamic> getCachedApiData(String key) async {
+    return _apiCache[key];
+  }
+
+  Future<void> clearApiCache(String key) async {
+    _apiCache.remove(key);
+  }
+
+  Future<void> clearAllApiCache() async {
+    _apiCache.clear();
+  }
+
+    Future<String> savePhotoFile(Uint8List bytes, {String? filename}) async {
+      // Stub: just return a dummy path
+      return 'stub_photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    }
+  }

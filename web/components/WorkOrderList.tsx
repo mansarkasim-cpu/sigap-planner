@@ -704,6 +704,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
       setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), ...woDetail, tasks } } as any));
       load(page, q);
+      showToast('Deploy sukses', 'success');
     } catch (e) {
       console.error('deploy failed', e);
       showToast('Deploy gagal: ' + (e?.message || e), 'error');
@@ -1409,7 +1410,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           }} disabled={editLoading}>{editLoading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
         </DialogActions>
       </Dialog>
-      <Snackbar open={snackOpen} autoHideDuration={4000} onClose={() => setSnackOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+      <Snackbar open={snackOpen} autoHideDuration={4000} onClose={() => setSnackOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} sx={{ zIndex: 9999 }}>
         <Alert onClose={() => setSnackOpen(false)} severity={snackSeverity} sx={{ width: '100%' }}>
           {snackMsg}
         </Alert>
