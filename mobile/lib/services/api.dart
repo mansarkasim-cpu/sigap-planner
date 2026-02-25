@@ -7,6 +7,7 @@ import 'logout_notifier.dart';
 class ApiClient {
   final String baseUrl;
   final String? token;
+  static const Duration defaultTimeout = Duration(seconds: 15);
 
   ApiClient({required this.baseUrl, this.token});
 
@@ -16,12 +17,12 @@ class ApiClient {
     return h;
   }
 
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Duration? timeout}) async {
     final url = Uri.parse(baseUrl + path);
     final headers = _headers();
     debugPrint('ApiClient GET: ${url.toString()}');
     debugPrint('ApiClient Headers: $headers');
-    final res = await http.get(url, headers: headers);
+    final res = await http.get(url, headers: headers).timeout(timeout ?? defaultTimeout);
     if (res.statusCode == 401) {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -40,7 +41,7 @@ class ApiClient {
     throw Exception('GET ${url.toString()} failed: ${res.statusCode} ${res.body}');
   }
 
-  Future<dynamic> post(String path, Map<String, dynamic> body) async {
+  Future<dynamic> post(String path, Map<String, dynamic> body, {Duration? timeout}) async {
     final url = Uri.parse(baseUrl + path);
     final headers = _headers();
     debugPrint('ApiClient POST: ${url.toString()}');
@@ -58,7 +59,7 @@ class ApiClient {
     } catch (e) {
       debugPrint('ApiClient Body: <failed to encode for debug>');
     }
-    final res = await http.post(url, headers: headers, body: json.encode(body));
+    final res = await http.post(url, headers: headers, body: json.encode(body)).timeout(timeout ?? defaultTimeout);
     if (res.statusCode == 401) {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -77,13 +78,13 @@ class ApiClient {
     throw Exception('POST ${url.toString()} failed: ${res.statusCode} ${res.body}');
   }
 
-  Future<dynamic> patch(String path, Map<String, dynamic> body) async {
+  Future<dynamic> patch(String path, Map<String, dynamic> body, {Duration? timeout}) async {
     final url = Uri.parse(baseUrl + path);
     final headers = _headers();
     debugPrint('ApiClient PATCH: ${url.toString()}');
     debugPrint('ApiClient Headers: $headers');
     // debugPrint('ApiClient Body: ${json.encode(body)}');
-    final res = await http.patch(url, headers: headers, body: json.encode(body));
+    final res = await http.patch(url, headers: headers, body: json.encode(body)).timeout(timeout ?? defaultTimeout);
     if (res.statusCode == 401) {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -102,12 +103,12 @@ class ApiClient {
     throw Exception('PATCH ${url.toString()} failed: ${res.statusCode} ${res.body}');
   }
 
-  Future<dynamic> delete(String path, Map<String, dynamic> body) async {
+  Future<dynamic> delete(String path, Map<String, dynamic> body, {Duration? timeout}) async {
     final url = Uri.parse(baseUrl + path);
     final headers = _headers();
     debugPrint('ApiClient DELETE: ${url.toString()}');
     debugPrint('ApiClient Headers: $headers');
-    final res = await http.delete(url, headers: headers, body: json.encode(body));
+    final res = await http.delete(url, headers: headers, body: json.encode(body)).timeout(timeout ?? defaultTimeout);
     if (res.statusCode == 401) {
       try {
         final prefs = await SharedPreferences.getInstance();

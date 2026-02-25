@@ -27,7 +27,7 @@ export class TaskAssignmentSubscriber implements EntitySubscriberInterface<TaskA
       if (!wo || !wo.id) return;
 
       const assignmentRepo = AppDataSource.getRepository(Assignment);
-      const exists = await assignmentRepo.findOne({ where: { assigneeId: String(userId), wo: { id: String(wo.id) } } as any, relations: ['wo'] as any });
+      const exists = await assignmentRepo.findOne({ where: { assigneeId: String(userId), wo: { id: String(wo.id) }, task_id: String(task.id) } as any, relations: ['wo'] as any });
       if (exists) return;
 
       const ass = new Assignment();

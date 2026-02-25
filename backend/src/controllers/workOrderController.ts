@@ -654,6 +654,58 @@ export async function deployWorkOrder(req: Request, res: Response) {
             created.push(saved as any);
             continue;
           }
+
+          // Try to find a workorder-level assignment (assignee on the WO) to propagate to task
+          try {
+            const woLevel = await assignmentRepo.createQueryBuilder('a')
+              .where('a.wo_id = :wo AND a.assignee_id IS NOT NULL AND a.status IN (:...st)', { wo: id, st: ['ASSIGNED','DEPLOYED','IN_PROGRESS'] })
+              .getOne();
+            if (woLevel && woLevel.assigneeId) {
+              const a = new Assignment();
+              a.wo = wo as any;
+              a.assigneeId = woLevel.assigneeId;
+              a.task_id = String(taskId);
+              a.task_name = taskName;
+              a.status = 'DEPLOYED';
+              const saved = await assignmentRepo.save(a as any);
+              created.push(saved as any);
+              continue;
+            }
+          } catch (e) {
+            console.warn('deployWorkOrder: failed to lookup wo-level assignment', e);
+          }
+
+          // Fallback: try to use wo.raw.assigned_user_id if present
+          try {
+            const rawAssignee = (wo as any).raw?.assigned_user_id ?? (wo as any).raw?.assigned_user_name ?? null;
+            if (rawAssignee) {
+              // attempt to resolve to user UUID if rawAssignee looks like UUID or NIPP
+              let resolvedId: string | null = null;
+              const s = String(rawAssignee);
+              const looksLikeUuid = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(s);
+              if (looksLikeUuid) resolvedId = s;
+              else {
+                try {
+                  const userRepo = AppDataSource.getRepository((await import('../entities/User')).User);
+                  const u = await userRepo.findOneBy([{ nipp: s } as any, { id: s } as any, { username: s } as any]);
+                  if (u && (u as any).id) resolvedId = String((u as any).id);
+                } catch (e) { /* ignore */ }
+              }
+              if (resolvedId) {
+                const a = new Assignment();
+                a.wo = wo as any;
+                a.assigneeId = resolvedId;
+                a.task_id = String(taskId);
+                a.task_name = taskName;
+                a.status = 'DEPLOYED';
+                const saved = await assignmentRepo.save(a as any);
+                created.push(saved as any);
+                continue;
+              }
+            }
+          } catch (e) { /* ignore */ }
+
+          // No assignee could be determined — create unassigned assignment
           const a = new Assignment();
           a.wo = wo as any;
           a.assigneeId = undefined;
@@ -674,13 +726,37 @@ export async function deployWorkOrder(req: Request, res: Response) {
 
     // notify assigned technicians (if any)
     try {
-      const assigneeIds = Array.from(new Set(created.map(a => (a as any).assigneeId).filter((x: any) => x)));
+      // Log created assignments for debugging
+      try { console.log('INSTRUMENT deployWorkOrder - created assignments count=', created.length, 'sample=', created.slice(0,5).map(c=>({id: (c as any).id, assigneeId: (c as any).assigneeId, task_id: (c as any).task_id}))); }catch(e){}
+      // Resolve assignee identifiers to user UUIDs. Some assignments may store NIPP or legacy identifiers; try to resolve them.
+      const userRepo = AppDataSource.getRepository((await import('../entities/User')).User);
+      const rawIds = Array.from(new Set(created.map(a => (a as any).assigneeId)));
+      const resolvedIds: string[] = [];
+      for (const rid of rawIds) {
+        if (!rid) continue;
+        const s = String(rid);
+        // heuristic: UUIDs contain hyphens and are long; NIPP is usually numeric and shorter
+        const looksLikeUuid = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(s);
+        if (looksLikeUuid) {
+          resolvedIds.push(s);
+          continue;
+        }
+        // attempt to resolve as NIPP or username
+        try{
+          const u = await userRepo.findOneBy([{ nipp: s } as any, { id: s } as any, { username: s } as any]);
+          if (u && (u as any).id) resolvedIds.push(String((u as any).id));
+          else console.warn('deployWorkOrder: could not resolve assignee identifier to user id', s);
+        }catch(e){ console.warn('deployWorkOrder: user resolve error', e); }
+      }
+
+      const uniqueResolved = Array.from(new Set(resolvedIds));
       const title = `Assigned: WO ${wo.doc_no ?? ''}`;
       const body = `You have been deployed to work order ${wo.doc_no ?? wo.id}`;
-      for (const uid of assigneeIds) {
-        // instrument: log intent to push
+      if (uniqueResolved.length === 0) {
+        console.log('deployWorkOrder: no resolved assignee UUIDs to notify for WO', wo.id);
+      }
+      for (const uid of uniqueResolved) {
         console.log('INSTRUMENT pushNotify deployWorkOrder', { targetUserId: String(uid), woId: wo?.id, woDoc: wo?.doc_no, title, body });
-        // fire-and-forget, log errors
         pushNotify(String(uid), `${body}`).catch((e: any) => console.warn('pushNotify error', e));
       }
     } catch (e) {

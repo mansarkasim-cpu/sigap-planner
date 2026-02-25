@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react'
 import apiClient from '../../../lib/api-client'
 import Link from 'next/link'
 import Box from '@mui/material/Box'
+import Tooltip from '@mui/material/Tooltip'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
@@ -137,9 +138,12 @@ export default function DailyWorkOrdersPage(){
   const [customSite, setCustomSite] = useState<string>('');
   const [selectedTechs, setSelectedTechs] = useState<any[]>([]);
   const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
   const SLOT_DURATION_MIN = 15;
   const SLOT_GAP_MIN = 5;
   const [previewSchedule, setPreviewSchedule] = useState<Array<any>>([]);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [unassignedDays, setUnassignedDays] = useState<string[]>([]);
 
   useEffect(()=>{ load(page) }, [])
 
@@ -325,6 +329,66 @@ export default function DailyWorkOrdersPage(){
       setScheduledEmpty(false);
     }catch(_){ setTechOptions([]); setTechsFromSchedule(false); setScheduledEmpty(false); }
   }
+
+    // Fetch scheduled technicians for a single date/time without mutating component state
+    async function fetchScheduledTechsForDate(dateOrDateTime?: string|null, siteOverride?: string|null) {
+      try{
+        let dateParam = '';
+        let timeParam = '';
+        if (dateOrDateTime) {
+          const iso = new Date(dateOrDateTime);
+          if (!isNaN(iso.getTime())){
+            const yyyy = iso.getFullYear();
+            const mm = String(iso.getMonth()+1).padStart(2,'0');
+            const dd = String(iso.getDate()).padStart(2,'0');
+            const hh = String(iso.getHours()).padStart(2,'0');
+            const min = String(iso.getMinutes()).padStart(2,'0');
+            dateParam = `${yyyy}-${mm}-${dd}`;
+            timeParam = `${hh}:${min}`;
+          } else {
+            const m = String(dateOrDateTime).match(/(\d{4}-\d{2}-\d{2})/);
+            if (m) dateParam = m[1];
+          }
+        }
+
+        function extractSiteValue(v:any){
+          if (v == null) return '';
+          if (typeof v === 'string') return v.trim();
+          if (typeof v === 'number') return String(v);
+          if (typeof v === 'object') {
+            return String(v.name ?? v.code ?? v.id ?? v.nama ?? v.label ?? v.site ?? '')
+          }
+          return '';
+        }
+
+        let siteParam: string | null = null;
+        if (siteOverride) siteParam = extractSiteValue(siteOverride) || null;
+        if (!siteParam) {
+          if (selectedAssets && selectedAssets.length>0) {
+            const s = extractSiteValue(selectedAssets[0].site ?? selectedAssets[0].vendor_cabang ?? selectedAssets[0].raw?.site ?? selectedAssets[0]);
+            if (s) siteParam = s;
+          }
+        }
+        if (!siteParam) {
+          if (assetsOptions && assetsOptions.length>0) {
+            const s = extractSiteValue(assetsOptions[0].site ?? assetsOptions[0].vendor_cabang ?? assetsOptions[0].raw?.site ?? assetsOptions[0]);
+            if (s) siteParam = s;
+          }
+        }
+        if (!siteParam) {
+          if (rows && rows.length>0) {
+            const r0: any = rows[0];
+            const s = extractSiteValue(r0.site ?? r0.vendor_cabang ?? r0.raw?.site ?? r0);
+            if (s) siteParam = s;
+          }
+        }
+
+        const q = `/scheduled-technicians?${dateParam ? `date=${encodeURIComponent(dateParam)}` : ''}${timeParam ? `&time=${encodeURIComponent(timeParam)}&timeIsLocal=1` : ''}` + (siteParam ? `&site=${encodeURIComponent(siteParam)}` : '');
+        const res = await apiClient(q);
+        const apiRows = res?.data ?? res ?? [];
+        return Array.isArray(apiRows) ? apiRows : [];
+      }catch(e){ return []; }
+    }
 
   function isAssetSelected(a:any){
     return selectedAssets.some(sa => String(sa.id) === String(a.id));
@@ -636,6 +700,7 @@ export default function DailyWorkOrdersPage(){
       if (m) initialStart = `${m[1]}T08:00`;
     }
     setCustomStart(initialStart);
+    setCustomEnd(initialStart);
     // populate technicians based on scheduled shift for the chosen start time/site
     // call without awaiting so UI opens immediately
     loadTechsForDate(initialStart || undefined, customSite);
@@ -706,57 +771,84 @@ export default function DailyWorkOrdersPage(){
     finally{ setDeployingAll(false); }
   }
 
-  function computePreview() {
+  async function computePreview() {
     if (!selectedAssets || selectedAssets.length === 0) return setPreviewSchedule([]);
     if (!selectedTechs || selectedTechs.length === 0) return setPreviewSchedule([]);
-    // slot length = duration + gap
-    const slotMs = (SLOT_DURATION_MIN + SLOT_GAP_MIN) * 60 * 1000;
-    const startMs = (customStart && !isNaN(new Date(customStart).getTime())) ? new Date(customStart).getTime() : Date.now();
+    setPreviewLoading(true);
+    try{
+      // slot length = duration + gap
+      const slotMs = (SLOT_DURATION_MIN + SLOT_GAP_MIN) * 60 * 1000;
+      const baseStart = (customStart && !isNaN(new Date(customStart).getTime())) ? new Date(customStart) : new Date();
+      const startMs = baseStart.getTime();
+      const endMs = (customEnd && !isNaN(new Date(customEnd).getTime())) ? new Date(customEnd).getTime() : startMs;
+      if (endMs < startMs) return setPreviewSchedule([]);
+      const dayMs = 24 * 60 * 60 * 1000;
+      const dayCount = Math.max(1, Math.floor((endMs - startMs) / dayMs) + 1);
 
-    // Group assets by jenis_alat (equipment type) so we can assign one technician per jenis
-    const groupMap: Record<string, any[]> = {};
-    const jenisKeys: string[] = [];
-    for (const a of selectedAssets) {
-      const jenis = (a?.jenis_alat_id ?? a?.jenis_alat?.id ?? a?.jenis_id ?? a?.jenis) || 'unknown';
-      const key = String(jenis);
-      if (!groupMap[key]) { groupMap[key] = []; jenisKeys.push(key); }
-      groupMap[key].push(a);
+      // Group assets by jenis_alat (equipment type) so we can assign one technician per jenis
+      const groupMap: Record<string, any[]> = {};
+      const jenisKeys: string[] = [];
+      for (const a of selectedAssets) {
+        const jenis = (a?.jenis_alat_id ?? a?.jenis_alat?.id ?? a?.jenis_id ?? a?.jenis) || 'unknown';
+        const key = String(jenis);
+        if (!groupMap[key]) { groupMap[key] = []; jenisKeys.push(key); }
+        groupMap[key].push(a);
+      }
+
+      // Build ordered asset list grouped by jenis (keeps grouping for readability) but assign round-robin across techs
+      const orderedAssets: Array<{ asset:any, jenisKey:string }> = [];
+      for (const k of jenisKeys) {
+        const assetsInGroup = groupMap[k] || [];
+        for (const a of assetsInGroup) orderedAssets.push({ asset: a, jenisKey: k });
+      }
+
+      const items: any[] = [];
+
+      // For each day, load scheduled technicians for that day (prefer schedule; fallback to selectedTechs)
+      const unassigned: string[] = [];
+      for (let dayIdx = 0; dayIdx < dayCount; dayIdx++) {
+        const dayDate = new Date(baseStart.getFullYear(), baseStart.getMonth(), baseStart.getDate() + dayIdx, baseStart.getHours(), baseStart.getMinutes());
+        // fetch scheduled techs for this day/time
+        let dayTechs = await fetchScheduledTechsForDate(dayDate.toISOString(), customSite);
+        if (!Array.isArray(dayTechs) || dayTechs.length === 0) {
+          // record that this day has no scheduled technicians
+          unassigned.push(new Date(dayDate).toISOString().slice(0,10));
+          // fallback: use selectedTechs
+          dayTechs = selectedTechs.slice();
+        }
+        const techCount = Math.max(1, dayTechs.length);
+        const techNextAvailable: Record<string, number> = {};
+        for (const t of dayTechs) techNextAvailable[String(t.id)] = dayDate.getTime();
+
+        for (let ai = 0; ai < orderedAssets.length; ai++) {
+          const { asset, jenisKey } = orderedAssets[ai];
+          const tech = dayTechs[ai % techCount];
+          const techId = String(tech.id);
+          const slotStart = techNextAvailable[techId];
+          const slotEnd = slotStart + SLOT_DURATION_MIN * 60 * 1000;
+          items.push({
+            asset_id: asset.id,
+            asset_name: asset.name || asset.nama || asset.label || asset.id,
+            start: new Date(slotStart).toISOString(),
+            end: new Date(slotEnd).toISOString(),
+            assigned_user_id: tech.id,
+            assigned_user_name: tech.name || tech.nipp || tech.email,
+            jenis_alat_id: jenisKey
+          });
+          techNextAvailable[techId] = slotStart + slotMs;
+        }
+      }
+
+      // Sort items by start time for preview clarity
+      items.sort((a,b)=> new Date(a.start).getTime() - new Date(b.start).getTime());
+      setPreviewSchedule(items);
+      setUnassignedDays(unassigned);
+    }catch(e){
+      console.error('computePreview error', e);
+      setPreviewSchedule([]);
+    }finally{
+      setPreviewLoading(false);
     }
-
-    // Distribute assets across selected technicians so every checked tech can receive assignments when possible.
-    const techCount = selectedTechs.length;
-    const techNextAvailable: Record<string, number> = {};
-    for (const t of selectedTechs) techNextAvailable[String(t.id)] = startMs;
-
-    // Build ordered asset list grouped by jenis (keeps grouping for readability) but assign round-robin across techs
-    const orderedAssets: Array<{ asset:any, jenisKey:string }> = [];
-    for (const k of jenisKeys) {
-      const assetsInGroup = groupMap[k] || [];
-      for (const a of assetsInGroup) orderedAssets.push({ asset: a, jenisKey: k });
-    }
-
-    const items: any[] = [];
-    for (let ai = 0; ai < orderedAssets.length; ai++) {
-      const { asset, jenisKey } = orderedAssets[ai];
-      const tech = selectedTechs[ai % techCount];
-      const techId = String(tech.id);
-      const slotStart = techNextAvailable[techId];
-      const slotEnd = slotStart + SLOT_DURATION_MIN * 60 * 1000;
-      items.push({
-        asset_id: asset.id,
-        asset_name: asset.name || asset.nama || asset.label || asset.id,
-        start: new Date(slotStart).toISOString(),
-        end: new Date(slotEnd).toISOString(),
-        assigned_user_id: tech.id,
-        assigned_user_name: tech.name || tech.nipp || tech.email,
-        jenis_alat_id: jenisKey
-      });
-      techNextAvailable[techId] = slotStart + slotMs;
-    }
-
-    // Sort items by start time for preview clarity
-    items.sort((a,b)=> new Date(a.start).getTime() - new Date(b.start).getTime());
-    setPreviewSchedule(items);
   }
 
   async function submitCustomGenerate() {
@@ -1083,8 +1175,8 @@ export default function DailyWorkOrdersPage(){
 
   return (
     <Box sx={{p:3}}>
-      <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', mb:2}}>
-        <Box>
+      <Box sx={{display:'flex', flexDirection: 'column', justifyContent:'space-between', alignItems: 'flex-start', gap:2, mb:2}}>
+        <Box sx={{width: '100%'}}>
           <Typography variant="h5">Daily Checklist Work Orders</Typography>
           <Typography variant="body2" color="text.secondary">Automatically generated per asset — templates included.</Typography>
         </Box>
@@ -1385,42 +1477,94 @@ export default function DailyWorkOrdersPage(){
               </Box>
             </Box>
 
-            <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
-              <TextField
-                label="Date"
-                type="date"
-                size="small"
-                value={(customStart && !isNaN(new Date(customStart).getTime())) ? new Date(customStart).toISOString().slice(0,10) : (dateFilter || '')}
-                InputLabelProps={{ shrink: true }}
-                disabled
-                sx={{ minWidth: 160 }}
-              />
-              <TextField
-                label="Time"
-                type="time"
-                size="small"
-                value={(() => {
-                  try {
-                    if (customStart && String(customStart).includes('T') && !isNaN(new Date(customStart).getTime())) {
-                      const d = new Date(customStart);
-                      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                    }
-                    // fallback: if dateFilter is today use current time, else 08:00
-                    return '08:00';
-                  } catch (e) { return '08:00'; }
-                })()}
-                onChange={e=>{
-                  const time = String(e.target.value || '').slice(0,5);
-                  const datePart = (dateFilter && String(dateFilter).trim()) ? String(dateFilter).trim() : ((customStart && String(customStart).includes('T')) ? String(customStart).split('T')[0] : '');
-                  if (datePart) setCustomStart(`${datePart}T${time}`);
-                }}
-                InputLabelProps={{ shrink: true }}
-              />
+            <Box sx={{display:'flex',gap:1,alignItems:'center',flexWrap:'wrap'}}>
+              <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
+                <TextField
+                  label="Start Date"
+                  type="date"
+                  size="small"
+                  value={(customStart && !isNaN(new Date(customStart).getTime())) ? new Date(customStart).toISOString().slice(0,10) : (dateFilter || '')}
+                  InputLabelProps={{ shrink: true }}
+                  onChange={e=>{
+                    const date = String(e.target.value || '').slice(0,10);
+                    const time = (customStart && String(customStart).includes('T')) ? String(customStart).split('T')[1].slice(0,5) : '08:00';
+                    if (date) setCustomStart(`${date}T${time}`);
+                  }}
+                  sx={{ minWidth: 160 }}
+                />
+                <TextField
+                  label="Start Time"
+                  type="time"
+                  size="small"
+                  value={(() => {
+                    try {
+                      if (customStart && String(customStart).includes('T') && !isNaN(new Date(customStart).getTime())) {
+                        const d = new Date(customStart);
+                        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                      }
+                      return '08:00';
+                    } catch (e) { return '08:00'; }
+                  })()}
+                  onChange={e=>{
+                    const time = String(e.target.value || '').slice(0,5);
+                    const datePart = (customStart && String(customStart).includes('T')) ? String(customStart).split('T')[0] : (dateFilter || '');
+                    if (datePart) setCustomStart(`${datePart}T${time}`);
+                  }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+
+              <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
+                <TextField
+                  label="End Date"
+                  type="date"
+                  size="small"
+                  value={(customEnd && !isNaN(new Date(customEnd).getTime())) ? new Date(customEnd).toISOString().slice(0,10) : ((customStart && !isNaN(new Date(customStart).getTime())) ? new Date(customStart).toISOString().slice(0,10) : (dateFilter || ''))}
+                  InputLabelProps={{ shrink: true }}
+                  onChange={e=>{
+                    const date = String(e.target.value || '').slice(0,10);
+                    const time = (customEnd && String(customEnd).includes('T')) ? String(customEnd).split('T')[1].slice(0,5) : ((customStart && String(customStart).includes('T')) ? String(customStart).split('T')[1].slice(0,5) : '08:00');
+                    if (date) setCustomEnd(`${date}T${time}`);
+                  }}
+                  sx={{ minWidth: 160 }}
+                />
+                <TextField
+                  label="End Time"
+                  type="time"
+                  size="small"
+                  value={(() => {
+                    try {
+                      if (customEnd && String(customEnd).includes('T') && !isNaN(new Date(customEnd).getTime())) {
+                        const d = new Date(customEnd);
+                        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                      }
+                      if (customStart && String(customStart).includes('T') && !isNaN(new Date(customStart).getTime())) {
+                        const d = new Date(customStart);
+                        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                      }
+                      return '08:00';
+                    } catch (e) { return '08:00'; }
+                  })()}
+                  onChange={e=>{
+                    const time = String(e.target.value || '').slice(0,5);
+                    const datePart = (customEnd && String(customEnd).includes('T')) ? String(customEnd).split('T')[0] : ((customStart && String(customStart).includes('T')) ? String(customStart).split('T')[0] : (dateFilter || ''));
+                    if (datePart) setCustomEnd(`${datePart}T${time}`);
+                  }}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
             </Box>
 
-            <Box sx={{display:'flex',gap:2,alignItems:'center'}}>
-              <Button variant="outlined" onClick={computePreview} disabled={!customStart}>Preview Schedule</Button>
-              <Box sx={{ml:2,color:'text.secondary'}}>Each job: {SLOT_DURATION_MIN} min, gap: {SLOT_GAP_MIN} min. Prefer one technician per equipment type; scheduled per-technician to avoid collisions.</Box>
+            <Box sx={{display:'flex',gap:2,alignItems:'center',flexDirection:'column',alignItemsContent:'flex-start'}}>
+              <Box>
+                <Button variant="outlined" onClick={async()=> await computePreview()} disabled={!customStart || previewLoading} startIcon={previewLoading ? <CircularProgress size={14}/> : undefined}>Preview Schedule</Button>
+                <Box component="span" sx={{ml:2, color:'text.secondary', display:'inline-block', verticalAlign:'middle'}}>Each job: {SLOT_DURATION_MIN} min, gap: {SLOT_GAP_MIN} min. Prefer one technician per equipment type; scheduled per-technician to avoid collisions.</Box>
+              </Box>
+              {unassignedDays && unassignedDays.length > 0 ? (
+                <Box sx={{mt:1, width:'100%'}}>
+                  <Typography variant="body2" color="error">Warning: no shifts assigned for these dates: {unassignedDays.join(', ')}. Preview used fallback technicians for those days.</Typography>
+                </Box>
+              ) : null}
             </Box>
 
             {previewSchedule.length>0 && (
@@ -1439,7 +1583,18 @@ export default function DailyWorkOrdersPage(){
         </DialogContent>
         <Box sx={{p:1,display:'flex',justifyContent:'flex-end'}}>
           <Button onClick={()=>setCustomOpen(false)} disabled={generating}>Cancel</Button>
-          <Button variant="contained" onClick={submitCustomGenerate} disabled={generating || previewSchedule.length===0} sx={{ml:1}}>{generating? 'Generating…':'Generate'}</Button>
+          <Tooltip title={unassignedDays && unassignedDays.length>0 ? `Cannot generate: no shifts for these dates: ${unassignedDays.join(', ')}` : ''}>
+            <span>
+              <Button
+                variant="contained"
+                onClick={submitCustomGenerate}
+                disabled={generating || previewSchedule.length===0 || (unassignedDays && unassignedDays.length>0)}
+                sx={{ml:1}}
+              >
+                {generating? 'Generating…':'Generate'}
+              </Button>
+            </span>
+          </Tooltip>
         </Box>
       </Dialog>
 
@@ -1479,3 +1634,5 @@ export default function DailyWorkOrdersPage(){
     </Box>
   )
 }
+
+  
