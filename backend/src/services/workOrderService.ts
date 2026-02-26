@@ -517,8 +517,8 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
  * Supports filtering by date range (start/end), site, status, q (search), work_type, type_work.
  * Returns paginated minimal rows with total count.
  */
-export async function getWorkOrdersOptimized(opts: { start?: string; end?: string; site?: string; status?: string; q?: string; work_type?: string; type_work?: string; page?: number; pageSize?: number; sort?: string }) {
-  const { start, end, site = '', status = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts as any;
+export async function getWorkOrdersOptimized(opts: { start?: string; end?: string; site?: string; status?: string; exclude_status?: string; q?: string; work_type?: string; type_work?: string; page?: number; pageSize?: number; sort?: string }) {
+  const { start, end, site = '', status = '', exclude_status = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts as any;
   const limit = Math.max(1, Math.min(Number(pageSize) || 20, Number(process.env.MAX_PAGE_SIZE || 100)));
   const offset = (Math.max(1, Number(page || 1)) - 1) * limit;
 
@@ -549,6 +549,16 @@ export async function getWorkOrdersOptimized(opts: { start?: string; end?: strin
   if (status && String(status).trim().length) {
     where.push("wo.status = $" + idx);
     params.push(String(status).trim()); idx += 1;
+  }
+
+  // exclude_status: comma-separated list of statuses to exclude (e.g., 'COMPLETED,CANCELLED')
+  if (exclude_status && String(exclude_status).trim().length) {
+    const parts = String(exclude_status).split(',').map((s: string) => String(s).trim()).filter(Boolean);
+    if (parts.length > 0) {
+      const placeholders = parts.map(() => '$' + (idx++)).join(',');
+      where.push(`wo.status NOT IN (${placeholders})`);
+      for (const p of parts) params.push(p);
+    }
   }
 
   if (work_type && String(work_type).trim().length) {

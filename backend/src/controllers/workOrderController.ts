@@ -44,6 +44,7 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const jenis = (req.query.jenis as string) || '';
     const work_type = (req.query.work_type as string) || undefined;
     const type_work = (req.query.type_work as string) || undefined;
+    const exclude_status = (req.query.exclude_status as string) || undefined;
     const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
 
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
@@ -144,7 +145,7 @@ export async function listWorkOrdersOptimized(req: Request, res: Response) {
     const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
     const sort = (req.query.sort as string) || 'start_date';
 
-    const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, q, work_type, type_work, page, pageSize, sort });
+    const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, exclude_status, q, work_type, type_work, page, pageSize, sort });
     const out = (rows || []).map((r: any) => {
       const s = serializeWorkOrder(r);
       s.status = (r as any).status ?? 'NEW';
