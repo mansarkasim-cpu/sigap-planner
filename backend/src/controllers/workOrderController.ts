@@ -45,6 +45,7 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const work_type = (req.query.work_type as string) || undefined;
     const type_work = (req.query.type_work as string) || undefined;
     const exclude_status = (req.query.exclude_status as string) || undefined;
+    const exclude_status = (req.query.exclude_status as string) || undefined;
     const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
 
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
