@@ -62,6 +62,54 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
   }
 }
 
+  /**
+   * GET /api/work-orders/gantt
+   * Query: start, end (ISO datetimes) [, site, work_type, type_work]
+   * Returns work orders overlapping the given time range.
+   */
+  export async function listWorkOrdersForGantt(req: Request, res: Response) {
+    try {
+      let start = (req.query.start as string) || '';
+      let end = (req.query.end as string) || '';
+      const site = (req.query.site as string) || '';
+      const work_type = (req.query.work_type as string) || '';
+      const type_work = (req.query.type_work as string) || '';
+
+      // normalize naive datetimes by appending Z if missing so Postgres timestamptz interprets them safely
+      function normalizeTs(v: string) {
+        if (!v) return v;
+        if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v)) return v;
+        return v + 'Z';
+      }
+      if (start) start = normalizeTs(start);
+      if (end) end = normalizeTs(end);
+
+      // If both start and end are missing, default to a 30-day window centered on today
+      if (!start && !end) {
+        const now = new Date();
+        const s = new Date(now);
+        s.setDate(s.getDate() - 15);
+        s.setHours(0,0,0,0);
+        const e = new Date(now);
+        e.setDate(e.getDate() + 45);
+        e.setHours(23,59,59,999);
+        start = s.toISOString();
+        end = e.toISOString();
+      }
+
+      const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work });
+      const out = Array.isArray(rows) ? rows.map(r => {
+        const s = serializeWorkOrder(r);
+        s.status = (r as any).status ?? 'NEW';
+        return s;
+      }) : [];
+      return res.json({ data: out, meta: { start, end, count: out.length } });
+    } catch (err) {
+      console.error('listWorkOrdersForGantt error', err);
+      return res.status(500).json({ message: 'Failed to load gantt work orders' });
+    }
+  }
+
 export async function listWorkOrders(req: Request, res: Response) {
   try {
     const rows = await service.getAllWorkOrders();

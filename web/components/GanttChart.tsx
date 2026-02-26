@@ -511,22 +511,33 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       }
 
       const siteParam = site ? `&site=${encodeURIComponent(site)}` : '';
-      const baseTemplate = `/work-orders?q=&page={page}&pageSize={pageSize}` + siteParam;
-      const rows = await fetchAllPages(baseTemplate);
+      const startIso = new Date(dayStartMs).toISOString();
+      const endIso = new Date(dayEndMs).toISOString();
+      // Use the new optimized Gantt endpoint which returns only workorders overlapping the window
+      const baseUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}` + siteParam;
+      let rowsRes: any = [];
+      try {
+        rowsRes = await apiClient(baseUrl);
+      } catch (e) {
+        rowsRes = [];
+      }
+      const rows = (rowsRes?.data ?? rowsRes) || [];
 
       // Also explicitly fetch DAILY work orders and merge to ensure they appear on the Gantt
       let dailyRows: any[] = [];
       try {
-        const dailyTemplate = `/work-orders?work_type=DAILY&page={page}&pageSize={pageSize}` + siteParam;
-        dailyRows = await fetchAllPages(dailyTemplate);
+        const dailyUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&work_type=DAILY` + siteParam;
+        const r = await apiClient(dailyUrl);
+        dailyRows = (r?.data ?? r) || [];
       } catch (e) {
         dailyRows = [];
       }
       // Also fetch items where type_work='DAILY_CHECKLIST' (legacy or alternative column)
       let typeWorkRows: any[] = [];
       try {
-        const twTemplate = `/work-orders?type_work=DAILY_CHECKLIST&page={page}&pageSize={pageSize}` + siteParam;
-        typeWorkRows = await fetchAllPages(twTemplate);
+        const twUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&type_work=DAILY_CHECKLIST` + siteParam;
+        const r2 = await apiClient(twUrl);
+        typeWorkRows = (r2?.data ?? r2) || [];
       } catch (e) {
         typeWorkRows = [];
       }

@@ -17,6 +17,71 @@ export async function getWorkOrderById(id: string) {
   return wo || null;
 }
 
+/**
+ * Return work orders overlapping a date range for Gantt use.
+ * Accepts ISO datetimes for `start` and `end` (timestamptz-friendly).
+ * Returns minimal fields and preserves SQL-like datetime strings.
+ */
+export async function getWorkOrdersForGantt(opts: { start: string; end: string; site?: string; work_type?: string; type_work?: string; limit?: number }) {
+  const { start, end, site = '', work_type = '', type_work = '', limit } = opts as any;
+  const repo = AppDataSource.getRepository(WorkOrder);
+
+  const qb = repo.createQueryBuilder('wo');
+  qb.where('wo.deleted_at IS NULL');
+
+  // overlap predicate: wo.start_date <= end AND (wo.end_date IS NULL OR wo.end_date >= start)
+  if (start && end) {
+    qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+  } else if (start) {
+    qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+  } else if (end) {
+    qb.andWhere('wo.start_date <= :end', { end });
+  }
+
+  if (site && String(site).trim().length) {
+    const s = `%${String(site).toLowerCase().trim()}%`;
+    qb.andWhere("(LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE :site OR LOWER(COALESCE(wo.raw->>'site','')) LIKE :site)", { site: s });
+  }
+
+  if (work_type && String(work_type).trim().length) {
+    qb.andWhere('wo.work_type = :wt', { wt: String(work_type).trim() });
+  }
+  if (type_work && String(type_work).trim().length) {
+    qb.andWhere('wo.type_work = :tw', { tw: String(type_work).trim() });
+  }
+
+  // select minimal columns to keep payload small for Gantt
+  qb.select(['wo.id', 'wo.doc_no', 'wo.start_date', 'wo.end_date', 'wo.asset_name', 'wo.raw', 'wo.status']);
+  qb.orderBy('wo.start_date', 'ASC');
+  if (limit && Number(limit) > 0) qb.limit(Number(limit));
+
+  const rows = await qb.getMany();
+
+  function formatDateToDisplay(val: any) {
+    if (val == null) return null;
+    try {
+      if (typeof val === 'string') {
+        const dt = new Date(val);
+        if (isNaN(dt.getTime())) return val;
+        return dt.toISOString();
+      }
+      const d = val instanceof Date ? val : new Date(val);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const serialized = rows.map(r => ({
+    ...r,
+    start_date: formatDateToDisplay((r as any).start_date),
+    end_date: formatDateToDisplay((r as any).end_date),
+  }));
+
+  return serialized;
+}
+
 export async function createOrUpdateFromSigap(payload: {
   sigap_id?: number;
   doc_no?: string;
