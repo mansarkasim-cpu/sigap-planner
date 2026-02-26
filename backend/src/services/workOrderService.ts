@@ -513,6 +513,98 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
 }
 
 /**
+ * Optimized list for Work Order listing UI.
+ * Supports filtering by date range (start/end), site, status, q (search), work_type, type_work.
+ * Returns paginated minimal rows with total count.
+ */
+export async function getWorkOrdersOptimized(opts: { start?: string; end?: string; site?: string; status?: string; q?: string; work_type?: string; type_work?: string; page?: number; pageSize?: number; sort?: string }) {
+  const { start, end, site = '', status = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts as any;
+  const limit = Math.max(1, Math.min(Number(pageSize) || 20, Number(process.env.MAX_PAGE_SIZE || 100)));
+  const offset = (Math.max(1, Number(page || 1)) - 1) * limit;
+
+  // Build WHERE clauses and params
+  const where: string[] = ['wo.deleted_at IS NULL'];
+  const params: any[] = [];
+  let idx = 1;
+
+  // date range overlap using timestamptz-safe expression
+  if (start && end) {
+    where.push("tstzrange((wo.start_date AT TIME ZONE 'UTC'), COALESCE(wo.end_date AT TIME ZONE 'UTC',(wo.start_date AT TIME ZONE 'UTC')), '[]') && tstzrange($" + idx + ", $" + (idx+1) + ", '[]')");
+    params.push(start, end);
+    idx += 2;
+  } else if (start) {
+    where.push("(wo.end_date IS NULL OR (wo.end_date AT TIME ZONE 'UTC') >= ($" + idx + "))");
+    params.push(start); idx += 1;
+  } else if (end) {
+    where.push("(wo.start_date AT TIME ZONE 'UTC') <= ($" + idx + ")");
+    params.push(end); idx += 1;
+  }
+
+  if (site && String(site).trim().length) {
+    where.push("(LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE $" + idx + " OR LOWER(COALESCE(wo.raw->>'site','')) LIKE $" + idx + ")");
+    params.push(`%${String(site).toLowerCase().trim()}%`);
+    idx += 1;
+  }
+
+  if (status && String(status).trim().length) {
+    where.push("wo.status = $" + idx);
+    params.push(String(status).trim()); idx += 1;
+  }
+
+  if (work_type && String(work_type).trim().length) {
+    where.push("wo.work_type = $" + idx);
+    params.push(String(work_type).trim()); idx += 1;
+  }
+  if (type_work && String(type_work).trim().length) {
+    where.push("wo.type_work = $" + idx);
+    params.push(String(type_work).trim()); idx += 1;
+  }
+
+  if (q && String(q).trim().length) {
+    where.push("(coalesce(wo.doc_no,'') || ' ' || coalesce(wo.asset_name,'')) ILIKE $" + idx);
+    params.push(`%${String(q).trim()}%`); idx += 1;
+  }
+
+  const whereSql = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+
+  // Choose order
+  const allowedSort = ['start_date', 'created_at', 'doc_no'];
+  const orderBy = allowedSort.includes(sort) ? `wo.${sort} DESC` : 'wo.start_date DESC';
+
+  // Main select: minimal fields and lateral subqueries for assigned_count and progress (progress computed via function if needed)
+  const selSql = `
+    SELECT wo.id, wo.doc_no, wo.asset_name, to_char(wo.start_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS start_date, 
+           to_char(wo.end_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS end_date,
+           wo.status, wo.raw,
+           (SELECT COUNT(1) FROM assignment a WHERE a.wo_id = wo.id AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')) AS assigned_count
+    FROM work_order wo
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  // count query
+  const countSql = `SELECT COUNT(1) AS total FROM work_order wo ${whereSql}`;
+
+  // Execute
+  const rows = await AppDataSource.query(selSql, params);
+  const cnt = await AppDataSource.query(countSql, params);
+  const total = (Array.isArray(cnt) && cnt[0] && Number(cnt[0].total)) ? Number(cnt[0].total) : 0;
+
+  // attach progress by computing per-row (reuse computeWorkOrderProgress) - do in parallel but limit concurrency
+  const out = await Promise.all(rows.map(async (r: any) => {
+    try {
+      const p = await computeWorkOrderProgress(String(r.id));
+      return { ...r, progress: p };
+    } catch (e) {
+      return { ...r, progress: 0 };
+    }
+  }));
+
+  return { rows: out, total };
+}
+
+/**
  * Compute work order progress as fraction in [0,1].
  * Progress is defined as sum(duration of tasks with at least one realisasi) / total task durations.
  */

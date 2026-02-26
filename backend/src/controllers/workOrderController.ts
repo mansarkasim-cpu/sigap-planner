@@ -128,6 +128,38 @@ export async function listWorkOrders(req: Request, res: Response) {
 }
 
 /**
+ * GET /api/work-orders/list-optimized
+ * Optimized list for UI grid; accepts start/end, site, status, q, page, pageSize
+ */
+export async function listWorkOrdersOptimized(req: Request, res: Response) {
+  try {
+    const start = (req.query.start as string) || undefined;
+    const end = (req.query.end as string) || undefined;
+    const site = (req.query.site as string) || undefined;
+    const status = (req.query.status as string) || undefined;
+    const q = (req.query.q as string) || undefined;
+    const work_type = (req.query.work_type as string) || undefined;
+    const type_work = (req.query.type_work as string) || undefined;
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
+    const sort = (req.query.sort as string) || 'start_date';
+
+    const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, q, work_type, type_work, page, pageSize, sort });
+    const out = (rows || []).map((r: any) => {
+      const s = serializeWorkOrder(r);
+      s.status = (r as any).status ?? 'NEW';
+      s.progress = (r as any).progress ?? 0;
+      s.assigned_count = (r as any).assigned_count ?? 0;
+      return s;
+    });
+    return res.json({ data: out, meta: { page, pageSize, total } });
+  } catch (err) {
+    console.error('listWorkOrdersOptimized error', err);
+    return res.status(500).json({ message: 'Failed to load optimized work orders' });
+  }
+}
+
+/**
  * GET /api/work-orders/completed-with-realisasi
  * Query params: start (ISO or YYYY-MM-DDTHH:MM:SS), end (ISO), page, pageSize
  * Returns work orders with status = 'COMPLETED' and embedded realisasi details
