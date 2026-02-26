@@ -101,6 +101,7 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
       const out = Array.isArray(rows) ? rows.map(r => {
         const s = serializeWorkOrder(r);
         s.status = (r as any).status ?? 'NEW';
+        s.progress = (r as any).progress ?? 0;
         return s;
       }) : [];
       return res.json({ data: out, meta: { start, end, count: out.length } });
