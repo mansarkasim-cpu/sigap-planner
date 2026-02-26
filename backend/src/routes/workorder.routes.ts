@@ -8,6 +8,9 @@ const router = Router();
 // daftar paginated & search: GET /api/work-orders?q=&page=&pageSize=
 router.get('/', ctrl.listWorkOrdersPaginated);
 
+// Gantt optimized endpoint: GET /api/work-orders/gantt?start=&end=&site=&work_type=&type_work=
+router.get('/gantt', ctrl.listWorkOrdersForGantt);
+
 // GET /api/work-orders/completed-with-realisasi?start=&end=&page=&pageSize=
 router.get('/completed-with-realisasi', ctrl.listCompletedWorkOrdersWithRealisasi);
 
