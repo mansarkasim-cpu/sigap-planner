@@ -79,7 +79,17 @@ export async function getWorkOrdersForGantt(opts: { start: string; end: string; 
     end_date: formatDateToDisplay((r as any).end_date),
   }));
 
-  return serialized;
+  // attach progress for each returned workorder (reuse existing computeWorkOrderProgress)
+  const withProgress = await Promise.all(serialized.map(async (r: any) => {
+    try {
+      const p = await computeWorkOrderProgress(String(r.id));
+      return { ...r, progress: p };
+    } catch (e) {
+      return { ...r, progress: 0 };
+    }
+  }));
+
+  return withProgress;
 }
 
 export async function createOrUpdateFromSigap(payload: {
