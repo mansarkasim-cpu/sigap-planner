@@ -139,10 +139,18 @@ export async function listWorkOrdersOptimized(req: Request, res: Response) {
     const site = (req.query.site as string) || undefined;
     const status = (req.query.status as string) || undefined;
     const exclude_status = (req.query.exclude_status as string) || undefined;
-    const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
+    let exclude_work_type = (req.query.exclude_work_type as string) || undefined;
     const q = (req.query.q as string) || undefined;
     const work_type = (req.query.work_type as string) || undefined;
-    const type_work = (req.query.type_work as string) || undefined;
+    let type_work = (req.query.type_work as string) || undefined;
+
+    // Backwards-compatible: some clients passed `type_work=DAILY` expecting it to
+    // exclude DAILY entries. If `exclude_work_type` not provided but `type_work`
+    // is present together with `exclude_status`, treat `type_work` as exclude.
+    if (!exclude_work_type && type_work && (req.query.exclude_status as string)) {
+      exclude_work_type = type_work;
+      type_work = undefined;
+    }
     const page = Math.max(Number(req.query.page || 1), 1);
     const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
     const sort = (req.query.sort as string) || 'start_date';

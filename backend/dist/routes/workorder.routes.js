@@ -30,6 +30,12 @@ const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 // daftar paginated & search: GET /api/work-orders?q=&page=&pageSize=
 router.get('/', ctrl.listWorkOrdersPaginated);
+// Gantt optimized endpoint: GET /api/work-orders/gantt?start=&end=&site=&work_type=&type_work=
+router.get('/gantt', ctrl.listWorkOrdersForGantt);
+// optimized list for UI grids
+router.get('/list-optimized', ctrl.listWorkOrdersOptimized);
+// GET /api/work-orders/completed-with-realisasi?start=&end=&page=&pageSize=
+router.get('/completed-with-realisasi', ctrl.listCompletedWorkOrdersWithRealisasi);
 // tambah dari SIGAP (existing)
 router.post('/add', ctrl.fetchAndCreateFromSigap);
 router.post('/fetch-and-create', ctrl.fetchAndCreateFromSigap);

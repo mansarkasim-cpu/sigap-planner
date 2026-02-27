@@ -15,6 +15,7 @@ const Task_1 = require("../entities/Task");
 const TaskAssignment_1 = require("../entities/TaskAssignment");
 const WorkOrder_1 = require("../entities/WorkOrder");
 const auth_1 = require("../middleware/auth");
+const realisasi_dto_1 = require("../dto/realisasi.dto");
 const class_validator_1 = require("class-validator");
 const router = (0, express_1.Router)();
 // GET /api/work-orders/:id/tasks
@@ -26,6 +27,7 @@ router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => 
             .leftJoinAndSelect('t.assignments', 'a')
             .leftJoinAndSelect('a.user', 'u')
             .where('t.workOrder = :wo', { wo: workOrderId })
+            .orderBy('t.task_number', 'ASC')
             .getMany();
         // compute per-task realisasi counts by joining task->realisasi for this workorder
         try {
@@ -95,7 +97,8 @@ router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => 
                 t.has_realisasi = false;
             }
         }
-        return res.json(rows);
+        // ensure `task_number` is present in response objects (explicitly include null when missing)
+        return res.json((rows || []).map(r => ({ ...r, task_number: r.task_number ?? null })));
     }
     catch (err) {
         console.error('list tasks', err);
@@ -155,6 +158,10 @@ router.get('/work-orders/:id/realisasi/full', auth_1.authMiddleware, async (req,
         return res.status(500).json({ message: 'Failed to fetch realisasi entries' });
     }
 });
+// PATCH /api/work-orders/:woId/realisasi/:rid - update realisasi (start/end/notes) and record history
+router.patch('/work-orders/:woId/realisasi/:rid', auth_1.authMiddleware, async (req, res) => (0, realisasi_dto_1.updateRealisasi)(req, res));
+// GET /api/work-orders/:woId/realisasi/:rid/history - fetch edit history for a realisasi
+router.get('/work-orders/:woId/realisasi/:rid/history', auth_1.authMiddleware, async (req, res) => (0, realisasi_dto_1.getRealisasiHistory)(req, res));
 class CreateTaskDTO {
 }
 __decorate([
@@ -223,6 +230,7 @@ router.post('/tasks/:id/assign', auth_1.authMiddleware, async (req, res) => {
                 const tasks = await taskRepo.createQueryBuilder('t')
                     .leftJoinAndSelect('t.assignments', 'a')
                     .where('t.workOrder = :wo', { wo: woId })
+                    .orderBy('t.task_number', 'ASC')
                     .getMany();
                 const total = tasks.length;
                 const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
@@ -297,6 +305,7 @@ router.delete('/tasks/:id/assign/:assignId', auth_1.authMiddleware, async (req, 
                     const tasks = await taskRepo.createQueryBuilder('t')
                         .leftJoinAndSelect('t.assignments', 'a')
                         .where('t.workOrder = :wo', { wo: woId })
+                        .orderBy('t.task_number', 'ASC')
                         .getMany();
                     const total = tasks.length;
                     const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;
@@ -374,6 +383,7 @@ router.delete('/tasks/:id', auth_1.authMiddleware, async (req, res) => {
                 const tasks = await taskRepo.createQueryBuilder('t')
                     .leftJoinAndSelect('t.assignments', 'a')
                     .where('t.workOrder = :wo', { wo: woId })
+                    .orderBy('t.task_number', 'ASC')
                     .getMany();
                 const total = tasks.length;
                 const assignedCount = tasks.filter(x => x.assignments && x.assignments.length > 0).length;

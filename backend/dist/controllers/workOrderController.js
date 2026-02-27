@@ -26,7 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteWorkOrderHandler = exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.generateDailyWorkOrders = exports.fetchAndCreateFromSigap = exports.listWorkOrders = exports.listWorkOrdersPaginated = void 0;
+exports.deleteWorkOrderHandler = exports.undeployWorkOrder = exports.deployWorkOrder = exports.getWorkOrderById = exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.generateDailyWorkOrders = exports.fetchAndCreateFromSigap = exports.listCompletedWorkOrdersWithRealisasi = exports.listWorkOrdersOptimized = exports.listWorkOrders = exports.listWorkOrdersForGantt = exports.listWorkOrdersPaginated = void 0;
 const axios_1 = __importDefault(require("axios"));
 const service = __importStar(require("../services/workOrderService"));
 const ormconfig_1 = require("../ormconfig");
@@ -49,6 +49,7 @@ async function listWorkOrdersPaginated(req, res) {
         const jenis = req.query.jenis || '';
         const work_type = req.query.work_type || undefined;
         const type_work = req.query.type_work || undefined;
+        const exclude_status = req.query.exclude_status || undefined;
         const exclude_work_type = req.query.exclude_work_type || undefined;
         const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
         return res.json({
@@ -66,6 +67,57 @@ async function listWorkOrdersPaginated(req, res) {
     }
 }
 exports.listWorkOrdersPaginated = listWorkOrdersPaginated;
+/**
+ * GET /api/work-orders/gantt
+ * Query: start, end (ISO datetimes) [, site, work_type, type_work]
+ * Returns work orders overlapping the given time range.
+ */
+async function listWorkOrdersForGantt(req, res) {
+    try {
+        let start = req.query.start || '';
+        let end = req.query.end || '';
+        const site = req.query.site || '';
+        const work_type = req.query.work_type || '';
+        const type_work = req.query.type_work || '';
+        // normalize naive datetimes by appending Z if missing so Postgres timestamptz interprets them safely
+        function normalizeTs(v) {
+            if (!v)
+                return v;
+            if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v))
+                return v;
+            return v + 'Z';
+        }
+        if (start)
+            start = normalizeTs(start);
+        if (end)
+            end = normalizeTs(end);
+        // If both start and end are missing, default to a 30-day window centered on today
+        if (!start && !end) {
+            const now = new Date();
+            const s = new Date(now);
+            s.setDate(s.getDate() - 15);
+            s.setHours(0, 0, 0, 0);
+            const e = new Date(now);
+            e.setDate(e.getDate() + 45);
+            e.setHours(23, 59, 59, 999);
+            start = s.toISOString();
+            end = e.toISOString();
+        }
+        const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work });
+        const out = Array.isArray(rows) ? rows.map(r => {
+            const s = serializeWorkOrder(r);
+            s.status = r.status ?? 'NEW';
+            s.progress = r.progress ?? 0;
+            return s;
+        }) : [];
+        return res.json({ data: out, meta: { start, end, count: out.length } });
+    }
+    catch (err) {
+        console.error('listWorkOrdersForGantt error', err);
+        return res.status(500).json({ message: 'Failed to load gantt work orders' });
+    }
+}
+exports.listWorkOrdersForGantt = listWorkOrdersForGantt;
 async function listWorkOrders(req, res) {
     try {
         const rows = await service.getAllWorkOrders();
@@ -83,6 +135,121 @@ async function listWorkOrders(req, res) {
     }
 }
 exports.listWorkOrders = listWorkOrders;
+/**
+ * GET /api/work-orders/list-optimized
+ * Optimized list for UI grid; accepts start/end, site, status, q, page, pageSize
+ */
+async function listWorkOrdersOptimized(req, res) {
+    try {
+        const start = req.query.start || undefined;
+        const end = req.query.end || undefined;
+        const site = req.query.site || undefined;
+        const status = req.query.status || undefined;
+        const exclude_status = req.query.exclude_status || undefined;
+        const exclude_work_type = req.query.exclude_work_type || undefined;
+        const q = req.query.q || undefined;
+        const work_type = req.query.work_type || undefined;
+        const type_work = req.query.type_work || undefined;
+        const page = Math.max(Number(req.query.page || 1), 1);
+        const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
+        const sort = req.query.sort || 'start_date';
+        const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, exclude_status, exclude_work_type, q, work_type, type_work, page, pageSize, sort });
+        const out = (rows || []).map((r) => {
+            const s = serializeWorkOrder(r);
+            s.status = r.status ?? 'NEW';
+            s.progress = r.progress ?? 0;
+            s.assigned_count = r.assigned_count ?? 0;
+            return s;
+        });
+        return res.json({ data: out, meta: { page, pageSize, total } });
+    }
+    catch (err) {
+        console.error('listWorkOrdersOptimized error', err);
+        return res.status(500).json({ message: 'Failed to load optimized work orders' });
+    }
+}
+exports.listWorkOrdersOptimized = listWorkOrdersOptimized;
+/**
+ * GET /api/work-orders/completed-with-realisasi
+ * Query params: start (ISO or YYYY-MM-DDTHH:MM:SS), end (ISO), page, pageSize
+ * Returns work orders with status = 'COMPLETED' and embedded realisasi details
+ */
+async function listCompletedWorkOrdersWithRealisasi(req, res) {
+    try {
+        const page = Math.max(Number(req.query.page || 1), 1);
+        const pageSize = Math.max(Number(req.query.pageSize || 20), 20);
+        let start = req.query.start || null;
+        let end = req.query.end || null;
+        const site = req.query.site || null;
+        // If provided datetimes don't include timezone info, treat them as UTC by appending 'Z'
+        function normalizeTs(v) {
+            if (!v)
+                return null;
+            if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v))
+                return v;
+            return v + 'Z';
+        }
+        start = normalizeTs(start);
+        end = normalizeTs(end);
+        const offset = (page - 1) * pageSize;
+        // Normalize site param for LIKE queries
+        const siteParam = site && String(site).trim().length ? `%${String(site).toLowerCase().trim()}%` : null;
+        // Aggregate realisasi per workorder, joining work_order to filter by status and site when provided
+        const aggSql = `
+      SELECT t.work_order_id AS wo_id,
+             MIN(r.start_time) AS actual_start,
+             MAX(r.end_time) AS actual_end,
+             json_agg(json_build_object(
+               'id', r.id,
+               'start', to_char(r.start_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+               'end', to_char(r.end_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+               'notes', r.notes,
+               'photoUrl', r.photo_url,
+               'taskId', r.task_id
+             ) ORDER BY r.start_time) AS items
+      FROM realisasi r
+      JOIN task t ON r.task_id = t.id
+      JOIN work_order wo ON t.work_order_id = wo.id
+      WHERE wo.status = 'COMPLETED'
+        AND ($1::timestamptz IS NULL OR r.start_time >= $1::timestamptz)
+        AND ($2::timestamptz IS NULL OR r.end_time <= $2::timestamptz)
+        AND ($3::text IS NULL OR LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE $3 OR LOWER(COALESCE(wo.raw->>'site','')) LIKE $3)
+      GROUP BY t.work_order_id
+    `;
+        const aggRows = await ormconfig_1.AppDataSource.query(aggSql, [start, end, siteParam]);
+        const woIds = (aggRows || []).map((r) => String(r.wo_id));
+        if (!woIds || woIds.length === 0) {
+            return res.json({ data: [], meta: { page, pageSize, total: 0 } });
+        }
+        // fetch matching work orders with status COMPLETED and limit/paginate
+        const total = woIds.length;
+        const pageIds = woIds.slice(offset, offset + pageSize);
+        if (pageIds.length === 0)
+            return res.json({ data: [], meta: { page, pageSize, total } });
+        const rows = await ormconfig_1.AppDataSource.query(`SELECT wo.* FROM work_order wo WHERE wo.id = ANY($1) AND wo.status = 'COMPLETED' ORDER BY wo.created_at DESC`, [pageIds]);
+        // map aggRows by wo_id for easy lookup
+        const aggByWo = {};
+        for (const a of aggRows || []) {
+            aggByWo[String(a.wo_id)] = {
+                actualStart: a.actual_start ? new Date(a.actual_start).toISOString() : null,
+                actualEnd: a.actual_end ? new Date(a.actual_end).toISOString() : null,
+                items: a.items || [],
+            };
+        }
+        const out = (rows || []).map((wo) => {
+            const serialized = serializeWorkOrder(wo);
+            serialized.status = wo.status ?? 'NEW';
+            const agg = aggByWo[String(wo.id)] || { actualStart: null, actualEnd: null, items: [] };
+            return { ...serialized, realisasi: agg };
+        });
+        return res.json({ data: out, meta: { page, pageSize, total } });
+    }
+    catch (err) {
+        console.error('listCompletedWorkOrdersWithRealisasi error', err);
+        return res.status(500).json({ message: 'Failed to list completed work orders' });
+    }
+}
+exports.listCompletedWorkOrdersWithRealisasi = listCompletedWorkOrdersWithRealisasi;
 function buildSigapHeaders() {
     const headers = { Accept: 'application/json' };
     if (SIGAP_BEARER_TOKEN)
@@ -463,6 +630,7 @@ async function deployWorkOrder(req, res) {
             .leftJoinAndSelect('t.assignments', 'ta')
             .leftJoinAndSelect('ta.user', 'u')
             .where('t.workOrder = :wo', { wo: id })
+            .orderBy('t.task_number', 'ASC')
             .getMany();
         if (!tasks || tasks.length === 0) {
             return res.status(400).json({ code: 'NO_TASKS', message: 'No tasks found for this work order' });
@@ -563,6 +731,60 @@ async function deployWorkOrder(req, res) {
                         created.push(saved);
                         continue;
                     }
+                    // Try to find a workorder-level assignment (assignee on the WO) to propagate to task
+                    try {
+                        const woLevel = await assignmentRepo.createQueryBuilder('a')
+                            .where('a.wo_id = :wo AND a.assignee_id IS NOT NULL AND a.status IN (:...st)', { wo: id, st: ['ASSIGNED', 'DEPLOYED', 'IN_PROGRESS'] })
+                            .getOne();
+                        if (woLevel && woLevel.assigneeId) {
+                            const a = new Assignment_1.Assignment();
+                            a.wo = wo;
+                            a.assigneeId = woLevel.assigneeId;
+                            a.task_id = String(taskId);
+                            a.task_name = taskName;
+                            a.status = 'DEPLOYED';
+                            const saved = await assignmentRepo.save(a);
+                            created.push(saved);
+                            continue;
+                        }
+                    }
+                    catch (e) {
+                        console.warn('deployWorkOrder: failed to lookup wo-level assignment', e);
+                    }
+                    // Fallback: try to use wo.raw.assigned_user_id if present
+                    try {
+                        const rawAssignee = wo.raw?.assigned_user_id ?? wo.raw?.assigned_user_name ?? null;
+                        if (rawAssignee) {
+                            // attempt to resolve to user UUID if rawAssignee looks like UUID or NIPP
+                            let resolvedId = null;
+                            const s = String(rawAssignee);
+                            const looksLikeUuid = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(s);
+                            if (looksLikeUuid)
+                                resolvedId = s;
+                            else {
+                                try {
+                                    const userRepo = ormconfig_1.AppDataSource.getRepository((await Promise.resolve().then(() => __importStar(require('../entities/User')))).User);
+                                    const u = await userRepo.findOneBy([{ nipp: s }, { id: s }, { username: s }]);
+                                    if (u && u.id)
+                                        resolvedId = String(u.id);
+                                }
+                                catch (e) { /* ignore */ }
+                            }
+                            if (resolvedId) {
+                                const a = new Assignment_1.Assignment();
+                                a.wo = wo;
+                                a.assigneeId = resolvedId;
+                                a.task_id = String(taskId);
+                                a.task_name = taskName;
+                                a.status = 'DEPLOYED';
+                                const saved = await assignmentRepo.save(a);
+                                created.push(saved);
+                                continue;
+                            }
+                        }
+                    }
+                    catch (e) { /* ignore */ }
+                    // No assignee could be determined — create unassigned assignment
                     const a = new Assignment_1.Assignment();
                     a.wo = wo;
                     a.assigneeId = undefined;
@@ -582,13 +804,45 @@ async function deployWorkOrder(req, res) {
         await woRepo.save(wo);
         // notify assigned technicians (if any)
         try {
-            const assigneeIds = Array.from(new Set(created.map(a => a.assigneeId).filter((x) => x)));
+            // Log created assignments for debugging
+            try {
+                console.log('INSTRUMENT deployWorkOrder - created assignments count=', created.length, 'sample=', created.slice(0, 5).map(c => ({ id: c.id, assigneeId: c.assigneeId, task_id: c.task_id })));
+            }
+            catch (e) { }
+            // Resolve assignee identifiers to user UUIDs. Some assignments may store NIPP or legacy identifiers; try to resolve them.
+            const userRepo = ormconfig_1.AppDataSource.getRepository((await Promise.resolve().then(() => __importStar(require('../entities/User')))).User);
+            const rawIds = Array.from(new Set(created.map(a => a.assigneeId)));
+            const resolvedIds = [];
+            for (const rid of rawIds) {
+                if (!rid)
+                    continue;
+                const s = String(rid);
+                // heuristic: UUIDs contain hyphens and are long; NIPP is usually numeric and shorter
+                const looksLikeUuid = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.test(s);
+                if (looksLikeUuid) {
+                    resolvedIds.push(s);
+                    continue;
+                }
+                // attempt to resolve as NIPP or username
+                try {
+                    const u = await userRepo.findOneBy([{ nipp: s }, { id: s }, { username: s }]);
+                    if (u && u.id)
+                        resolvedIds.push(String(u.id));
+                    else
+                        console.warn('deployWorkOrder: could not resolve assignee identifier to user id', s);
+                }
+                catch (e) {
+                    console.warn('deployWorkOrder: user resolve error', e);
+                }
+            }
+            const uniqueResolved = Array.from(new Set(resolvedIds));
             const title = `Assigned: WO ${wo.doc_no ?? ''}`;
             const body = `You have been deployed to work order ${wo.doc_no ?? wo.id}`;
-            for (const uid of assigneeIds) {
-                // instrument: log intent to push
+            if (uniqueResolved.length === 0) {
+                console.log('deployWorkOrder: no resolved assignee UUIDs to notify for WO', wo.id);
+            }
+            for (const uid of uniqueResolved) {
                 console.log('INSTRUMENT pushNotify deployWorkOrder', { targetUserId: String(uid), woId: wo?.id, woDoc: wo?.doc_no, title, body });
-                // fire-and-forget, log errors
                 (0, pushService_1.pushNotify)(String(uid), `${body}`).catch((e) => console.warn('pushNotify error', e));
             }
         }

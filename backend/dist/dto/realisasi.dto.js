@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RealisasiCreateDTO = exports.approvePendingRealisasi = exports.listPendingRealisasi = exports.submitPendingRealisasi = exports.createRealisasi = exports.createAssignment = void 0;
+exports.getRealisasiHistory = exports.updateRealisasi = exports.RealisasiCreateDTO = exports.approvePendingRealisasi = exports.listPendingRealisasi = exports.submitPendingRealisasi = exports.createRealisasi = exports.createAssignment = void 0;
 const class_validator_1 = require("class-validator");
 // import { RealisasiCreateDTO } from "./realisasi-create.dto";
 const ormconfig_1 = require("../ormconfig");
@@ -32,6 +32,7 @@ const Realisasi_1 = require("../entities/Realisasi");
 const PendingRealisasi_1 = require("../entities/PendingRealisasi");
 const WorkOrder_1 = require("../entities/WorkOrder");
 const workOrderService_1 = require("../services/workOrderService");
+const User_1 = require("../entities/User");
 const ShiftGroup_1 = require("../entities/ShiftGroup");
 const pushService_1 = require("../services/pushService");
 const uuid_1 = require("uuid");
@@ -134,6 +135,21 @@ async function createRealisasi(req, res) {
                 .getRawOne();
             if (row && row.min_start)
                 resolvedStartCreate = new Date(row.min_start);
+            // fallback: if no task-scoped started_at found, try to use any started_at for the same workorder
+            if (!resolvedStartCreate) {
+                try {
+                    const row2 = await aRepo.createQueryBuilder('a')
+                        .select('MIN(a.started_at)', 'min_start')
+                        .where('a.wo_id = :wo', { wo: task.workOrder?.id })
+                        .andWhere('a.started_at IS NOT NULL')
+                        .getRawOne();
+                    if (row2 && row2.min_start)
+                        resolvedStartCreate = new Date(row2.min_start);
+                }
+                catch (e) {
+                    // ignore
+                }
+            }
         }
         catch (e) {
             // ignore lookup errors
@@ -544,3 +560,104 @@ async function approvePendingRealisasi(req, res) {
     return res.json({ id: realisasi.id });
 }
 exports.approvePendingRealisasi = approvePendingRealisasi;
+async function updateRealisasi(req, res) {
+    const user = req.user;
+    if (!user)
+        return res.status(403).json({ message: 'Forbidden' });
+    const woId = req.params.woId || req.params.id || null;
+    const rid = req.params.rid || req.params.id || null;
+    if (!rid)
+        return res.status(400).json({ message: 'realisasi id required' });
+    try {
+        const r = await realisasiRepo().findOne({ where: { id: rid }, relations: ['task', 'task.workOrder'] });
+        if (!r)
+            return res.status(404).json({ message: 'Realisasi not found' });
+        if (woId && r.task && r.task.workOrder && String(r.task.workOrder.id) !== String(woId)) {
+            return res.status(400).json({ message: 'WorkOrder id mismatch' });
+        }
+        // role check: allow admin, planned, planner (flexible checks)
+        const role = (user?.role || '').toString();
+        const rolesArr = Array.isArray(user?.roles) ? user.roles : [];
+        const allowed = role === 'admin' || role === 'planned' || role === 'planner' || rolesArr.includes('admin') || rolesArr.includes('planned') || rolesArr.includes('planner');
+        if (!allowed)
+            return res.status(403).json({ message: 'Forbidden' });
+        const oldStart = r.startTime ? new Date(r.startTime) : null;
+        const oldEnd = r.endTime ? new Date(r.endTime) : null;
+        const body = req.body || {};
+        const newStart = body.start ? new Date(body.start) : null;
+        const newEnd = body.end ? new Date(body.end) : null;
+        const note = body.note || null;
+        // apply changes
+        if (newStart !== null)
+            r.startTime = newStart;
+        else
+            r.startTime = null;
+        if (newEnd !== null)
+            r.endTime = newEnd;
+        else
+            r.endTime = null;
+        if (note !== null)
+            r.notes = note;
+        await realisasiRepo().save(r);
+        // ensure history table exists (best-effort) and insert history row
+        try {
+            await ormconfig_1.AppDataSource.query(`
+        CREATE TABLE IF NOT EXISTS realisasi_history (
+          id uuid PRIMARY KEY,
+          realisasi_id uuid,
+          work_order_id uuid,
+          task_id uuid,
+          changed_by varchar(255),
+          changed_at timestamptz DEFAULT now(),
+          old_start timestamptz,
+          old_end timestamptz,
+          new_start timestamptz,
+          new_end timestamptz,
+          note text
+        )
+      `);
+            const histId = (0, uuid_1.v4)();
+            const params = [histId, rid, r.task?.workOrder?.id || null, r.task?.id || null, user?.id || user?.name || null, oldStart, oldEnd, r.startTime || null, r.endTime || null, note];
+            await ormconfig_1.AppDataSource.query(`INSERT INTO realisasi_history(id, realisasi_id, work_order_id, task_id, changed_by, old_start, old_end, new_start, new_end, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, params);
+        }
+        catch (e) {
+            console.warn('Failed to record realisasi_history', e);
+        }
+        return res.json({ id: r.id, start: r.startTime || null, end: r.endTime || null, notes: r.notes || null });
+    }
+    catch (e) {
+        console.error('updateRealisasi error', e);
+        return res.status(500).json({ message: 'Failed to update realisasi' });
+    }
+}
+exports.updateRealisasi = updateRealisasi;
+async function getRealisasiHistory(req, res) {
+    const rid = req.params.rid || req.params.id;
+    if (!rid)
+        return res.status(400).json({ message: 'realisasi id required' });
+    try {
+        const rows = await ormconfig_1.AppDataSource.query(`SELECT id, realisasi_id, work_order_id, task_id, changed_by, changed_at, old_start, old_end, new_start, new_end, note FROM realisasi_history WHERE realisasi_id = $1 ORDER BY changed_at DESC`, [rid]);
+        const out = [];
+        const userRepo = ormconfig_1.AppDataSource.getRepository(User_1.User);
+        for (const r of rows || []) {
+            let userObj = null;
+            try {
+                if (r.changed_by) {
+                    const u = await userRepo.findOneBy({ id: r.changed_by });
+                    if (u)
+                        userObj = { id: u.id, name: u.name, email: u.email, nipp: u.nipp };
+                }
+            }
+            catch (e) {
+                // ignore lookup errors
+            }
+            out.push({ id: r.id, changed_at: r.changed_at, user: userObj || r.changed_by, old_start: r.old_start, new_start: r.new_start, old_end: r.old_end, new_end: r.new_end, note: r.note });
+        }
+        return res.json(out);
+    }
+    catch (e) {
+        console.error('getRealisasiHistory error', e);
+        return res.status(500).json({ message: 'Failed to load realisasi history' });
+    }
+}
+exports.getRealisasiHistory = getRealisasiHistory;
