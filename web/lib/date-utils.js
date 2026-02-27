@@ -41,6 +41,32 @@ export function parseToUtcDate(input) {
     return new Date(Date.UTC(year, month, day, hour, minute, second, 0));
   }
 
+  // DD/MM/YYYY (slashes) optionally with timezone abbreviation (WIB/WITA/WIT)
+  const dmySlashRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\s*(WIB|WITA|WIT))?)?$/i;
+  const m3 = dmySlashRx.exec(s);
+  if (m3) {
+    const day = Number(m3[1]);
+    const month = Number(m3[2]) - 1;
+    const year = Number(m3[3]);
+    const hour = Number(m3[4] || '0');
+    const minute = Number(m3[5] || '0');
+    const second = Number(m3[6] || '0');
+    const tzAbbr = (m3[7] || '').toUpperCase();
+    // If an Indonesian abbreviation is present, convert to UTC by subtracting offset hours
+    // WIB = UTC+7, WITA = UTC+8, WIT = UTC+9
+    let offsetHours = null;
+    if (tzAbbr === 'WIB') offsetHours = 7;
+    else if (tzAbbr === 'WITA') offsetHours = 8;
+    else if (tzAbbr === 'WIT') offsetHours = 9;
+    if (offsetHours != null) {
+      // Convert local tz hour to UTC hour by subtracting offset
+      const utcMs = Date.UTC(year, month, day, hour - offsetHours, minute, second);
+      return new Date(utcMs);
+    }
+    // No tz abbreviation: treat as UTC (consistent with other naive formats)
+    return new Date(Date.UTC(year, month, day, hour, minute, second, 0));
+  }
+
   // MM/DD/YYYY or other formats - fallback to Date.parse
   const parsed = new Date(s);
   if (!isNaN(parsed.getTime())) return parsed;
