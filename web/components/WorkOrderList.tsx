@@ -162,35 +162,18 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     setLoading(true);
     setError(null);
     try {
-      // Build date range: if user selected a single date, query that day's window;
-      // otherwise default to a moderate +/-30 day window to avoid full-table scans.
-      let startIso: string | undefined;
-      let endIso: string | undefined;
-      if (date) {
-        const dt = parseToUtcDate(String(date));
-        if (dt) {
-          const s = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
-          const e = new Date(s.getTime() + 24*60*60*1000 - 1);
-          startIso = s.toISOString();
-          endIso = e.toISOString();
-        }
-      }
-      if (!startIso || !endIso) {
-        const now = new Date();
-        const s = new Date(now); s.setDate(s.getDate() - 30); s.setHours(0,0,0,0);
-        const e = new Date(now); e.setDate(e.getDate() + 30); e.setHours(23,59,59,999);
-        startIso = startIso ?? s.toISOString();
-        endIso = endIso ?? e.toISOString();
-      }
-
+      // Call optimized list endpoint WITHOUT date filtering (show all),
+      // but the UI will hide COMPLETED items by default when no status is selected.
       const params = new URLSearchParams();
       if (query) params.set('q', query);
-      params.set('start', startIso!);
-      params.set('end', endIso!);
       params.set('page', String(p));
       params.set('pageSize', String(pageSize));
       if (location) params.set('site', location);
-      console.debug('[WorkOrderList] loading optimized', { url: `/work-orders/list-optimized?${params.toString()}`, p, query, location, date, startIso, endIso });
+      // If no statuses selected, ask server to exclude COMPLETED items to reduce payload
+      if ((!selectedStatuses || selectedStatuses.length === 0) && (!q || String(q).trim().length === 0)) {
+        params.set('exclude_status', 'COMPLETED');
+      }
+      console.debug('[WorkOrderList] loading optimized (no date filter)', { url: `/work-orders/list-optimized?${params.toString()}`, p, query, location, date });
       // support excluding work_type when requested by parent (pass through as type_work filter)
       if (excludeWorkType) params.set('type_work', excludeWorkType);
       const res = await apiClient(`/work-orders/list-optimized?${params.toString()}`);
