@@ -67,12 +67,13 @@ export default function Dashboard(){
     setLoading(true)
     try{
       async function fetchAllWorkOrders(){
+        // Use optimized backend endpoint to reduce payload and improve query performance
         const out = []
-        let effectivePageSize = 2000
-        const MAX_PAGES = 50
+        let effectivePageSize = 1000
+        const MAX_PAGES = 20
         let page = 1
         while (page <= MAX_PAGES){
-          const res = await apiClient(`/work-orders?page=${page}&pageSize=${effectivePageSize}`)
+          const res = await apiClient(`/work-orders/list-optimized?page=${page}&pageSize=${effectivePageSize}&exclude_work_type=DAILY`)
           const rows = res?.data ?? res ?? []
           const meta = res?.meta ?? null
           if (!Array.isArray(rows) || rows.length === 0) break

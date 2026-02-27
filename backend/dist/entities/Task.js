@@ -37,6 +37,10 @@ __decorate([
     __metadata("design:type", Number)
 ], Task.prototype, "duration_min", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Number)
+], Task.prototype, "task_number", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], Task.prototype, "description", void 0);

@@ -174,19 +174,17 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
         params.set('exclude_status', 'COMPLETED');
       }
       console.debug('[WorkOrderList] loading optimized (no date filter)', { url: `/work-orders/list-optimized?${params.toString()}`, p, query, location, date });
-      // support excluding work_type when requested by parent (pass through as type_work filter)
-      if (excludeWorkType) params.set('type_work', excludeWorkType);
+      // support excluding work_type when requested by parent
+      if (excludeWorkType) params.set('exclude_work_type', excludeWorkType);
       const res = await apiClient(`/work-orders/list-optimized?${params.toString()}`);
       console.debug('[WorkOrderList] api response', res);
       const data = Array.isArray(res) ? res : (res?.data ?? []);
       const meta = (res && typeof res === 'object' && !Array.isArray(res)) ? (res.meta ?? { page: p, pageSize, total: 0 }) : { page: p, pageSize, total: 0 };
       const listData = Array.isArray(data) ? data : [];
-      // derive available locations from returned (unfiltered) data
+      // derive available statuses from returned (unfiltered) data
       const allListData = listData;
-      const locs = Array.from(new Set(allListData.map((w: WorkOrder) => (w.vendor_cabang ?? w.raw?.vendor_cabang ?? '').toString().trim()).filter(Boolean)));
       const sts = Array.from(new Set(allListData.map((w: WorkOrder) => normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').toString().trim()).filter(Boolean)));
       setStatuses(sts);
-      setLocations(locs);
       // apply client-side filtering by location (case-insensitive) so filter works
       let displayed = allListData;
       console.debug('test ', allListData);
@@ -237,6 +235,23 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     }
     // we intentionally omit onRefreshRequested from deps to only register once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // load master sites for location select (use master data instead of deriving from workorders)
+  useEffect(() => {
+    let mounted = true;
+    async function loadSites() {
+      try {
+        const res = await apiClient('/master/sites');
+        const rows = res?.data ?? res ?? [];
+        const names = Array.isArray(rows) ? rows.map((r: any) => (r?.name || r?.nama || r?.location || r?.code || '').toString()).filter(Boolean) : [];
+        if (mounted) setLocations(names);
+      } catch (e) {
+        if (mounted) setLocations([]);
+      }
+    }
+    loadSites();
+    return () => { mounted = false; };
   }, []);
 
   // Responsive: show stacked card view on small screens
@@ -835,7 +850,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                 }
               }}
               InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: 160 }}
+              sx={{ minWidth: 160, display: 'none' }}
             />
 
             <Button variant="contained" color="primary" size="small" onClick={() => load(1, q, locationFilter, dateFilter)} disabled={loading}>Search</Button>

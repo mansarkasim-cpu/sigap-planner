@@ -29,29 +29,30 @@ const siteCtrl = __importStar(require("../controllers/masterSiteController"));
 const jenisCtrl = __importStar(require("../controllers/masterJenisAlatController"));
 const alatCtrl = __importStar(require("../controllers/masterAlatController"));
 const qCtrl = __importStar(require("../controllers/masterQuestionController"));
+const rolesCtrl = __importStar(require("../controllers/masterRolesController"));
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 // Hubs (protected)
-router.get('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), hubCtrl.listHubs);
-router.get('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), hubCtrl.getHub);
+router.get('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), hubCtrl.listHubs);
+router.get('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), hubCtrl.getHub);
 router.post('/master/hubs', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.createHub);
 router.patch('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.updateHub);
 router.delete('/master/hubs/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), hubCtrl.deleteHub);
 // Sites (protected)
-router.get('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), siteCtrl.listSites);
-router.get('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), siteCtrl.getSite);
+router.get('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), siteCtrl.listSites);
+router.get('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), siteCtrl.getSite);
 router.post('/master/sites', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.createSite);
 router.patch('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.updateSite);
 router.delete('/master/sites/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), siteCtrl.deleteSite);
 // Jenis Alat (protected)
-router.get('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), jenisCtrl.listJenis);
-router.get('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), jenisCtrl.getJenis);
+router.get('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), jenisCtrl.listJenis);
+router.get('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), jenisCtrl.getJenis);
 router.post('/master/jenis-alat', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.createJenis);
 router.patch('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.updateJenis);
 router.delete('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), jenisCtrl.deleteJenis);
 // Alat (protected)
-router.get('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), alatCtrl.listAlats);
-router.get('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), alatCtrl.getAlat);
+router.get('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), alatCtrl.listAlats);
+router.get('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), alatCtrl.getAlat);
 router.post('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.createAlat);
 router.patch('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.deleteAlat);
@@ -66,4 +67,6 @@ router.patch('/master/options/:id', auth_1.authMiddleware, (0, auth_1.requireRol
 router.delete('/master/options/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), qCtrl.deleteOption);
 // allow listing options (used by mobile client to fetch options per question)
 router.get('/master/options', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.listOptions);
+// Roles (simple master data)
+router.get('/master/roles', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), rolesCtrl.listRoles);
 exports.default = router;

@@ -51,8 +51,10 @@ const cors_1 = __importDefault(require("cors"));
 const FRONTEND_ORIGIN = process.env.NODE_ENV !== 'production'
     ? true
     : (process.env.FRONTEND_URL || 'http://localhost:3000');
-app.use(body_parser_1.default.json({ limit: "20mb" }));
-app.use(body_parser_1.default.urlencoded({ extended: true }));
+// Increase request body size limits to match nginx `client_max_body_size`
+// (nginx configured to 50M in deploy/nginx/sigap.jasamaritim.co.id.conf)
+app.use(body_parser_1.default.json({ limit: "50mb" }));
+app.use(body_parser_1.default.urlencoded({ extended: true, limit: "50mb" }));
 // enable CORS
 app.use((0, cors_1.default)({
     origin: FRONTEND_ORIGIN,

@@ -84,7 +84,9 @@ async function tokensForUserId(userId) {
     // assume userId is uuid
     const tokens = await dtRepo.find({ where: { user: { id: userId } } });
     const tokenList = tokens.map(t => t.token);
-    console.log('pushNotify: tokens for user', userId, 'count=', tokenList.length, 'tokens=', tokenList);
+    // Log token count and a masked preview for debugging (do not print full tokens in production)
+    const masked = tokenList.map(t => (typeof t === 'string' ? (t.length > 16 ? `${t.slice(0, 8)}...${t.slice(-8)}` : t) : String(t)));
+    console.log('pushNotify: tokens for user', userId, 'count=', tokenList.length, 'tokens(masked)=', masked);
     return tokenList;
 }
 async function pushNotify(userId, message) {
@@ -95,6 +97,7 @@ async function pushNotify(userId, message) {
             return;
         }
         const tokens = await tokensForUserId(userId);
+        console.log('pushNotify: sending to user=', userId, 'tokenCount=', Array.isArray(tokens) ? tokens.length : 0);
         if (!tokens || tokens.length === 0) {
             // No device tokens for this user — nothing to send.
             // Return silently to avoid noisy logs when many users lack tokens.

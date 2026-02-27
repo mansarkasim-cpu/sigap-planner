@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.createCustomDailyChecklistWorkOrders = exports.generateDailyChecklistWorkOrders = exports.deleteWorkOrder = exports.computeWorkOrderProgress = exports.getWorkOrdersPaginated = exports.createOrUpdateFromSigap = exports.getWorkOrderById = exports.getAllWorkOrders = void 0;
+exports.getWorkOrderDateHistory = exports.updateWorkOrderDates = exports.createCustomDailyChecklistWorkOrders = exports.generateDailyChecklistWorkOrders = exports.deleteWorkOrder = exports.computeWorkOrderProgress = exports.getWorkOrdersOptimized = exports.getWorkOrdersPaginated = exports.createOrUpdateFromSigap = exports.getWorkOrdersForGantt = exports.getWorkOrderById = exports.getAllWorkOrders = void 0;
 // src/services/workOrderService.ts
 const ormconfig_1 = require("../ormconfig");
 const WorkOrder_1 = require("../entities/WorkOrder");
@@ -41,6 +41,79 @@ async function getWorkOrderById(id) {
     return wo || null;
 }
 exports.getWorkOrderById = getWorkOrderById;
+/**
+ * Return work orders overlapping a date range for Gantt use.
+ * Accepts ISO datetimes for `start` and `end` (timestamptz-friendly).
+ * Returns minimal fields and preserves SQL-like datetime strings.
+ */
+async function getWorkOrdersForGantt(opts) {
+    const { start, end, site = '', work_type = '', type_work = '', limit } = opts;
+    const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
+    const qb = repo.createQueryBuilder('wo');
+    qb.where('wo.deleted_at IS NULL');
+    // overlap predicate: wo.start_date <= end AND (wo.end_date IS NULL OR wo.end_date >= start)
+    if (start && end) {
+        qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+    }
+    else if (start) {
+        qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+    }
+    else if (end) {
+        qb.andWhere('wo.start_date <= :end', { end });
+    }
+    if (site && String(site).trim().length) {
+        const s = `%${String(site).toLowerCase().trim()}%`;
+        qb.andWhere("(LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE :site OR LOWER(COALESCE(wo.raw->>'site','')) LIKE :site)", { site: s });
+    }
+    if (work_type && String(work_type).trim().length) {
+        qb.andWhere('wo.work_type = :wt', { wt: String(work_type).trim() });
+    }
+    if (type_work && String(type_work).trim().length) {
+        qb.andWhere('wo.type_work = :tw', { tw: String(type_work).trim() });
+    }
+    // select minimal columns to keep payload small for Gantt
+    qb.select(['wo.id', 'wo.doc_no', 'wo.start_date', 'wo.end_date', 'wo.asset_name', 'wo.raw', 'wo.status']);
+    qb.orderBy('wo.start_date', 'ASC');
+    if (limit && Number(limit) > 0)
+        qb.limit(Number(limit));
+    const rows = await qb.getMany();
+    function formatDateToDisplay(val) {
+        if (val == null)
+            return null;
+        try {
+            if (typeof val === 'string') {
+                const dt = new Date(val);
+                if (isNaN(dt.getTime()))
+                    return val;
+                return dt.toISOString();
+            }
+            const d = val instanceof Date ? val : new Date(val);
+            if (isNaN(d.getTime()))
+                return null;
+            return d.toISOString();
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    const serialized = rows.map(r => ({
+        ...r,
+        start_date: formatDateToDisplay(r.start_date),
+        end_date: formatDateToDisplay(r.end_date),
+    }));
+    // attach progress for each returned workorder (reuse existing computeWorkOrderProgress)
+    const withProgress = await Promise.all(serialized.map(async (r) => {
+        try {
+            const p = await computeWorkOrderProgress(String(r.id));
+            return { ...r, progress: p };
+        }
+        catch (e) {
+            return { ...r, progress: 0 };
+        }
+    }));
+    return withProgress;
+}
+exports.getWorkOrdersForGantt = getWorkOrdersForGantt;
 async function createOrUpdateFromSigap(payload) {
     const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
     // Stronger duplicate detection: try several identifiers in order of reliability
@@ -95,6 +168,18 @@ async function createOrUpdateFromSigap(payload) {
             end_date: payload.end_date ?? existing.end_date,
             raw: payload.raw ?? existing.raw,
         });
+        // If the existing record was soft-deleted, clear deleted_at to restore it
+        try {
+            if (existing.deleted_at) {
+                existing.deleted_at = null;
+            }
+            if (existing.status === 'DELETED') {
+                existing.status = 'PREPARATION';
+            }
+        }
+        catch (e) {
+            // ignore if fields not present
+        }
         const saved = await repo.save(existing);
         // upsert tasks from SIGAP payload (if any)
         try {
@@ -159,6 +244,14 @@ async function createOrUpdateFromSigap(payload) {
                     end_date: payload.end_date ?? recovered.end_date,
                     raw: payload.raw ?? recovered.raw,
                 });
+                // clear soft-delete marker if present so re-imported WO becomes visible
+                try {
+                    if (recovered.deleted_at)
+                        recovered.deleted_at = null;
+                    if (recovered.status === 'DELETED')
+                        recovered.status = 'PREPARATION';
+                }
+                catch (e) { /* ignore */ }
                 const saved = await repo.save(recovered);
                 try {
                     await upsertTasksForWorkOrder(saved, payload.raw);
@@ -226,6 +319,8 @@ async function upsertTasksForWorkOrder(workOrder, rawActivities) {
         const externalId = a.id ?? a.task_id ?? a.activity_id ?? a.external_id ?? null;
         const name = a.task_name ?? a.name ?? a.activity_name ?? a.title ?? (externalId ? `Task ${externalId}` : 'Task');
         const durRaw = a.task_duration ?? a.duration_min ?? a.duration ?? null;
+        const tnRaw = a.task_number ?? a.task_no ?? a.number ?? null;
+        const taskNumber = tnRaw !== null && tnRaw !== undefined ? (Number(tnRaw) || null) : null;
         const duration = durRaw !== null && durRaw !== undefined ? (Number(durRaw) || null) : null;
         const desc = a.description ?? a.detail ?? a.note ?? null;
         let existingTask;
@@ -256,6 +351,10 @@ async function upsertTasksForWorkOrder(workOrder, rawActivities) {
                 existingTask.description = desc ?? undefined;
                 changed = true;
             }
+            if ((existingTask.task_number || null) !== (taskNumber || null)) {
+                existingTask.task_number = taskNumber;
+                changed = true;
+            }
             if (changed) {
                 toSave.push(existingTask);
                 actions.push({ action: 'update', externalId: externalId ? String(externalId) : null, name, duration, existingId: existingTask.id });
@@ -272,6 +371,7 @@ async function upsertTasksForWorkOrder(workOrder, rawActivities) {
                 name: name || 'Task',
                 duration_min: duration,
                 description: desc ?? undefined,
+                task_number: taskNumber,
                 status: 'NEW'
             });
             toSave.push(t);
@@ -310,7 +410,8 @@ async function getWorkOrdersPaginated(opts) {
     const qb = repo.createQueryBuilder('wo');
     if (q && q.trim().length) {
         const like = `%${q.trim()}%`;
-        qb.where('(wo.doc_no ILIKE :like OR wo.asset_name ILIKE :like OR wo.description ILIKE :like)', { like });
+        // Also search common fields that may be stored inside the raw JSON payload
+        qb.where("(wo.doc_no ILIKE :like OR wo.asset_name ILIKE :like OR wo.description ILIKE :like OR COALESCE(wo.raw->>'doc_no','') ILIKE :like OR COALESCE(wo.raw->>'asset_name','') ILIKE :like OR COALESCE(wo.raw->>'description','') ILIKE :like OR COALESCE(wo.raw->>'asset','') ILIKE :like)", { like });
     }
     // optional site filtering: try matching raw->>'vendor_cabang' or raw->>'site'
     if (site && site.toString().trim().length) {
@@ -341,13 +442,32 @@ async function getWorkOrdersPaginated(opts) {
     }
     // optional exclude_work_type: e.g., exclude DAILY
     if (exclude_work_type && String(exclude_work_type).trim().length) {
-        qb.andWhere('wo.work_type IS NULL OR wo.work_type != :exwt', { exwt: String(exclude_work_type).trim() });
+        // parenthesize to ensure correct operator precedence when combined with other WHERE clauses
+        qb.andWhere('(wo.work_type IS NULL OR wo.work_type != :exwt)', { exwt: String(exclude_work_type).trim() });
     }
     // exclude soft-deleted
     qb.andWhere('wo.deleted_at IS NULL');
+    // Enforce a server-side maximum page size to avoid N+1 storms when clients
+    // request extremely large pages (e.g., 2000). Use `MAX_PAGE_SIZE` env or
+    // default to 100.
+    const MAX_PAGE_SIZE = Number(process.env.MAX_PAGE_SIZE || 100);
+    const requestedPageSize = Number(pageSize) || 10;
+    const cappedPageSize = Math.max(1, Math.min(requestedPageSize, MAX_PAGE_SIZE));
+    if (requestedPageSize !== cappedPageSize) {
+        console.warn('[getWorkOrdersPaginated] requested pageSize too large, capped to', cappedPageSize, 'requested=', requestedPageSize);
+    }
     qb.orderBy('wo.created_at', 'DESC')
-        .skip((page - 1) * pageSize)
-        .take(pageSize);
+        .skip((page - 1) * cappedPageSize)
+        .take(cappedPageSize);
+    // debug: log built SQL and parameters to help diagnose search issues
+    try {
+        const qp = qb.getQueryAndParameters();
+        console.debug('[getWorkOrdersPaginated] built query:', qp[0]);
+        console.debug('[getWorkOrdersPaginated] query params:', qp[1]);
+    }
+    catch (e) {
+        console.debug('[getWorkOrdersPaginated] failed to get query string', e);
+    }
     // inside getWorkOrdersPaginated after fetching rows...  
     const [rows, total] = await qb.getManyAndCount();
     // Return date fields as-stored in the database. If TypeORM returned a Date
@@ -379,24 +499,32 @@ async function getWorkOrdersPaginated(opts) {
         end_date: formatDateToDisplay(r.end_date),
     }));
     console.log('  data count:', rows.length);
-    // attach workorder-level assignments (user names and ids) for convenience to the API consumer
+    // attach workorder-level assignments (user names and ids) in a single batched
+    // query to avoid N+1 queries when returning many rows.
     try {
-        const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
-        await Promise.all(serialized.map(async (r) => {
-            try {
-                const assigns = await ormconfig_1.AppDataSource.query(`SELECT a.assignee_id AS assignee_id, u.name AS user_name
-           FROM assignment a
-           LEFT JOIN "user" u ON u.id = a.assignee_id
-           WHERE a.wo_id = $1 AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')`, [r.id]);
-                r.assigned_users = Array.isArray(assigns) ? assigns.map((x) => ({ id: x.assignee_id, name: x.user_name })) : [];
+        const woIds = serialized.map((r) => r.id).filter(Boolean);
+        const assignsMap = new Map();
+        if (woIds.length > 0) {
+            // Use a single query with WHERE a.wo_id = ANY($1)
+            const assigns = await ormconfig_1.AppDataSource.query(`SELECT a.wo_id AS wo_id, a.assignee_id AS assignee_id, u.name AS user_name
+         FROM assignment a
+         LEFT JOIN "user" u ON u.id = a.assignee_id
+         WHERE a.wo_id = ANY($1) AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')`, [woIds]);
+            for (const a of assigns || []) {
+                const wid = String(a.wo_id);
+                const list = assignsMap.get(wid) || [];
+                list.push({ id: a.assignee_id, name: a.user_name });
+                assignsMap.set(wid, list);
             }
-            catch (e) {
-                r.assigned_users = [];
-            }
-        }));
+        }
+        for (const r of serialized) {
+            r.assigned_users = assignsMap.get(String(r.id)) || [];
+        }
     }
     catch (e) {
-        console.warn('failed to attach workorder-level assignments', e);
+        console.warn('failed to attach workorder-level assignments (batched)', e);
+        for (const r of serialized)
+            r.assigned_users = [];
     }
     // compute progress for each workorder (sum of task durations completed via realisasi)
     const withProgress = await Promise.all(serialized.map(async (r) => {
@@ -411,6 +539,110 @@ async function getWorkOrdersPaginated(opts) {
     return { rows: withProgress, total };
 }
 exports.getWorkOrdersPaginated = getWorkOrdersPaginated;
+/**
+ * Optimized list for Work Order listing UI.
+ * Supports filtering by date range (start/end), site, status, q (search), work_type, type_work.
+ * Returns paginated minimal rows with total count.
+ */
+async function getWorkOrdersOptimized(opts) {
+    const { start, end, site = '', status = '', exclude_status = '', exclude_work_type = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts;
+    const limit = Math.max(1, Math.min(Number(pageSize) || 20, Number(process.env.MAX_PAGE_SIZE || 100)));
+    const offset = (Math.max(1, Number(page || 1)) - 1) * limit;
+    // Build WHERE clauses and params
+    const where = ['wo.deleted_at IS NULL'];
+    const params = [];
+    let idx = 1;
+    // date range overlap using timestamptz-safe expression
+    if (start && end) {
+        where.push("tstzrange((wo.start_date AT TIME ZONE 'UTC'), COALESCE(wo.end_date AT TIME ZONE 'UTC',(wo.start_date AT TIME ZONE 'UTC')), '[]') && tstzrange($" + idx + ", $" + (idx + 1) + ", '[]')");
+        params.push(start, end);
+        idx += 2;
+    }
+    else if (start) {
+        where.push("(wo.end_date IS NULL OR (wo.end_date AT TIME ZONE 'UTC') >= ($" + idx + "))");
+        params.push(start);
+        idx += 1;
+    }
+    else if (end) {
+        where.push("(wo.start_date AT TIME ZONE 'UTC') <= ($" + idx + ")");
+        params.push(end);
+        idx += 1;
+    }
+    if (site && String(site).trim().length) {
+        where.push("(LOWER(COALESCE(wo.raw->>'vendor_cabang','')) LIKE $" + idx + " OR LOWER(COALESCE(wo.raw->>'site','')) LIKE $" + idx + ")");
+        params.push(`%${String(site).toLowerCase().trim()}%`);
+        idx += 1;
+    }
+    if (status && String(status).trim().length) {
+        where.push("wo.status = $" + idx);
+        params.push(String(status).trim());
+        idx += 1;
+    }
+    // exclude_status: comma-separated list of statuses to exclude (e.g., 'COMPLETED,CANCELLED')
+    if (exclude_status && String(exclude_status).trim().length) {
+        const parts = String(exclude_status).split(',').map((s) => String(s).trim()).filter(Boolean);
+        if (parts.length > 0) {
+            const placeholders = parts.map(() => '$' + (idx++)).join(',');
+            where.push(`wo.status NOT IN (${placeholders})`);
+            for (const p of parts)
+                params.push(p);
+        }
+    }
+    if (work_type && String(work_type).trim().length) {
+        where.push("wo.work_type = $" + idx);
+        params.push(String(work_type).trim());
+        idx += 1;
+    }
+    if (type_work && String(type_work).trim().length) {
+        where.push("wo.type_work = $" + idx);
+        params.push(String(type_work).trim());
+        idx += 1;
+    }
+    // optional exclude_work_type: e.g., exclude DAILY
+    if (exclude_work_type && String(exclude_work_type).trim().length) {
+        where.push("(wo.work_type IS NULL OR wo.work_type != $" + idx + ")");
+        params.push(String(exclude_work_type).trim());
+        idx += 1;
+    }
+    if (q && String(q).trim().length) {
+        where.push("(coalesce(wo.doc_no,'') || ' ' || coalesce(wo.asset_name,'')) ILIKE $" + idx);
+        params.push(`%${String(q).trim()}%`);
+        idx += 1;
+    }
+    const whereSql = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+    // Choose order
+    const allowedSort = ['start_date', 'created_at', 'doc_no'];
+    const orderBy = allowedSort.includes(sort) ? `wo.${sort} DESC` : 'wo.start_date DESC';
+    // Main select: minimal fields and lateral subqueries for assigned_count and progress (progress computed via function if needed)
+    const selSql = `
+    SELECT wo.id, wo.doc_no, wo.asset_name, to_char(wo.start_date, 'YYYY-MM-DD HH24:MI:SS') AS start_date, 
+           to_char(wo.end_date, 'YYYY-MM-DD HH24:MI:SS') AS end_date,
+           wo.status, wo.raw,
+           (SELECT COUNT(1) FROM assignment a WHERE a.wo_id = wo.id AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')) AS assigned_count
+    FROM work_order wo
+    ${whereSql}
+    ORDER BY ${orderBy}
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+    // count query
+    const countSql = `SELECT COUNT(1) AS total FROM work_order wo ${whereSql}`;
+    // Execute
+    const rows = await ormconfig_1.AppDataSource.query(selSql, params);
+    const cnt = await ormconfig_1.AppDataSource.query(countSql, params);
+    const total = (Array.isArray(cnt) && cnt[0] && Number(cnt[0].total)) ? Number(cnt[0].total) : 0;
+    // attach progress by computing per-row (reuse computeWorkOrderProgress) - do in parallel but limit concurrency
+    const out = await Promise.all(rows.map(async (r) => {
+        try {
+            const p = await computeWorkOrderProgress(String(r.id));
+            return { ...r, progress: p };
+        }
+        catch (e) {
+            return { ...r, progress: 0 };
+        }
+    }));
+    return { rows: out, total };
+}
+exports.getWorkOrdersOptimized = getWorkOrdersOptimized;
 /**
  * Compute work order progress as fraction in [0,1].
  * Progress is defined as sum(duration of tasks with at least one realisasi) / total task durations.

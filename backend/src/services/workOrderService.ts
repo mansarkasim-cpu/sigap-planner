@@ -415,7 +415,8 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
   // optional exclude_work_type: e.g., exclude DAILY
   if (exclude_work_type && String(exclude_work_type).trim().length) {
     // parenthesize to ensure correct operator precedence when combined with other WHERE clauses
-    qb.andWhere('(wo.work_type IS NULL OR wo.work_type != :exwt)', { exwt: String(exclude_work_type).trim() });
+    // exclude match by `work_type` exact or `type_work` containing the token (case-insensitive)
+    qb.andWhere("( (wo.work_type IS NULL OR wo.work_type != :exwt) AND (wo.type_work IS NULL OR LOWER(wo.type_work) NOT LIKE ('%' || LOWER(:exwt) || '%')) )", { exwt: String(exclude_work_type).trim() });
   }
 
   // exclude soft-deleted
@@ -517,8 +518,8 @@ export async function getWorkOrdersPaginated(opts: { q?: string; page: number; p
  * Supports filtering by date range (start/end), site, status, q (search), work_type, type_work.
  * Returns paginated minimal rows with total count.
  */
-export async function getWorkOrdersOptimized(opts: { start?: string; end?: string; site?: string; status?: string; exclude_status?: string; q?: string; work_type?: string; type_work?: string; page?: number; pageSize?: number; sort?: string }) {
-  const { start, end, site = '', status = '', exclude_status = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts as any;
+export async function getWorkOrdersOptimized(opts: { start?: string; end?: string; site?: string; status?: string; exclude_status?: string; exclude_work_type?: string; q?: string; work_type?: string; type_work?: string; page?: number; pageSize?: number; sort?: string }) {
+  const { start, end, site = '', status = '', exclude_status = '', exclude_work_type = '', q = '', work_type = '', type_work = '', page = 1, pageSize = 20, sort = 'start_date' } = opts as any;
   const limit = Math.max(1, Math.min(Number(pageSize) || 20, Number(process.env.MAX_PAGE_SIZE || 100)));
   const offset = (Math.max(1, Number(page || 1)) - 1) * limit;
 
@@ -570,6 +571,14 @@ export async function getWorkOrdersOptimized(opts: { start?: string; end?: strin
     params.push(String(type_work).trim()); idx += 1;
   }
 
+  // optional exclude_work_type: e.g., exclude DAILY
+  if (exclude_work_type && String(exclude_work_type).trim().length) {
+    // Exclude rows where either `work_type` equals the value or `type_work`
+    // contains the value (e.g., 'DAILY' should exclude 'DAILY_CHECKLIST').
+    where.push("((wo.work_type IS NULL OR wo.work_type != $" + idx + ") AND (wo.type_work IS NULL OR LOWER(wo.type_work) NOT LIKE '%' || LOWER($" + idx + ") || '%'))");
+    params.push(String(exclude_work_type).trim()); idx += 1;
+  }
+
   if (q && String(q).trim().length) {
     where.push("(coalesce(wo.doc_no,'') || ' ' || coalesce(wo.asset_name,'')) ILIKE $" + idx);
     params.push(`%${String(q).trim()}%`); idx += 1;
@@ -583,8 +592,8 @@ export async function getWorkOrdersOptimized(opts: { start?: string; end?: strin
 
   // Main select: minimal fields and lateral subqueries for assigned_count and progress (progress computed via function if needed)
   const selSql = `
-    SELECT wo.id, wo.doc_no, wo.asset_name, to_char(wo.start_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS start_date, 
-           to_char(wo.end_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS end_date,
+    SELECT wo.id, wo.doc_no, wo.asset_name, to_char(wo.start_date, 'YYYY-MM-DD HH24:MI:SS') AS start_date, 
+           to_char(wo.end_date, 'YYYY-MM-DD HH24:MI:SS') AS end_date,
            wo.status, wo.raw,
            (SELECT COUNT(1) FROM assignment a WHERE a.wo_id = wo.id AND a.status IN ('ASSIGNED','DEPLOYED','IN_PROGRESS')) AS assigned_count
     FROM work_order wo
