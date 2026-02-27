@@ -162,16 +162,38 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     setLoading(true);
     setError(null);
     try {
+      // Build date range: if user selected a single date, query that day's window;
+      // otherwise default to a moderate +/-30 day window to avoid full-table scans.
+      let startIso: string | undefined;
+      let endIso: string | undefined;
+      if (date) {
+        const dt = parseToUtcDate(String(date));
+        if (dt) {
+          const s = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
+          const e = new Date(s.getTime() + 24*60*60*1000 - 1);
+          startIso = s.toISOString();
+          endIso = e.toISOString();
+        }
+      }
+      if (!startIso || !endIso) {
+        const now = new Date();
+        const s = new Date(now); s.setDate(s.getDate() - 30); s.setHours(0,0,0,0);
+        const e = new Date(now); e.setDate(e.getDate() + 30); e.setHours(23,59,59,999);
+        startIso = startIso ?? s.toISOString();
+        endIso = endIso ?? e.toISOString();
+      }
+
       const params = new URLSearchParams();
       if (query) params.set('q', query);
+      params.set('start', startIso!);
+      params.set('end', endIso!);
       params.set('page', String(p));
       params.set('pageSize', String(pageSize));
       if (location) params.set('site', location);
-      if (date) params.set('date', date);
-      console.debug('[WorkOrderList] loading', { url: `/work-orders?${params.toString()}`, p, query, location, date });
-      // support excluding work_type when requested by parent
-      if (excludeWorkType) params.set('exclude_work_type', excludeWorkType);
-      const res = await apiClient(`/work-orders?${params.toString()}`);
+      console.debug('[WorkOrderList] loading optimized', { url: `/work-orders/list-optimized?${params.toString()}`, p, query, location, date, startIso, endIso });
+      // support excluding work_type when requested by parent (pass through as type_work filter)
+      if (excludeWorkType) params.set('type_work', excludeWorkType);
+      const res = await apiClient(`/work-orders/list-optimized?${params.toString()}`);
       console.debug('[WorkOrderList] api response', res);
       const data = Array.isArray(res) ? res : (res?.data ?? []);
       const meta = (res && typeof res === 'object' && !Array.isArray(res)) ? (res.meta ?? { page: p, pageSize, total: 0 }) : { page: p, pageSize, total: 0 };

@@ -44,6 +44,7 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const jenis = (req.query.jenis as string) || '';
     const work_type = (req.query.work_type as string) || undefined;
     const type_work = (req.query.type_work as string) || undefined;
+    const exclude_status = (req.query.exclude_status as string) || undefined;
     const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
 
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
@@ -124,6 +125,38 @@ export async function listWorkOrders(req: Request, res: Response) {
   } catch (err) {
     console.error('listWorkOrders error', err);
     return res.status(500).json({ message: 'Failed to load work orders' });
+  }
+}
+
+/**
+ * GET /api/work-orders/list-optimized
+ * Optimized list for UI grid; accepts start/end, site, status, q, page, pageSize
+ */
+export async function listWorkOrdersOptimized(req: Request, res: Response) {
+  try {
+    const start = (req.query.start as string) || undefined;
+    const end = (req.query.end as string) || undefined;
+    const site = (req.query.site as string) || undefined;
+    const status = (req.query.status as string) || undefined;
+    const q = (req.query.q as string) || undefined;
+    const work_type = (req.query.work_type as string) || undefined;
+    const type_work = (req.query.type_work as string) || undefined;
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
+    const sort = (req.query.sort as string) || 'start_date';
+
+    const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, exclude_status, q, work_type, type_work, page, pageSize, sort });
+    const out = (rows || []).map((r: any) => {
+      const s = serializeWorkOrder(r);
+      s.status = (r as any).status ?? 'NEW';
+      s.progress = (r as any).progress ?? 0;
+      s.assigned_count = (r as any).assigned_count ?? 0;
+      return s;
+    });
+    return res.json({ data: out, meta: { page, pageSize, total } });
+  } catch (err) {
+    console.error('listWorkOrdersOptimized error', err);
+    return res.status(500).json({ message: 'Failed to load optimized work orders' });
   }
 }
 
