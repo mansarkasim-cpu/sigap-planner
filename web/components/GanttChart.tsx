@@ -1185,8 +1185,14 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
                 {/* bars */}
                 {validItems.map((w, idx) => {
-                  const baseStartRaw = isoToMs(w.start_date ?? w.raw?.start_date ?? w.raw?.start_date_sql ?? w.raw?.date_start ?? w.raw?.date ?? w.raw?.planned_start) as number | null;
-                  const baseEndRaw = isoToMs(w.end_date ?? w.raw?.end_date ?? w.raw?.end_date_sql ?? w.raw?.up_date ?? w.raw?.date_end ?? w.raw?.planned_end) as number | null;
+                  // Resolve start/end from multiple possible shapes (top-level or raw fields)
+                  const baseStartRawVal = w.start_date ?? w.raw?.start_date ?? w.raw?.start_date_sql ?? w.raw?.date_start ?? w.raw?.date ?? w.raw?.planned_start ?? w.raw?.start ?? w.raw?.started_at ?? w.raw?.start_time ?? null;
+                  const baseEndRawVal = w.end_date ?? w.raw?.end_date ?? w.raw?.end_date_sql ?? w.raw?.up_date ?? w.raw?.date_end ?? w.raw?.planned_end ?? w.raw?.end ?? w.raw?.ended_at ?? w.raw?.end_time ?? null;
+                  let baseStartRaw = isoToMs(baseStartRawVal) as number | null;
+                  let baseEndRaw = isoToMs(baseEndRawVal) as number | null;
+                  // If only one side is present, fall back so bars can still render (treated as zero-duration)
+                  if (baseStartRaw == null && baseEndRaw != null) baseStartRaw = baseEndRaw;
+                  if (baseEndRaw == null && baseStartRaw != null) baseEndRaw = baseStartRaw;
                   const realStartMsRaw = isoToMs(w.realisasi?.actualStart ?? w.realisasi?.items?.[0]?.start) as number | null;
                   const realEndMsRaw = isoToMs(w.realisasi?.actualEnd ?? w.realisasi?.items?.[0]?.end) as number | null;
                   // determine which start/end to use: for COMPLETED prefer realisasi start/end when available
