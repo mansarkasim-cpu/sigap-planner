@@ -45,7 +45,6 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
     const work_type = (req.query.work_type as string) || undefined;
     const type_work = (req.query.type_work as string) || undefined;
     const exclude_status = (req.query.exclude_status as string) || undefined;
-    const exclude_status = (req.query.exclude_status as string) || undefined;
     const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
 
     const { rows, total } = await service.getWorkOrdersPaginated({ q, page, pageSize, site, date, jenis, work_type, type_work, exclude_work_type });
@@ -139,6 +138,8 @@ export async function listWorkOrdersOptimized(req: Request, res: Response) {
     const end = (req.query.end as string) || undefined;
     const site = (req.query.site as string) || undefined;
     const status = (req.query.status as string) || undefined;
+    const exclude_status = (req.query.exclude_status as string) || undefined;
+    const exclude_work_type = (req.query.exclude_work_type as string) || undefined;
     const q = (req.query.q as string) || undefined;
     const work_type = (req.query.work_type as string) || undefined;
     const type_work = (req.query.type_work as string) || undefined;
@@ -146,7 +147,21 @@ export async function listWorkOrdersOptimized(req: Request, res: Response) {
     const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
     const sort = (req.query.sort as string) || 'start_date';
 
-    const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, exclude_status, q, work_type, type_work, page, pageSize, sort });
+    const opts = {
+      start,
+      end,
+      site,
+      status,
+      exclude_status: exclude_status,
+      exclude_work_type: exclude_work_type,
+      q,
+      work_type,
+      type_work,
+      page,
+      pageSize,
+      sort,
+    } as any;
+    const { rows, total } = await service.getWorkOrdersOptimized(opts);
     const out = (rows || []).map((r: any) => {
       const s = serializeWorkOrder(r);
       s.status = (r as any).status ?? 'NEW';
