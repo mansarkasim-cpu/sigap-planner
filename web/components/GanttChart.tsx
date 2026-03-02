@@ -511,10 +511,16 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       }
 
       const siteParam = site ? `&site=${encodeURIComponent(site)}` : '';
+      // If client didn't choose a site, include a timezone hint so server can
+      // correctly interpret stored naive timestamps for the default site.
+      const tzParam = site ? '' : `&tz=${encodeURIComponent('Asia/Makassar')}`;
       const startIso = new Date(dayStartMs).toISOString();
       const endIso = new Date(dayEndMs).toISOString();
       // Use the new optimized Gantt endpoint which returns only workorders overlapping the window
-      const baseUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}` + siteParam;
+      // Ask the backend to treat the provided start/end as local-day window
+      // (some backends expect local timestamps; sending `timeIsLocal=1` helps avoid
+      // timezone mismatches that cause items to be omitted from the returned set)
+      const baseUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&timeIsLocal=1` + siteParam + tzParam;
       let rowsRes: any = [];
       try {
         rowsRes = await apiClient(baseUrl);
@@ -526,7 +532,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       // Also explicitly fetch DAILY work orders and merge to ensure they appear on the Gantt
       let dailyRows: any[] = [];
       try {
-        const dailyUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&work_type=DAILY` + siteParam;
+        const dailyUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&work_type=DAILY&timeIsLocal=1` + siteParam + tzParam;
         const r = await apiClient(dailyUrl);
         dailyRows = (r?.data ?? r) || [];
       } catch (e) {
@@ -535,7 +541,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       // Also fetch items where type_work='DAILY_CHECKLIST' (legacy or alternative column)
       let typeWorkRows: any[] = [];
       try {
-        const twUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&type_work=DAILY_CHECKLIST` + siteParam;
+        const twUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&type_work=DAILY_CHECKLIST&timeIsLocal=1` + siteParam + tzParam;
         const r2 = await apiClient(twUrl);
         typeWorkRows = (r2?.data ?? r2) || [];
       } catch (e) {
@@ -567,9 +573,13 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
           // ignore per-item failures
         }
       setItems(mapped);
-      // debug: log loaded items for troubleshooting
+      // debug: log requested window and loaded rows for troubleshooting missing items
       if (typeof window !== 'undefined' && (window as any).console && (window as any).console.debug) {
-        console.debug('[Gantt] loaded items:', mapped.length, mapped.map((r: any) => r.id ?? r.doc_no));
+        console.debug('[Gantt] request window', { startIso, endIso, dayStartMs, dayEndMs, site });
+        console.debug('[Gantt] loaded items count:', mapped.length);
+        try {
+          console.debug('[Gantt] loaded items details:', mapped.map((r: any) => ({ id: r.id, doc_no: r.doc_no, start_date: r.start_date, end_date: r.end_date, raw_start: r.raw?.start_date ?? r.raw?.start, raw_end: r.raw?.end_date ?? r.raw?.end })));
+        } catch (e) { console.debug('[Gantt] loaded items details: <failed to stringify>'); }
       }
       // detailed debug: show start/end values and parsed timestamps
       if (typeof window !== 'undefined' && (window as any).console && (window as any).console.debug) {
@@ -582,6 +592,44 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       setError(err?.body?.message || err?.message || 'Gagal memuat data');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Temporary debug helper: fetch a work-order by doc_no (tries list and direct endpoints)
+  async function debugFetchWorkOrder(docNo?: string) {
+    try {
+      const target = docNo || prompt('Enter doc_no to debug (e.g. WO-2026-0167892):');
+      if (!target) return;
+      console.debug('[Gantt][debug] fetching by list filter', target);
+      try {
+        const res = await apiClient(`/work-orders?doc_no=${encodeURIComponent(target)}`);
+        console.debug('[Gantt][debug] /work-orders?doc_no= result:', res);
+        const rows = res?.data ?? res;
+        if (Array.isArray(rows) && rows.length > 0) {
+          console.debug('[Gantt][debug] found via list filter:', rows);
+          return rows;
+        }
+      } catch (e) {
+        console.warn('[Gantt][debug] list filter failed', e);
+      }
+      // fallback: try fetching as id
+      try {
+        const r2 = await apiClient(`/work-orders/${encodeURIComponent(target)}`);
+        console.debug('[Gantt][debug] /work-orders/{id} result:', r2);
+        return r2?.data ?? r2;
+      } catch (e) {
+        console.warn('[Gantt][debug] direct fetch failed', e);
+      }
+      // last resort: try search endpoint
+      try {
+        const r3 = await apiClient(`/work-orders/search?doc_no=${encodeURIComponent(target)}`);
+        console.debug('[Gantt][debug] /work-orders/search result:', r3);
+        return r3?.data ?? r3;
+      } catch (e) {
+        console.warn('[Gantt][debug] search fetch failed', e);
+      }
+    } catch (e) {
+      console.error('[Gantt][debug] unexpected', e);
     }
   }
 
@@ -1031,6 +1079,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                 <Tooltip title="Refresh">
                   <IconButton size="small" onClick={load}><RefreshIcon /></IconButton>
                 </Tooltip>
+                {/* Debug WO button hidden in production */}
                 <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
                   <IconButton size="small" onClick={toggleFullscreen}>
                     {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
