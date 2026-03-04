@@ -22,20 +22,37 @@ export async function getWorkOrderById(id: string) {
  * Accepts ISO datetimes for `start` and `end` (timestamptz-friendly).
  * Returns minimal fields and preserves SQL-like datetime strings.
  */
-export async function getWorkOrdersForGantt(opts: { start: string; end: string; site?: string; work_type?: string; type_work?: string; limit?: number }) {
-  const { start, end, site = '', work_type = '', type_work = '', limit } = opts as any;
+export async function getWorkOrdersForGantt(opts: { start: string; end: string; site?: string; work_type?: string; type_work?: string; limit?: number; tz?: string }) {
+  const { start, end, site = '', work_type = '', type_work = '', limit, tz } = opts as any;
   const repo = AppDataSource.getRepository(WorkOrder);
 
   const qb = repo.createQueryBuilder('wo');
   qb.where('wo.deleted_at IS NULL');
 
   // overlap predicate: wo.start_date <= end AND (wo.end_date IS NULL OR wo.end_date >= start)
+  // Note: `wo.start_date` / `wo.end_date` are stored as SQL `timestamp` (no timezone).
+  // When caller provides ISO datetimes (timestamptz) we must compare in the same
+  // local timeline. If a `tz` (IANA timezone) is provided, convert the provided
+  // timestamptz into local `timestamp` using `AT TIME ZONE :tz` so comparisons are
+  // accurate regardless of server timezone. Otherwise fall back to simple bounds.
   if (start && end) {
-    qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+    if (tz) {
+      qb.andWhere('(wo.start_date <= (:end::timestamptz AT TIME ZONE :tz) AND (wo.end_date IS NULL OR wo.end_date >= (:start::timestamptz AT TIME ZONE :tz)))', { start, end, tz });
+    } else {
+      qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+    }
   } else if (start) {
-    qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+    if (tz) {
+      qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= (:start::timestamptz AT TIME ZONE :tz))', { start, tz });
+    } else {
+      qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+    }
   } else if (end) {
-    qb.andWhere('wo.start_date <= :end', { end });
+    if (tz) {
+      qb.andWhere('wo.start_date <= (:end::timestamptz AT TIME ZONE :tz)', { end, tz });
+    } else {
+      qb.andWhere('wo.start_date <= :end', { end });
+    }
   }
 
   if (site && String(site).trim().length) {

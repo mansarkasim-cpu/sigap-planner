@@ -62,6 +62,46 @@ function isoToMs(val?: string | null) {
   // If naive SQL datetime (YYYY-MM-DD or YYYY-MM-DD HH:mm:ss) without timezone,
   // interpret it as local wall-clock time so it lines up with local dayStartMs.
   const s = String(val).trim();
+  // Common non-ISO formats: dd/mm/yyyy or dd/mm/yyyy HH:MM (optionally with WITA/WIB/WIT)
+  // Accept examples like: "02/03/2026 17:00 WITA" or "02/03/2026 17:00"
+  const ddmmyyyyRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?(?:\s*(WITA|WIB|WIT|UTC|GMT|[+-]\d{2}:?\d{2}))?$/i;
+  const m2 = ddmmyyyyRx.exec(s);
+  if (m2) {
+    try {
+      const d = Number(m2[1]);
+      const mo = Number(m2[2]) - 1;
+      const y = Number(m2[3]);
+      const hh = Number(m2[4] || '0');
+      const mi = Number(m2[5] || '0');
+      const ss = Number(m2[6] || '0');
+      const tzLabel = (m2[7] || '').toString().toUpperCase();
+      // interpret bare dd/mm/yyyy as local wall-clock time (like naive SQL behaviour)
+      if (!tzLabel) {
+        return new Date(y, mo, d, hh, mi, ss).getTime();
+      }
+      // handle common Indonesian timezone labels
+      const tzOffsets: Record<string, number> = { 'WIB': 7, 'WITA': 8, 'WIT': 9, 'UTC': 0, 'GMT': 0 };
+      if (tzOffsets[tzLabel]) {
+        const offset = tzOffsets[tzLabel];
+        // convert local time in that timezone to UTC ms
+        return Date.UTC(y, mo, d, hh - offset, mi, ss);
+      }
+      // handle explicit offsets like +07:00 or +0700
+      const offMatch = /^([+-])(\d{2}):?(\d{2})$/.exec(tzLabel);
+      if (offMatch) {
+        const sign = offMatch[1] === '+' ? 1 : -1;
+        const oh = Number(offMatch[2]);
+        const om = Number(offMatch[3]);
+        const offsetHours = sign * (oh + om / 60);
+        return Date.UTC(y, mo, d, Math.round(hh - offsetHours), mi, ss);
+      }
+      // fallback to local parse
+      return new Date(y, mo, d, hh, mi, ss).getTime();
+    } catch (e) {
+      // fall through to try other parsers
+    }
+  }
+
   const naiveSqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
   const m = naiveSqlRx.exec(s);
   if (m && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
@@ -511,16 +551,10 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       }
 
       const siteParam = site ? `&site=${encodeURIComponent(site)}` : '';
-      // If client didn't choose a site, include a timezone hint so server can
-      // correctly interpret stored naive timestamps for the default site.
-      const tzParam = site ? '' : `&tz=${encodeURIComponent('Asia/Makassar')}`;
       const startIso = new Date(dayStartMs).toISOString();
       const endIso = new Date(dayEndMs).toISOString();
       // Use the new optimized Gantt endpoint which returns only workorders overlapping the window
-      // Ask the backend to treat the provided start/end as local-day window
-      // (some backends expect local timestamps; sending `timeIsLocal=1` helps avoid
-      // timezone mismatches that cause items to be omitted from the returned set)
-      const baseUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&timeIsLocal=1` + siteParam + tzParam;
+      const baseUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}` + siteParam;
       let rowsRes: any = [];
       try {
         rowsRes = await apiClient(baseUrl);
@@ -532,7 +566,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       // Also explicitly fetch DAILY work orders and merge to ensure they appear on the Gantt
       let dailyRows: any[] = [];
       try {
-        const dailyUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&work_type=DAILY&timeIsLocal=1` + siteParam + tzParam;
+        const dailyUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&work_type=DAILY` + siteParam;
         const r = await apiClient(dailyUrl);
         dailyRows = (r?.data ?? r) || [];
       } catch (e) {
@@ -541,7 +575,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       // Also fetch items where type_work='DAILY_CHECKLIST' (legacy or alternative column)
       let typeWorkRows: any[] = [];
       try {
-        const twUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&type_work=DAILY_CHECKLIST&timeIsLocal=1` + siteParam + tzParam;
+        const twUrl = `/work-orders/gantt?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&type_work=DAILY_CHECKLIST` + siteParam;
         const r2 = await apiClient(twUrl);
         typeWorkRows = (r2?.data ?? r2) || [];
       } catch (e) {
@@ -573,13 +607,9 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
           // ignore per-item failures
         }
       setItems(mapped);
-      // debug: log requested window and loaded rows for troubleshooting missing items
+      // debug: log loaded items for troubleshooting
       if (typeof window !== 'undefined' && (window as any).console && (window as any).console.debug) {
-        console.debug('[Gantt] request window', { startIso, endIso, dayStartMs, dayEndMs, site });
-        console.debug('[Gantt] loaded items count:', mapped.length);
-        try {
-          console.debug('[Gantt] loaded items details:', mapped.map((r: any) => ({ id: r.id, doc_no: r.doc_no, start_date: r.start_date, end_date: r.end_date, raw_start: r.raw?.start_date ?? r.raw?.start, raw_end: r.raw?.end_date ?? r.raw?.end })));
-        } catch (e) { console.debug('[Gantt] loaded items details: <failed to stringify>'); }
+        console.debug('[Gantt] loaded items:', mapped.length, mapped.map((r: any) => r.id ?? r.doc_no));
       }
       // detailed debug: show start/end values and parsed timestamps
       if (typeof window !== 'undefined' && (window as any).console && (window as any).console.debug) {
@@ -592,44 +622,6 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       setError(err?.body?.message || err?.message || 'Gagal memuat data');
     } finally {
       setLoading(false);
-    }
-  }
-
-  // Temporary debug helper: fetch a work-order by doc_no (tries list and direct endpoints)
-  async function debugFetchWorkOrder(docNo?: string) {
-    try {
-      const target = docNo || prompt('Enter doc_no to debug (e.g. WO-2026-0167892):');
-      if (!target) return;
-      console.debug('[Gantt][debug] fetching by list filter', target);
-      try {
-        const res = await apiClient(`/work-orders?doc_no=${encodeURIComponent(target)}`);
-        console.debug('[Gantt][debug] /work-orders?doc_no= result:', res);
-        const rows = res?.data ?? res;
-        if (Array.isArray(rows) && rows.length > 0) {
-          console.debug('[Gantt][debug] found via list filter:', rows);
-          return rows;
-        }
-      } catch (e) {
-        console.warn('[Gantt][debug] list filter failed', e);
-      }
-      // fallback: try fetching as id
-      try {
-        const r2 = await apiClient(`/work-orders/${encodeURIComponent(target)}`);
-        console.debug('[Gantt][debug] /work-orders/{id} result:', r2);
-        return r2?.data ?? r2;
-      } catch (e) {
-        console.warn('[Gantt][debug] direct fetch failed', e);
-      }
-      // last resort: try search endpoint
-      try {
-        const r3 = await apiClient(`/work-orders/search?doc_no=${encodeURIComponent(target)}`);
-        console.debug('[Gantt][debug] /work-orders/search result:', r3);
-        return r3?.data ?? r3;
-      } catch (e) {
-        console.warn('[Gantt][debug] search fetch failed', e);
-      }
-    } catch (e) {
-      console.error('[Gantt][debug] unexpected', e);
     }
   }
 
@@ -906,9 +898,13 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         debugReasons.push(rec);
         return false;
       }
-      if (start >= dayEndMs) {
+      // Treat items that start strictly after the day end as out-of-range.
+      // Allow items that start exactly at `dayEndMs` to remain, since some backends
+      // may represent local-midnight as the same UTC instant and we want those
+      // work orders to appear for the selected date.
+      if (start > dayEndMs) {
         rec.passes = false;
-        rec.reason = `starts at/after dayEnd (${start} >= ${dayEndMs})`;
+        rec.reason = `starts after dayEnd (${start} > ${dayEndMs})`;
         debugReasons.push(rec);
         return false;
       }
@@ -1079,7 +1075,6 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                 <Tooltip title="Refresh">
                   <IconButton size="small" onClick={load}><RefreshIcon /></IconButton>
                 </Tooltip>
-                {/* Debug WO button hidden in production */}
                 <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
                   <IconButton size="small" onClick={toggleFullscreen}>
                     {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
