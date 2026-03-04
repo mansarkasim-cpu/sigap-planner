@@ -5,6 +5,7 @@ import * as service from '../services/workOrderService';
 import { AppDataSource } from '../ormconfig';
 import { pushNotify } from '../services/pushService';
 import { Task } from '../entities/Task';
+import { MasterSite } from '../entities/MasterSite';
 import { Assignment } from '../entities/Assignment';
 import { WorkOrder } from '../entities/WorkOrder';
 import { User } from '../entities/User';
@@ -76,9 +77,34 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
       const work_type = (req.query.work_type as string) || '';
       const type_work = (req.query.type_work as string) || '';
 
-      // normalize naive datetimes by appending Z if missing so Postgres timestamptz interprets them safely
+      // normalize provided datetimes so they are safe to bind to Postgres timestamptz
+      // If the client indicates `timeIsLocal=1` we should interpret the provided
+      // value as a local wall-clock and convert it to an ISO UTC string. This
+      // avoids treating naive datetimes as literal UTC which can shift items
+      // outside the requested window.
       function normalizeTs(v: string) {
         if (!v) return v;
+        // If client requested local interpretation, parse components as local
+        // wall-clock and return UTC ISO (new Date(y,mo,d,h,m,s) -> local -> toISOString())
+        const timeIsLocal = String(req.query.timeIsLocal || req.query.timeislocal || '') === '1' || String(req.query.timeIsLocal || '').toLowerCase() === 'true';
+        if (timeIsLocal) {
+          // Accept formats like YYYY-MM-DD[ T]HH:mm[:ss] or YYYY-MM-DD
+          const m = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+          if (m) {
+            const y = Number(m[1]);
+            const mo = Number(m[2]) - 1;
+            const d = Number(m[3]);
+            const hh = Number(m[4] || '0');
+            const mm = Number(m[5] || '0');
+            const ss = Number(m[6] || '0');
+            return new Date(y, mo, d, hh, mm, ss).toISOString();
+          }
+          // Fallback: if it contains a timezone already, return as-is
+          if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v)) return v;
+          // Otherwise append Z to preserve previous behaviour
+          return v + 'Z';
+        }
+        // Default behaviour: if value already contains timezone info, keep it
         if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v)) return v;
         return v + 'Z';
       }
@@ -98,7 +124,38 @@ export async function listWorkOrdersPaginated(req: Request, res: Response) {
         end = e.toISOString();
       }
 
-      const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work });
+      // Attempt to determine timezone to correctly interpret naive DB timestamps
+      let tz: string | undefined = undefined;
+      // honor explicit tz query parameter when provided
+      if (req.query.tz && String(req.query.tz).trim().length) tz = String(req.query.tz).trim();
+      // otherwise try to resolve from master_site using provided `site` text
+      if (!tz && site && String(site).trim().length) {
+        try {
+          const s = String(site).toLowerCase().trim();
+          const msRepo = AppDataSource.getRepository(MasterSite);
+          const found = await msRepo.createQueryBuilder('ms')
+            .where('LOWER(ms.name) LIKE :q OR LOWER(ms.code) LIKE :q', { q: `%${s}%` })
+            .limit(1)
+            .getOne();
+          if (found && found.timezone) tz = String(found.timezone).trim();
+        } catch (e) {
+          // ignore lookup failures
+        }
+      }
+
+      // If still no timezone resolved and caller didn't provide a `site`,
+      // apply a server-side fallback so Gantt queries aren't silently wrong
+      // when the client omits site/tz. Use an env var `DEFAULT_TZ` if set,
+      // otherwise fall back to the known site timezone used by the app.
+      if (!tz && (!site || !String(site).trim().length)) {
+        tz = process.env.DEFAULT_TZ || 'Asia/Makassar';
+      }
+
+      if (tz) {
+        console.debug('listWorkOrdersForGantt resolved tz=', tz);
+      }
+
+      const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work, tz });
       const out = Array.isArray(rows) ? rows.map(r => {
         const s = serializeWorkOrder(r);
         s.status = (r as any).status ?? 'NEW';

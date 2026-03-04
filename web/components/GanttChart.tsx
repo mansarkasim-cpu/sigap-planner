@@ -62,6 +62,46 @@ function isoToMs(val?: string | null) {
   // If naive SQL datetime (YYYY-MM-DD or YYYY-MM-DD HH:mm:ss) without timezone,
   // interpret it as local wall-clock time so it lines up with local dayStartMs.
   const s = String(val).trim();
+  // Common non-ISO formats: dd/mm/yyyy or dd/mm/yyyy HH:MM (optionally with WITA/WIB/WIT)
+  // Accept examples like: "02/03/2026 17:00 WITA" or "02/03/2026 17:00"
+  const ddmmyyyyRx = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?(?:\s*(WITA|WIB|WIT|UTC|GMT|[+-]\d{2}:?\d{2}))?$/i;
+  const m2 = ddmmyyyyRx.exec(s);
+  if (m2) {
+    try {
+      const d = Number(m2[1]);
+      const mo = Number(m2[2]) - 1;
+      const y = Number(m2[3]);
+      const hh = Number(m2[4] || '0');
+      const mi = Number(m2[5] || '0');
+      const ss = Number(m2[6] || '0');
+      const tzLabel = (m2[7] || '').toString().toUpperCase();
+      // interpret bare dd/mm/yyyy as local wall-clock time (like naive SQL behaviour)
+      if (!tzLabel) {
+        return new Date(y, mo, d, hh, mi, ss).getTime();
+      }
+      // handle common Indonesian timezone labels
+      const tzOffsets: Record<string, number> = { 'WIB': 7, 'WITA': 8, 'WIT': 9, 'UTC': 0, 'GMT': 0 };
+      if (tzOffsets[tzLabel]) {
+        const offset = tzOffsets[tzLabel];
+        // convert local time in that timezone to UTC ms
+        return Date.UTC(y, mo, d, hh - offset, mi, ss);
+      }
+      // handle explicit offsets like +07:00 or +0700
+      const offMatch = /^([+-])(\d{2}):?(\d{2})$/.exec(tzLabel);
+      if (offMatch) {
+        const sign = offMatch[1] === '+' ? 1 : -1;
+        const oh = Number(offMatch[2]);
+        const om = Number(offMatch[3]);
+        const offsetHours = sign * (oh + om / 60);
+        return Date.UTC(y, mo, d, Math.round(hh - offsetHours), mi, ss);
+      }
+      // fallback to local parse
+      return new Date(y, mo, d, hh, mi, ss).getTime();
+    } catch (e) {
+      // fall through to try other parsers
+    }
+  }
+
   const naiveSqlRx = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
   const m = naiveSqlRx.exec(s);
   if (m && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
@@ -858,9 +898,13 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         debugReasons.push(rec);
         return false;
       }
-      if (start >= dayEndMs) {
+      // Treat items that start strictly after the day end as out-of-range.
+      // Allow items that start exactly at `dayEndMs` to remain, since some backends
+      // may represent local-midnight as the same UTC instant and we want those
+      // work orders to appear for the selected date.
+      if (start > dayEndMs) {
         rec.passes = false;
-        rec.reason = `starts at/after dayEnd (${start} >= ${dayEndMs})`;
+        rec.reason = `starts after dayEnd (${start} > ${dayEndMs})`;
         debugReasons.push(rec);
         return false;
       }
