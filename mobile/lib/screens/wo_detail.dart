@@ -43,14 +43,15 @@ class _WODetailScreenState extends State<WODetailScreen>
   String? _selectedTaskId;
   // local map of taskId -> photo bytes (from camera)
   final Map<String, Uint8List> taskPhotoBytes = {};
-  bool loading = false;
+  bool loading = true;
   bool submitting = false;
   String? _keterangan;
 
   @override
   void initState() {
     super.initState();
-    _loadPrefs().then((_) => _loadAll());
+    // start prefs + data loads in parallel so UI shows loading immediately
+    _startLoads();
     // swipe hint animation: slight left slide to indicate swipe direction
     _swipeController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 900));
@@ -59,6 +60,14 @@ class _WODetailScreenState extends State<WODetailScreen>
             .chain(CurveTween(curve: Curves.easeInOut))
             .animate(_swipeController);
     _swipeController.repeat(reverse: true);
+  }
+
+  Future<void> _startLoads() async {
+    try {
+      await Future.wait([_loadPrefs(), _loadAll()]);
+    } catch (e) {
+      debugPrint('startLoads error: $e');
+    }
   }
 
   @override
@@ -127,9 +136,9 @@ class _WODetailScreenState extends State<WODetailScreen>
       _loadDetail(),
       _loadTasks(),
       _loadAssignmentStatus(),
-      _loadAssignmentDetail()
+      _loadAssignmentDetail(),
+      _loadLocalChecklist(),
     ]);
-    await _loadLocalChecklist();
     setState(() {
       loading = false;
     });
@@ -270,6 +279,20 @@ class _WODetailScreenState extends State<WODetailScreen>
                   ? (assignmentDetail!['task_id'] ?? assignmentDetail!['task'])
                   : null))
           ?.toString();
+
+      // If taskId is missing, backend validation will fail (taskId is required).
+      // Block submission early and inform the user so they can choose/notify admin.
+      if (qTaskId == null || qTaskId.isEmpty) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Tidak dapat submit: task/pekerjaan tidak terasosiasi. Hubungi admin.')));
+        } catch (_) {}
+        setState(() {
+          submitting = false;
+        });
+        return;
+      }
 
       // Persist submission locally first (photo file + queued record) to mitigate offline.
       await LocalDB.instance.init();
