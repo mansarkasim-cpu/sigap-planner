@@ -44,6 +44,7 @@ class _WODetailScreenState extends State<WODetailScreen>
   // local map of taskId -> photo bytes (from camera)
   final Map<String, Uint8List> taskPhotoBytes = {};
   bool loading = true;
+  bool _showedOfflineNotice = false;
   bool submitting = false;
   String? _keterangan;
 
@@ -145,28 +146,27 @@ class _WODetailScreenState extends State<WODetailScreen>
   }
 
   Future<void> _loadAssignmentDetail() async {
+    final cacheKey = 'assignments';
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      final res = await api.get('/assignments');
+      final res = await api.get('/assignments', timeout: const Duration(seconds: 8));
       final list = (res is List) ? res : (res['data'] ?? res);
+      // cache the assignments list for offline fallback
+      try {
+        await LocalDB.instance.cacheApiData(cacheKey, list);
+      } catch (_) {}
       if (list is List) {
         final found = list.firstWhere(
             (e) => (e['id'] ?? '')?.toString() == widget.assignmentId,
             orElse: () => null);
         if (found != null) {
-          final tid =
-              (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
+          final tid = (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
           if (tid.isNotEmpty) {
             setState(() {
               _selectedTaskId = tid;
-              assignmentDetail =
-                  (found is Map) ? Map<String, dynamic>.from(found) : null;
-              // prefer explicit start fields from assignment if available
+              assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
               try {
-                final s = (found['start_date'] ??
-                    found['start_time'] ??
-                    found['start'] ??
-                    found['startTime']);
+                final s = (found['start_date'] ?? found['start_time'] ?? found['start'] ?? found['startTime']);
                 if (s != null) {
                   try {
                     final dt = DateTime.parse(s.toString());
@@ -177,10 +177,8 @@ class _WODetailScreenState extends State<WODetailScreen>
                 }
               } catch (_) {}
             });
-            // also try LocalDB stored start time (swipe timestamp)
             try {
-              final localStart = await LocalDB.instance
-                  .getAssignmentStart(widget.assignmentId);
+              final localStart = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
               if (localStart != null)
                 setState(() {
                   assignmentStart = localStart.toUtc().toIso8601String();
@@ -196,6 +194,47 @@ class _WODetailScreenState extends State<WODetailScreen>
       });
     } catch (e) {
       debugPrint('load assignment detail failed: $e');
+      // fallback to cached assignments
+      try {
+        final cached = await LocalDB.instance.getCachedApiData(cacheKey);
+        if (cached is List) {
+          final list = cached;
+          final found = list.firstWhere(
+              (e) => (e['id'] ?? '')?.toString() == widget.assignmentId,
+              orElse: () => null);
+          if (found != null) {
+            final tid = (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
+            if (tid.isNotEmpty) {
+              setState(() {
+                _selectedTaskId = tid;
+                assignmentDetail = (found is Map) ? Map<String, dynamic>.from(found) : null;
+                try {
+                  final s = (found['start_date'] ?? found['start_time'] ?? found['start'] ?? found['startTime']);
+                  if (s != null) {
+                    try {
+                      final dt = DateTime.parse(s.toString());
+                      assignmentStart = dt.toUtc().toIso8601String();
+                    } catch (_) {
+                      assignmentStart = s.toString();
+                    }
+                  }
+                } catch (_) {}
+              });
+              _maybeShowOfflineNotice();
+              try {
+                final localStart = await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+                if (localStart != null)
+                  setState(() {
+                    assignmentStart = localStart.toUtc().toIso8601String();
+                  });
+              } catch (_) {}
+              return;
+            }
+          }
+        }
+      } catch (ce) {
+        debugPrint('assignment detail cache fallback failed: $ce');
+      }
       setState(() {
         _selectedTaskId = null;
         assignmentDetail = null;
@@ -227,20 +266,52 @@ class _WODetailScreenState extends State<WODetailScreen>
     }
   }
 
+  void _maybeShowOfflineNotice() {
+    if (_showedOfflineNotice) return;
+    _showedOfflineNotice = true;
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Koneksi lambat: menampilkan data cache (offline mode)')));
+    } catch (_) {}
+  }
+
   Future<void> _loadDetail() async {
+    final cacheKey = 'wo_detail:${widget.woId}';
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      final res =
-          await api.get('/work-orders/${Uri.encodeComponent(widget.woId)}');
-      // Unwrap common API envelope { data: {...} } if present
+      final res = await api.get('/work-orders/${Uri.encodeComponent(widget.woId)}', timeout: const Duration(seconds: 8));
       dynamic payload = res;
       if (res is Map && res.containsKey('data')) payload = res['data'];
+      try {
+        await LocalDB.instance.cacheApiData(cacheKey, payload);
+      } catch (_) {}
       setState(() {
         woDetail = (payload is Map) ? Map<String, dynamic>.from(payload) : null;
-        _keterangan = payload['keterangan'] ?? '';
+        try {
+          _keterangan = (payload is Map) ? (payload['keterangan'] ?? '') : '';
+        } catch (_) {
+          _keterangan = '';
+        }
       });
     } catch (e) {
       debugPrint('load detail error: $e');
+      try {
+        final cached = await LocalDB.instance.getCachedApiData(cacheKey);
+        if (cached != null) {
+          final payload = cached;
+          setState(() {
+            woDetail = (payload is Map) ? Map<String, dynamic>.from(payload) : null;
+            try {
+              _keterangan = (payload is Map) ? (payload['keterangan'] ?? '') : '';
+            } catch (_) {
+              _keterangan = '';
+            }
+          });
+          _maybeShowOfflineNotice();
+        }
+      } catch (ce) {
+        debugPrint('load detail cache fallback failed: $ce');
+      }
     }
   }
 
@@ -517,15 +588,30 @@ class _WODetailScreenState extends State<WODetailScreen>
   }
 
   Future<void> _loadTasks() async {
+    final cacheKey = 'wo_tasks:${widget.woId}';
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      final tres = await api
-          .get('/work-orders/${Uri.encodeComponent(widget.woId)}/tasks');
+      final tres = await api.get('/work-orders/${Uri.encodeComponent(widget.woId)}/tasks', timeout: const Duration(seconds: 8));
+      final list = (tres is List) ? tres : (tres['data'] ?? tres);
+      try {
+        await LocalDB.instance.cacheApiData(cacheKey, list);
+      } catch (_) {}
       setState(() {
-        tasks = (tres is List) ? tres : (tres['data'] ?? tres);
+        tasks = (list is List) ? list : <dynamic>[];
       });
     } catch (e) {
       debugPrint('load tasks error: $e');
+      try {
+        final cached = await LocalDB.instance.getCachedApiData(cacheKey);
+        if (cached is List) {
+          setState(() {
+            tasks = cached;
+          });
+          _maybeShowOfflineNotice();
+        }
+      } catch (ce) {
+        debugPrint('load tasks cache fallback failed: $ce');
+      }
     }
   }
 
@@ -574,64 +660,71 @@ class _WODetailScreenState extends State<WODetailScreen>
   }
 
   Future<void> _loadAssignmentStatus() async {
-    try {
-      final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      // Try dedicated for-tech endpoint with explicit user id (handles leaders who fetch group assignments elsewhere)
+    final candidates = <String>[];
+    final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
+    if (_techId != null && _techId!.isNotEmpty) {
+      candidates.add('/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
+    }
+    candidates.add('/assignments/for-tech');
+    candidates.add('/assignments');
+
+    String? foundStatus;
+    String? cacheKeyUsed;
+
+    for (final path in candidates) {
       try {
-        if (_techId != null && _techId!.isNotEmpty) {
+        final res = await api.get(path, timeout: const Duration(seconds: 8));
+        final list = (res is Map && res['assignments'] != null)
+            ? res['assignments']
+            : ((res is List) ? res : (res['data'] ?? res));
+        if (list is List) {
+          // cache list for this endpoint (use simple key based on path)
+          final key = path.replaceAll(RegExp(r'[^a-z0-9_]'), '_');
           try {
-            final res = await api.get(
-                '/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
-            final list = (res is Map && res['assignments'] != null)
-                ? res['assignments']
-                : ((res is List) ? res : (res['data'] ?? res));
-            if (list is List) {
-              final found = list.firstWhere(
-                  (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-                  orElse: () => <String, dynamic>{});
-              setState(() {
-                assignmentStatus =
-                    found.isNotEmpty ? (found['status'] ?? '') : null;
-              });
-              if (assignmentStatus != null) return;
-            }
+            await LocalDB.instance.cacheApiData(key, list);
           } catch (_) {}
-        }
-
-        // prefer dedicated for-tech endpoint without user param but fallback to /assignments
-        try {
-          final res = await api.get('/assignments/for-tech');
-          final list = (res is Map && res['assignments'] != null)
-              ? res['assignments']
-              : ((res is List) ? res : (res['data'] ?? res));
-          if (list is List) {
-            final found = list.firstWhere(
-                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-                orElse: () => <String, dynamic>{});
-            setState(() {
-              assignmentStatus =
-                  found.isNotEmpty ? (found['status'] ?? '') : null;
-            });
-            if (assignmentStatus != null) return;
+          final found = list.firstWhere(
+              (e) => (e['id'] ?? '')?.toString() == widget.assignmentId,
+              orElse: () => null);
+          if (found != null) {
+            foundStatus = (found['status'] ?? '')?.toString() ?? '';
+            cacheKeyUsed = key;
+            break;
           }
-        } catch (_) {}
-
-        final res2 = await api.get('/assignments');
-        final list2 = (res2 is List) ? res2 : (res2['data'] ?? res2);
-        if (list2 is List) {
-          final found = list2.firstWhere(
-              (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-              orElse: () => <String, dynamic>{});
-          setState(() {
-            assignmentStatus =
-                found.isNotEmpty ? (found['status'] ?? '') : null;
-          });
         }
       } catch (e) {
-        debugPrint('failed to load assignment status: $e');
+        debugPrint('assignment status fetch failed for $path: $e');
+        // try next endpoint
       }
-    } catch (e) {
-      debugPrint('failed to load assignment status: $e');
+    }
+
+    if (foundStatus != null && foundStatus.isNotEmpty) {
+      setState(() {
+        assignmentStatus = foundStatus;
+      });
+      return;
+    }
+
+    // fallback: try cached keys in same order
+    for (final path in candidates) {
+      final key = path.replaceAll(RegExp(r'[^a-z0-9_]'), '_');
+      try {
+        final cached = await LocalDB.instance.getCachedApiData(key);
+        if (cached is List) {
+          final found = cached.firstWhere(
+              (e) => (e['id'] ?? '')?.toString() == widget.assignmentId,
+              orElse: () => null);
+          if (found != null) {
+            setState(() {
+              assignmentStatus = (found['status'] ?? '')?.toString() ?? '';
+            });
+            _maybeShowOfflineNotice();
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('assignment status cache lookup failed for $key: $e');
+      }
     }
   }
 
