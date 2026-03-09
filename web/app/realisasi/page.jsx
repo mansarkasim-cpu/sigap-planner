@@ -148,6 +148,12 @@ export default function Page() {
   const [editSaving, setEditSaving] = useState(false)
   const [editNote, setEditNote] = useState('')
   const [modalHistoryVisible, setModalHistoryVisible] = useState({})
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createTask, setCreateTask] = useState(null)
+  const [createStartInput, setCreateStartInput] = useState('')
+  const [createEndInput, setCreateEndInput] = useState('')
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createNote, setCreateNote] = useState('')
   const roleRaw = (typeof window !== 'undefined') ? localStorage.getItem('sigap_role') : null
   const canEdit = hasRole(roleRaw, 'planned') || hasRole(roleRaw, 'planner') || hasRole(roleRaw, 'admin')
   const [page, setPage] = useState(1)
@@ -372,6 +378,42 @@ export default function Page() {
     setEditDialogOpen(true)
   }
 
+  function openCreateDialog(task) {
+    setCreateTask(task)
+    const tz = getSiteTimezone(modalData?.wo) || undefined
+    // default to WO start/end or now
+    setCreateStartInput(toInputDatetime(modalData?.wo?.start_date || new Date().toISOString(), tz))
+    setCreateEndInput(toInputDatetime(modalData?.wo?.end_date || new Date().toISOString(), tz))
+    setCreateNote('')
+    setCreateDialogOpen(true)
+  }
+
+  async function saveCreate() {
+    if (!createTask) return
+    setCreateSaving(true)
+    try {
+      const payload = {}
+      // use DTO field names expected by backend
+      payload.taskId = createTask.id || createTask.taskId || createTask._id
+      payload.startTime = createStartInput ? new Date(createStartInput).toISOString() : null
+      payload.endTime = createEndInput ? new Date(createEndInput).toISOString() : null
+      if (typeof createNote !== 'undefined') payload.notes = createNote || null
+      await apiClient('/realisasi', { method: 'POST', body: payload })
+      // refresh details for current WO
+      if (modalData && modalData.wo && modalData.wo.id) {
+        const res = await loadDetails(modalData.wo.id)
+        setModalData({ wo: modalData.wo, tasks: res.tasks || [], relByTask: res.relByTask || {} })
+      }
+      setCreateDialogOpen(false)
+      setCreateTask(null)
+    } catch (e) {
+      console.error('create realisasi failed', e)
+      alert('Gagal membuat realisasi: ' + (e?.message || 'error'))
+    } finally {
+      setCreateSaving(false)
+    }
+  }
+
   async function saveEdit() {
     if (!editRealisasi) return
     setEditSaving(true)
@@ -527,6 +569,9 @@ export default function Page() {
                       </Grid>
                       <Grid item xs={12} sm={4} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Chip label={`${(modalData.relByTask && modalData.relByTask[t.id] ? modalData.relByTask[t.id].length : 0)} entries`} size="small" />
+                        {canEdit && false ? (
+                          <Button size="small" variant="outlined" sx={{ ml: 1 }} onClick={() => openCreateDialog(t)}>Add Realisasi</Button>
+                        ) : null}
                       </Grid>
                     </Grid>
 
@@ -640,6 +685,20 @@ export default function Page() {
         <DialogActions>
           <Button onClick={() => { setEditDialogOpen(false); setEditRealisasi(null); }}>Cancel</Button>
           <Button variant="contained" onClick={saveEdit} disabled={editSaving}>{editSaving ? 'Saving...' : 'Save'}</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog fullWidth maxWidth="sm" open={createDialogOpen} onClose={() => setCreateDialogOpen(false)}>
+        <DialogTitle>Create Realisasi</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField label="Start" type="datetime-local" InputLabelProps={{ shrink: true }} value={createStartInput} onChange={(e) => setCreateStartInput(e.target.value)} />
+            <TextField label="End" type="datetime-local" InputLabelProps={{ shrink: true }} value={createEndInput} onChange={(e) => setCreateEndInput(e.target.value)} />
+            <TextField label="Keterangan" placeholder="Keterangan / alasan (opsional)" multiline rows={3} value={createNote} onChange={(e) => setCreateNote(e.target.value)} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setCreateDialogOpen(false); setCreateTask(null); }}>Cancel</Button>
+          <Button variant="contained" onClick={saveCreate} disabled={createSaving}>{createSaving ? 'Creating...' : 'Create'}</Button>
         </DialogActions>
       </Dialog>
     </main>

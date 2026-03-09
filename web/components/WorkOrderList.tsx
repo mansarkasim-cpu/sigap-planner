@@ -144,6 +144,12 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
   const [currentUser, setCurrentUser] = useState<any | null>(undefined);
   const [editStartInput, setEditStartInput] = useState<string>('');
   const [editEndInput, setEditEndInput] = useState<string>('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createTask, setCreateTask] = useState<any>(null);
+  const [createStartInput, setCreateStartInput] = useState<string>('');
+  const [createEndInput, setCreateEndInput] = useState<string>('');
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createNote, setCreateNote] = useState<string>('');
 
   // Snackbar / Toast state
   const [snackOpen, setSnackOpen] = useState(false);
@@ -157,6 +163,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
   const roleRaw = typeof window !== 'undefined' ? localStorage.getItem('sigap_role') : null;
   const isTerminal = hasRole(roleRaw, 'terminal');
+  const canCreateRealisasi = hasRole(roleRaw, 'planned') || hasRole(roleRaw, 'planner') || hasRole(roleRaw, 'admin');
 
   async function load(p = page, query = q, location = locationFilter, date = dateFilter) {
     setLoading(true);
@@ -576,6 +583,47 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       load(page, q);
     } catch (e) {
       console.warn('Failed to refresh work order list after closing modal', e);
+    }
+  }
+
+  function openCreateDialog(task: any) {
+    setCreateTask(task);
+    // default start/end to WO start/end or now
+    const base = (taskModal && taskModal.wo && taskModal.wo.start_date) ? taskModal.wo.start_date : new Date().toISOString();
+    setCreateStartInput(toInputDatetime(base));
+    setCreateEndInput(toInputDatetime(taskModal && taskModal.wo && taskModal.wo.end_date ? taskModal.wo.end_date : new Date().toISOString()));
+    setCreateNote('');
+    setCreateDialogOpen(true);
+  }
+
+  async function saveCreate() {
+    if (!createTask) return;
+    setCreateSaving(true);
+    try {
+      const payload: any = {};
+      payload.taskId = createTask.id || createTask.task_id || createTask._id;
+      payload.startTime = createStartInput ? new Date(createStartInput).toISOString() : null;
+      payload.endTime = createEndInput ? new Date(createEndInput).toISOString() : null;
+      if (typeof createNote !== 'undefined') payload.notes = createNote || null;
+      await apiClient('/realisasi', { method: 'POST', body: payload });
+      showToast('Realisasi dibuat', 'success');
+      // refresh tasks for current WO in modal
+      try {
+        const tasksRes = await apiClient(`/work-orders/${encodeURIComponent(taskModal.wo?.id)}/tasks`);
+        const tasks = Array.isArray(tasksRes) ? tasksRes : (tasksRes?.data ?? []);
+        setTaskModal(prev => ({ ...(prev || {}), wo: { ...(prev?.wo || {}), tasks } } as any));
+      } catch (e) {
+        console.warn('refresh tasks after create failed', e);
+      }
+      // refresh list
+      load(page, q);
+      setCreateDialogOpen(false);
+      setCreateTask(null);
+    } catch (e: any) {
+      console.error('create realisasi failed', e);
+      showToast('Gagal membuat realisasi: ' + (e?.message || e), 'error');
+    } finally {
+      setCreateSaving(false);
     }
   }
 
@@ -1015,11 +1063,8 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
       {/* Task Modal */}
       {taskModal.open && taskModal.wo && (
-        <div style={{
-          position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: 16
-        }}>
-          <div style={{ background: 'white', padding: 16, width: '95%', maxWidth: 900, borderRadius: 8, maxHeight: '86vh', overflow: 'auto', boxShadow: '0 6px 30px rgba(0,0,0,0.2)' }}>
+        <Dialog open={Boolean(taskModal.open && taskModal.wo)} onClose={closeTaskModal} fullWidth maxWidth="md">
+          <div style={{ background: 'white', padding: 16, width: '100%', maxWidth: 900, borderRadius: 8, maxHeight: '86vh', overflow: 'auto', boxShadow: '0 6px 30px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Task - {taskModal.wo.doc_no ?? taskModal.wo.id}</h2>
@@ -1142,7 +1187,14 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                                   return <span style={{ background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Pending{pendingCount ? ` (${pendingCount})` : ''}</span>;
                                 }
                                 // explicit 'Belum Realisasi' state when neither realisasi nor pending exist
-                                return <span style={{ background: '#64748b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Belum Realisasi</span>;
+                                return (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ background: '#64748b', color: 'white', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>Belum Realisasi</span>
+                                    {canCreateRealisasi ? (
+                                      <Button size="small" variant="outlined" onClick={() => openCreateDialog(act)}>Add Realisasi</Button>
+                                    ) : null}
+                                  </span>
+                                );
                               })()
                             )}
                           </div>
@@ -1300,7 +1352,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
               </table>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Row Details Dialog for table view */}
@@ -1340,6 +1392,27 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
               </IconButton>
             </Tooltip>
           )}
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => { setCreateDialogOpen(false); setCreateTask(null); }}
+        fullWidth
+        maxWidth="sm"
+        BackdropProps={{ sx: { zIndex: 3000 } }}
+        PaperProps={{ sx: { zIndex: 3001 } }}
+      >
+        <DialogTitle>Create Realisasi — {createTask ? (createTask.name || createTask.task_name || createTask.id) : ''}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Start" type="datetime-local" size="small" value={createStartInput} onChange={e => setCreateStartInput(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
+            <TextField label="End" type="datetime-local" size="small" value={createEndInput} onChange={e => setCreateEndInput(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth />
+            <TextField label="Keterangan" placeholder="Keterangan / alasan (opsional)" multiline rows={3} value={createNote} onChange={e => setCreateNote(e.target.value)} fullWidth size="small" />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setCreateDialogOpen(false); setCreateTask(null); }} disabled={createSaving}>Cancel</Button>
+          <Button variant="contained" onClick={saveCreate} disabled={createSaving}>{createSaving ? 'Creating...' : 'Create'}</Button>
         </DialogActions>
       </Dialog>
 
