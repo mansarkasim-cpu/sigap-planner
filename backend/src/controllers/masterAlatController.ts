@@ -65,6 +65,11 @@ export async function createAlat(req: Request, res: Response) {
   try {
     const repo = AppDataSource.getRepository(MasterAlat);
     const payload = req.body || {};
+    // ignore any client-supplied id to avoid duplicate-pkey inserts
+    if (payload.id !== undefined) {
+      console.warn('createAlat: client supplied id ignored', payload.id);
+      delete payload.id;
+    }
     if (!payload.nama || String(payload.nama).trim() === '') return res.status(400).json({ message: 'nama is required' });
     if (!payload.jenis_alat_id) return res.status(400).json({ message: 'jenis_alat_id is required' });
     const ent = repo.create({
