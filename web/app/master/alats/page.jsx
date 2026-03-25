@@ -19,7 +19,7 @@ import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import CircularProgress from '@mui/material/CircularProgress';
+// CircularProgress removed — no longer used in this file
 import Tooltip from '@mui/material/Tooltip';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -91,9 +91,10 @@ export default function AlatsPage(){
             <MenuItem value=""><em>All jenis</em></MenuItem>
             {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
           </Select>
-          <Button variant="outlined" onClick={()=>{ setPage(1); load(1, pageSize, q); }} startIcon={loading? <CircularProgress size={18}/> : null}>Search</Button>
-          <Button variant="outlined" onClick={()=>{ setQ(''); setFilterJenis(null); setPage(1); load(1, pageSize, ''); }}>Clear</Button>
-          <Button variant="outlined" onClick={()=>load(page,pageSize,q)} startIcon={loading? <CircularProgress size={18}/> : null}>Refresh</Button>
+          <Select size="small" value={filterSite ?? ''} onChange={e=>{ setFilterSite(e.target.value || null); }} displayEmpty sx={{ minWidth:200 }}>
+            <MenuItem value=""><em>All sites</em></MenuItem>
+            {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+          </Select>
           <Button variant="contained" sx={{ ml:1 }} startIcon={<AddIcon/>} onClick={openCreate}>Create Alat</Button>
         </Box>
       </Box>
