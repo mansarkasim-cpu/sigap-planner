@@ -210,9 +210,80 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         }
       }
 
+      // normalize master lists
+      final allAlats = ares is List ? ares : (ares is Map ? (ares['data'] ?? []) : []);
+      final allJenis = jres is List ? jres : (jres is Map ? (jres['data'] ?? []) : []);
+
+      // try to determine technician's site(s) from /auth/me and filter alats
+      final allowedSiteIds = <String>{};
+      try {
+        final meRes = await api.get('/auth/me');
+        final user = meRes is Map && meRes['data'] != null ? meRes['data'] : meRes;
+        if (user is Map) {
+          // common shapes to check for site id(s)
+          try {
+            final s = user['site_id'] ?? user['site'] ?? user['sites'] ?? user['personil'] ?? null;
+            if (s != null) {
+              if (s is String || s is num) {
+                allowedSiteIds.add(s.toString());
+              } else if (s is Map) {
+                final sid = s['id'] ?? s['site_id'] ?? s['siteId'];
+                if (sid != null) allowedSiteIds.add(sid.toString());
+              } else if (s is List) {
+                for (final it in s) {
+                  try {
+                    if (it is String || it is num) allowedSiteIds.add(it.toString());
+                    else if (it is Map) {
+                      final sid = it['id'] ?? it['site_id'] ?? it['siteId'];
+                      if (sid != null) allowedSiteIds.add(sid.toString());
+                    }
+                  } catch (_) {}
+                }
+              }
+            }
+          } catch (_) {}
+          // fallback: check user['sites'] explicitly if present
+          try {
+            final ss = user['sites'];
+            if (ss is List) for (final it in ss) {
+              try {
+                if (it is Map) {
+                  final sid = it['id'] ?? it['site_id'] ?? it['siteId'];
+                  if (sid != null) allowedSiteIds.add(sid.toString());
+                }
+              } catch (_) {}
+            }
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('checklist: /auth/me lookup failed: $e');
+      }
+
+      List<dynamic> filteredAlats = allAlats;
+      if (allowedSiteIds.isNotEmpty) {
+        try {
+          filteredAlats = allAlats.where((a) {
+            try {
+              if (a == null) return false;
+              String sid = '';
+              if (a is Map) {
+                if (a['site'] is Map) sid = (a['site']['id'] ?? a['site']['site_id'] ?? a['site']['siteId'] ?? '').toString();
+                if (sid.isEmpty && a['site_id'] != null) sid = a['site_id'].toString();
+                if (sid.isEmpty && a['siteId'] != null) sid = a['siteId'].toString();
+                if (sid.isEmpty && a['raw'] is Map) sid = (a['raw']['site_id'] ?? a['raw']['siteId'] ?? a['raw']['site'] ?? '').toString();
+              }
+              if (sid.isEmpty) return false;
+              return allowedSiteIds.contains(sid);
+            } catch (_) {
+              return false;
+            }
+          }).toList();
+        } catch (_) {}
+      }
+
       setState(() {
-        alats = ares is List ? ares : (ares is Map ? (ares['data'] ?? []) : []);
-        jenis = jres is List ? jres : (jres is Map ? (jres['data'] ?? []) : []);
+        alats = filteredAlats;
+        jenis = allJenis;
       });
       // also load which alats have been checked today to hide them
       await fetchDoneToday();

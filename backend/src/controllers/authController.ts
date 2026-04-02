@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { AppDataSource } from "../ormconfig";
 import { User } from "../entities/User";
+import { MasterSite } from "../entities/MasterSite";
 
 const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
@@ -109,6 +110,44 @@ export async function meHandler(req: Request, res: Response) {
     const user = await repo.findOne({ where: { id: reqUser.id } as any });
     if (!user) return res.status(404).json({ code: "NOT_FOUND", message: "User not found" });
 
+    // include site information when available (user.site may contain site id or code)
+    let siteInfo: any = null;
+    try {
+      const sVal = (user as any).site;
+      if (sVal != null && String(sVal).trim() !== '') {
+        const siteRepo = AppDataSource.getRepository(MasterSite);
+        let foundSite: any = null;
+        // try numeric id lookup first
+        const asNum = Number(sVal);
+        if (!Number.isNaN(asNum) && asNum > 0) {
+          foundSite = await siteRepo.findOne({ where: { id: asNum } as any });
+        }
+        // fallback to code lookup
+        if (!foundSite) {
+          try {
+            foundSite = await siteRepo.findOne({ where: { code: String(sVal) } as any });
+          } catch (_) {}
+        }
+        // fallback to name lookup (some users store site name in user.site)
+        if (!foundSite) {
+          try {
+            foundSite = await siteRepo.findOne({ where: { name: String(sVal) } as any });
+          } catch (_) {}
+        }
+        if (foundSite) {
+          siteInfo = {
+            id: foundSite.id,
+            code: (foundSite as any).code ?? null,
+            name: (foundSite as any).name ?? null,
+            timezone: (foundSite as any).timezone ?? null,
+          };
+        }
+      }
+    } catch (e) {
+      // swallow site lookup errors — don't break /auth/me
+      console.error('me: site lookup failed', e);
+    }
+
     return res.json({
       id: user.id,
       username: user.name,
@@ -117,6 +156,7 @@ export async function meHandler(req: Request, res: Response) {
       city: (user as any).city ?? null,
       location: (user as any).location ?? null,
       role: user.role,
+      site: siteInfo,
     });
   } catch (err) {
     console.error("me error:", err);

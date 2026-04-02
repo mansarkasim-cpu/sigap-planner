@@ -47,19 +47,39 @@ exports.getWorkOrderById = getWorkOrderById;
  * Returns minimal fields and preserves SQL-like datetime strings.
  */
 async function getWorkOrdersForGantt(opts) {
-    const { start, end, site = '', work_type = '', type_work = '', limit } = opts;
+    const { start, end, site = '', work_type = '', type_work = '', limit, tz } = opts;
     const repo = ormconfig_1.AppDataSource.getRepository(WorkOrder_1.WorkOrder);
     const qb = repo.createQueryBuilder('wo');
     qb.where('wo.deleted_at IS NULL');
     // overlap predicate: wo.start_date <= end AND (wo.end_date IS NULL OR wo.end_date >= start)
+    // Note: `wo.start_date` / `wo.end_date` are stored as SQL `timestamp` (no timezone).
+    // When caller provides ISO datetimes (timestamptz) we must compare in the same
+    // local timeline. If a `tz` (IANA timezone) is provided, convert the provided
+    // timestamptz into local `timestamp` using `AT TIME ZONE :tz` so comparisons are
+    // accurate regardless of server timezone. Otherwise fall back to simple bounds.
     if (start && end) {
-        qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+        if (tz) {
+            qb.andWhere('(wo.start_date <= (:end::timestamptz AT TIME ZONE :tz) AND (wo.end_date IS NULL OR wo.end_date >= (:start::timestamptz AT TIME ZONE :tz)))', { start, end, tz });
+        }
+        else {
+            qb.andWhere('(wo.start_date <= :end AND (wo.end_date IS NULL OR wo.end_date >= :start))', { start, end });
+        }
     }
     else if (start) {
-        qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+        if (tz) {
+            qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= (:start::timestamptz AT TIME ZONE :tz))', { start, tz });
+        }
+        else {
+            qb.andWhere('(wo.end_date IS NULL OR wo.end_date >= :start)', { start });
+        }
     }
     else if (end) {
-        qb.andWhere('wo.start_date <= :end', { end });
+        if (tz) {
+            qb.andWhere('wo.start_date <= (:end::timestamptz AT TIME ZONE :tz)', { end, tz });
+        }
+        else {
+            qb.andWhere('wo.start_date <= :end', { end });
+        }
     }
     if (site && String(site).trim().length) {
         const s = `%${String(site).toLowerCase().trim()}%`;
@@ -443,7 +463,8 @@ async function getWorkOrdersPaginated(opts) {
     // optional exclude_work_type: e.g., exclude DAILY
     if (exclude_work_type && String(exclude_work_type).trim().length) {
         // parenthesize to ensure correct operator precedence when combined with other WHERE clauses
-        qb.andWhere('(wo.work_type IS NULL OR wo.work_type != :exwt)', { exwt: String(exclude_work_type).trim() });
+        // exclude match by `work_type` exact or `type_work` containing the token (case-insensitive)
+        qb.andWhere("( (wo.work_type IS NULL OR wo.work_type != :exwt) AND (wo.type_work IS NULL OR LOWER(wo.type_work) NOT LIKE ('%' || LOWER(:exwt) || '%')) )", { exwt: String(exclude_work_type).trim() });
     }
     // exclude soft-deleted
     qb.andWhere('wo.deleted_at IS NULL');
@@ -600,7 +621,9 @@ async function getWorkOrdersOptimized(opts) {
     }
     // optional exclude_work_type: e.g., exclude DAILY
     if (exclude_work_type && String(exclude_work_type).trim().length) {
-        where.push("(wo.work_type IS NULL OR wo.work_type != $" + idx + ")");
+        // Exclude rows where either `work_type` equals the value or `type_work`
+        // contains the value (e.g., 'DAILY' should exclude 'DAILY_CHECKLIST').
+        where.push("((wo.work_type IS NULL OR wo.work_type != $" + idx + ") AND (wo.type_work IS NULL OR LOWER(wo.type_work) NOT LIKE '%' || LOWER($" + idx + ") || '%'))");
         params.push(String(exclude_work_type).trim());
         idx += 1;
     }

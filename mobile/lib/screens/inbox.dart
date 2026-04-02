@@ -612,9 +612,9 @@ class _InboxScreenState extends State<InboxScreen> {
               (r) => false);
 
           // dismiss the loading dialog if still present
-          try {
+          if (Navigator.of(context, rootNavigator: true).canPop()) {
             Navigator.of(context, rootNavigator: true).pop();
-          } catch (e) {}
+          }
         } catch (e) {}
       });
     });

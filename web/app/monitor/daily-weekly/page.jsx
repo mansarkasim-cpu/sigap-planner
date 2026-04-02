@@ -111,6 +111,30 @@ export default function WeeklyMonitoring(){
     items.sort((a,b)=> getIndex(a) - getIndex(b))
     return items
   }, [detailData?.items])
+  const todaySummary = useMemo(()=>{
+    const res = { done: 0, doneWithNotes: 0, total: 0 }
+    try{
+      const alats = Array.isArray(data?.alats) ? data.alats : []
+      res.total = alats.length
+      for (const a of alats) {
+        try{
+          const s = a?.statuses?.[today]
+          if (s && s.done) {
+            res.done++
+            if (s.notes || s.catatan || s.has_false) res.doneWithNotes++
+          }
+        }catch(e){}
+      }
+    }catch(e){}
+    return res
+  }, [data, today])
+  const siteName = useMemo(()=>{
+    try{
+      if (!siteId) return 'All Sites'
+      const s = Array.isArray(sites) ? sites.find(x=> String(x.id) === String(siteId)) : null
+      return s ? (s.name || s.nama || s.id) : siteId
+    }catch(e){ return siteId || 'All Sites' }
+  }, [siteId, sites])
   const containerRef = useRef(null)
   const [autoScroll, setAutoScroll] = useState(false)
   const autoRef = useRef({interval: null})
@@ -291,6 +315,23 @@ export default function WeeklyMonitoring(){
         {!loading && !data && <Typography>No data</Typography>}
         {!loading && data && (
           <Box>
+            {/* Summary cards for today's status */}
+            <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:2, mb:2}}>
+              <Box sx={{display:'flex', gap:2}}>
+                <Paper sx={{p:2, minWidth:220}} elevation={1}>
+                  <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Done</Typography>
+                  <Typography variant="h6" sx={{color:(theme)=>theme.palette.success.main}}>{`${todaySummary.done} / ${todaySummary.total}`}</Typography>
+                </Paper>
+                <Paper sx={{p:2, minWidth:220}} elevation={1}>
+                  <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Done (with notes)</Typography>
+                  <Typography variant="h6" sx={{color:(theme)=>theme.palette.warning.main}}>{todaySummary.doneWithNotes}</Typography>
+                </Paper>
+              </Box>
+              <Box sx={{ml:2, textAlign:'right'}}>
+                <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Site</Typography>
+                <Typography variant="subtitle1" sx={{fontWeight:600}}>{siteName}</Typography>
+              </Box>
+            </Box>
             {/* compute paged subset when using paged view */}
             {
               (()=>{
@@ -433,7 +474,9 @@ export default function WeeklyMonitoring(){
                           }
 
                           const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? 'Missed (no checklist)' : (statusLabel === 'OPEN' ? 'Not yet due' : ''));
-                          const chipSx = statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {};
+                          const chipSx = (()=>{
+                            return statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {};
+                          })();
 
                           return (
                             <TableCell key={d} align="center" sx={{py:1}}>
@@ -441,7 +484,7 @@ export default function WeeklyMonitoring(){
                                 <span>
                                   <Chip
                                     label={statusLabel}
-                                    color={color === 'default' ? undefined : color}
+                                    color={color === 'default' ? undefined : (color === 'info' ? 'warning' : color)}
                                     size="medium"
                                     sx={chipSx}
                                     onClick={async () => {

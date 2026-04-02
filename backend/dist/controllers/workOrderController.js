@@ -32,6 +32,7 @@ const service = __importStar(require("../services/workOrderService"));
 const ormconfig_1 = require("../ormconfig");
 const pushService_1 = require("../services/pushService");
 const Task_1 = require("../entities/Task");
+const MasterSite_1 = require("../entities/MasterSite");
 const Assignment_1 = require("../entities/Assignment");
 const WorkOrder_1 = require("../entities/WorkOrder");
 const User_1 = require("../entities/User");
@@ -79,10 +80,36 @@ async function listWorkOrdersForGantt(req, res) {
         const site = req.query.site || '';
         const work_type = req.query.work_type || '';
         const type_work = req.query.type_work || '';
-        // normalize naive datetimes by appending Z if missing so Postgres timestamptz interprets them safely
+        // normalize provided datetimes so they are safe to bind to Postgres timestamptz
+        // If the client indicates `timeIsLocal=1` we should interpret the provided
+        // value as a local wall-clock and convert it to an ISO UTC string. This
+        // avoids treating naive datetimes as literal UTC which can shift items
+        // outside the requested window.
         function normalizeTs(v) {
             if (!v)
                 return v;
+            // If client requested local interpretation, parse components as local
+            // wall-clock and return UTC ISO (new Date(y,mo,d,h,m,s) -> local -> toISOString())
+            const timeIsLocal = String(req.query.timeIsLocal || req.query.timeislocal || '') === '1' || String(req.query.timeIsLocal || '').toLowerCase() === 'true';
+            if (timeIsLocal) {
+                // Accept formats like YYYY-MM-DD[ T]HH:mm[:ss] or YYYY-MM-DD
+                const m = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+                if (m) {
+                    const y = Number(m[1]);
+                    const mo = Number(m[2]) - 1;
+                    const d = Number(m[3]);
+                    const hh = Number(m[4] || '0');
+                    const mm = Number(m[5] || '0');
+                    const ss = Number(m[6] || '0');
+                    return new Date(y, mo, d, hh, mm, ss).toISOString();
+                }
+                // Fallback: if it contains a timezone already, return as-is
+                if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v))
+                    return v;
+                // Otherwise append Z to preserve previous behaviour
+                return v + 'Z';
+            }
+            // Default behaviour: if value already contains timezone info, keep it
             if (/[zZ]|[+\-]\d{2}:?\d{2}$/.test(v))
                 return v;
             return v + 'Z';
@@ -103,7 +130,38 @@ async function listWorkOrdersForGantt(req, res) {
             start = s.toISOString();
             end = e.toISOString();
         }
-        const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work });
+        // Attempt to determine timezone to correctly interpret naive DB timestamps
+        let tz = undefined;
+        // honor explicit tz query parameter when provided
+        if (req.query.tz && String(req.query.tz).trim().length)
+            tz = String(req.query.tz).trim();
+        // otherwise try to resolve from master_site using provided `site` text
+        if (!tz && site && String(site).trim().length) {
+            try {
+                const s = String(site).toLowerCase().trim();
+                const msRepo = ormconfig_1.AppDataSource.getRepository(MasterSite_1.MasterSite);
+                const found = await msRepo.createQueryBuilder('ms')
+                    .where('LOWER(ms.name) LIKE :q OR LOWER(ms.code) LIKE :q', { q: `%${s}%` })
+                    .limit(1)
+                    .getOne();
+                if (found && found.timezone)
+                    tz = String(found.timezone).trim();
+            }
+            catch (e) {
+                // ignore lookup failures
+            }
+        }
+        // If still no timezone resolved and caller didn't provide a `site`,
+        // apply a server-side fallback so Gantt queries aren't silently wrong
+        // when the client omits site/tz. Use an env var `DEFAULT_TZ` if set,
+        // otherwise fall back to the known site timezone used by the app.
+        if (!tz && (!site || !String(site).trim().length)) {
+            tz = process.env.DEFAULT_TZ || 'Asia/Makassar';
+        }
+        if (tz) {
+            console.debug('listWorkOrdersForGantt resolved tz=', tz);
+        }
+        const rows = await service.getWorkOrdersForGantt({ start, end, site, work_type, type_work, tz });
         const out = Array.isArray(rows) ? rows.map(r => {
             const s = serializeWorkOrder(r);
             s.status = r.status ?? 'NEW';
@@ -146,14 +204,35 @@ async function listWorkOrdersOptimized(req, res) {
         const site = req.query.site || undefined;
         const status = req.query.status || undefined;
         const exclude_status = req.query.exclude_status || undefined;
-        const exclude_work_type = req.query.exclude_work_type || undefined;
+        let exclude_work_type = req.query.exclude_work_type || undefined;
         const q = req.query.q || undefined;
         const work_type = req.query.work_type || undefined;
-        const type_work = req.query.type_work || undefined;
+        let type_work = req.query.type_work || undefined;
+        // Backwards-compatible: some clients passed `type_work=DAILY` expecting it to
+        // exclude DAILY entries. If `exclude_work_type` not provided but `type_work`
+        // is present together with `exclude_status`, treat `type_work` as exclude.
+        if (!exclude_work_type && type_work && req.query.exclude_status) {
+            exclude_work_type = type_work;
+            type_work = undefined;
+        }
         const page = Math.max(Number(req.query.page || 1), 1);
         const pageSize = Math.max(Number(req.query.pageSize || 20), 1);
         const sort = req.query.sort || 'start_date';
-        const { rows, total } = await service.getWorkOrdersOptimized({ start, end, site, status, exclude_status, exclude_work_type, q, work_type, type_work, page, pageSize, sort });
+        const opts = {
+            start,
+            end,
+            site,
+            status,
+            exclude_status: exclude_status,
+            exclude_work_type: exclude_work_type,
+            q,
+            work_type,
+            type_work,
+            page,
+            pageSize,
+            sort,
+        };
+        const { rows, total } = await service.getWorkOrdersOptimized(opts);
         const out = (rows || []).map((r) => {
             const s = serializeWorkOrder(r);
             s.status = r.status ?? 'NEW';

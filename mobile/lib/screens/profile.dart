@@ -87,9 +87,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint('Profile: failed to clear prefs: $e');
     }
-    try {
+    if (Navigator.of(context, rootNavigator: true).canPop()) {
       Navigator.of(context, rootNavigator: true).pop();
-    } catch (_) {}
+    }
     Navigator.pushAndRemoveUntil(context,
         MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
   }
