@@ -45,7 +45,7 @@ export async function createJenis(req: Request, res: Response) {
     const repo = AppDataSource.getRepository(MasterJenisAlat);
     const payload = req.body || {};
     if (!payload.nama || String(payload.nama).trim() === '') return res.status(400).json({ message: 'nama is required' });
-    const ent = repo.create({ nama: String(payload.nama).trim(), description: payload.description });
+    const ent = repo.create({ nama: String(payload.nama).trim(), description: payload.description, avg_hours_per_day: typeof payload.avg_hours_per_day !== 'undefined' ? payload.avg_hours_per_day : 24 });
     const saved = await repo.save(ent);
     return res.status(201).json(saved);
   } catch (err) {

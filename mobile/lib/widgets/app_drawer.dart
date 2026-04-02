@@ -276,9 +276,9 @@ class _AppDrawerState extends State<AppDrawer> {
       debugPrint('AppDrawer: failed to clear prefs: $e');
     }
     // dismiss loading dialog if still shown
-    try {
+    if (Navigator.of(context, rootNavigator: true).canPop()) {
       Navigator.of(context, rootNavigator: true).pop();
-    } catch (_) {}
+    }
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(context,
         MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);

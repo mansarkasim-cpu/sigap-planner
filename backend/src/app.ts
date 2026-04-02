@@ -12,6 +12,7 @@ import taskRoutes from './routes/task.routes';
 import checklistRoutes from './routes/checklist.routes';
 import masterRoutes from './routes/master.routes';
 import monitoringRoutes from './routes/monitoring.routes';
+import pmRoutes from './routes/pm.routes';
 import deviceRoutes from './routes/device.routes';
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -80,6 +81,7 @@ app.use('/api', checklistRoutes);
 app.use('/api', masterRoutes);
 app.use('/api', monitoringRoutes);
 app.use('/api', deviceRoutes);
+app.use('/api', pmRoutes);
 
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swaggerRoutes);

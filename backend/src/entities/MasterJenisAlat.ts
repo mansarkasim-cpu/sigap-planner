@@ -11,6 +11,9 @@ export class MasterJenisAlat {
   @Column({ type: 'text', nullable: true })
   description?: string;
 
+  @Column({ type: 'numeric', name: 'avg_hours_per_day', nullable: true, default: 24 })
+  avg_hours_per_day?: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   created_at!: Date;
 

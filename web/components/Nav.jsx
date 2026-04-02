@@ -100,6 +100,7 @@ export default function Nav(){
               <li><Link href="/master/sites" className="nav-link">Sites</Link></li>
               <li><Link href="/master/jenis-alat" className="nav-link">Jenis Alat</Link></li>
               <li><Link href="/master/questions" className="nav-link">Questions</Link></li>
+              <li><Link href="/master/pm-rules" className="nav-link">PM Rules</Link></li>
               <li><Link href="/master/alats" className="nav-link">Alat</Link></li>
             </ul>
           </li>
@@ -116,8 +117,17 @@ export default function Nav(){
             <li className="nav-item has-sub">
               <span className="nav-link">Daily Checklist</span>
               <ul className="sub-menu">
-                <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
-                <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li>
+                  <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+                  <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li>
+                  <li><Link href="/monitor/daily-equipment-hour-meter" className="nav-link">Daily Equipment Hour Meter</Link></li>
+                  
+              </ul>
+            </li>
+            <li className="nav-item has-sub">
+              <span className="nav-link">Monitor</span>
+              <ul className="sub-menu">
+                <li><Link href="/monitor/pm-history" className="nav-link">PM History</Link></li>
+                <li><Link href="/monitor/pm-calendar" className="nav-link">PM Calendar</Link></li>
               </ul>
             </li>
           </>
