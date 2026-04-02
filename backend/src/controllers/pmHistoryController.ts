@@ -44,7 +44,8 @@ export async function listPmHistory(req: Request, res: Response) {
     const rows = await AppDataSource.manager.query(sql, params);
     return res.json({ data: rows });
   } catch (err) {
-    console.error('listPmHistory error', err && err.stack ? err.stack : err);
+    const e: any = err;
+    console.error('listPmHistory error', e && e.stack ? e.stack : e);
     return res.status(500).json({ message: 'Failed to list PM history' });
   }
 }

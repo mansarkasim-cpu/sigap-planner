@@ -32,8 +32,8 @@ export async function getPMCalendar(req: Request, res: Response) {
       [limit]
     );
     // compute PM label for each row
-    function pmLabelForEngine(nextEngine) {
-      if (!nextEngine && nextEngine !== 0) return null;
+    function pmLabelForEngine(nextEngine: any): string | null {
+      if (nextEngine == null) return null;
       const n = Number(nextEngine);
       if (isNaN(n)) return null;
       const cycle = 1000;
