@@ -466,7 +466,7 @@ export default function PMCalendarPage() {
         </div>
       </div>
 
-      <Dialog open={dayModalOpen} onClose={() => setDayModalOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={dayModalOpen} onClose={() => setDayModalOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
         <DialogTitle>Events</DialogTitle>
         <DialogContent>
           {dayModalItems.map((it, idx) => (
@@ -481,7 +481,7 @@ export default function PMCalendarPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
         <DialogTitle>
           {detailItem ? (detailItem.nama_alat || `Alat ${detailItem.alat_id}`) : 'Detail'}
           <IconButton onClick={() => setDetailOpen(false)} style={{ position:'absolute', right:8, top:8 }}><CloseIcon/></IconButton>
@@ -530,7 +530,7 @@ export default function PMCalendarPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={assignModalOpen} onClose={() => setAssignModalOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={assignModalOpen} onClose={() => setAssignModalOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
         <DialogTitle>Assign Workorder</DialogTitle>
         <DialogContent>
           <Box sx={{ display:'grid', gap:2, mt:1 }}>
