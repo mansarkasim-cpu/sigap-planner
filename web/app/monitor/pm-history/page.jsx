@@ -70,8 +70,12 @@ export default function PMHistoryPage(){
   async function loadAlats(){
     try{ const r = await apiClient('/master/alats?page=1&pageSize=1000'); setAlats(r?.data || r || []) }catch(e){ console.error(e) }
   }
-  async function loadRules(){
-    try{ const r = await apiClient('/pm/rules'); setRules(r?.data || r || []) }catch(e){ console.error(e) }
+  async function loadRules(jenis_alat_id){
+    try{
+      const qs = jenis_alat_id ? `?jenis_alat_id=${encodeURIComponent(jenis_alat_id)}` : ''
+      const r = await apiClient(`/pm/rules${qs}`);
+      setRules(r?.data || r || [])
+    }catch(e){ console.error(e) }
   }
   async function loadUsers(siteFilter){
     try{
@@ -181,7 +185,14 @@ export default function PMHistoryPage(){
               {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.label || s.id}</MenuItem>)}
             </TextField>
 
-            <TextField select size="small" label="Alat" value={form.alat_id} onChange={e=>{ const v = e.target.value; setForm(f=>({...f, alat_id: v})); setFilterAlatId(v); load(); }}>
+            <TextField select size="small" label="Alat" value={form.alat_id} onChange={e=>{ const v = e.target.value; setForm(f=>({...f, alat_id: v, pm_rule_id: ''})); setFilterAlatId(v); load();
+                // load PM rules filtered by selected alat's jenis_alat
+                try{
+                  const a = alats.find(x=> String(x.id) === String(v)) || null
+                  const jenisId = a ? (a.jenis_alat_id || (a.jenis && a.jenis.id) || (a.jenis_alat && a.jenis_alat.id) || null) : null
+                  loadRules(jenisId)
+                }catch(e){ console.error('failed to load rules by jenis', e) }
+              }}>
               <MenuItem value="">-- Select --</MenuItem>
               {alats.filter(a=>{
                 if (!form.site_id) return true
