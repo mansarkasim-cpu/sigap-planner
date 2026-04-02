@@ -21,7 +21,7 @@ export async function startPmChangeListener() {
     await client.query('LISTEN pm_changes');
     console.log('[pmChangeListener] Listening to pm_changes notifications');
 
-    client.on('notification', async (msg) => {
+    client.on('notification', async (msg: any) => {
       try {
         // simple debounce to coalesce rapid notifications
         if (debounceTimer) clearTimeout(debounceTimer);
