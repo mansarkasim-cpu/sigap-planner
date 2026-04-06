@@ -437,8 +437,9 @@ export default function PMCalendarPage() {
                 const isCurrentMonth = day.getMonth() === viewDate.getMonth();
                 const isToday = toYMD(day, 8) === toYMD(new Date(), 8);
                 const items = eventsByDate[ymd] || [];
+                const todayBoxStyle = isToday ? { border: '2px solid #1976d2', background: isCurrentMonth ? '#e8f0ff' : '#e6eefc', boxShadow: '0 2px 6px rgba(25,118,210,0.12)' } : {};
                 return (
-                  <div key={`${wi}-${di}`} style={{ minHeight: 120, border: '1px solid #eee', background: isCurrentMonth ? '#fff' : '#f7f7f7', padding: 8, borderRadius:6 }}>
+                  <div key={`${wi}-${di}`} style={{ minHeight: 120, border: '1px solid #eee', background: isCurrentMonth ? '#fff' : '#f7f7f7', padding: 8, borderRadius:6, ...todayBoxStyle }} aria-current={isToday ? 'date' : undefined}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                       <div style={{ fontSize: 13, fontWeight: isToday ? '700' : '500' }}>{day.getDate()}</div>
                       {items.length > 0 && <div style={{ fontSize: 12, color: '#0070f3' }}>{items.length} PM</div>}
