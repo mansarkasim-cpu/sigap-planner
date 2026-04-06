@@ -65,6 +65,19 @@ function toYMD(dt, tzOffsetHours = 0) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function hexToRgba(hex, alpha = 0.12) {
+  if (!hex || typeof hex !== 'string') return `rgba(0,0,0,${alpha})`;
+  const h = hex.trim();
+  if (!h.startsWith('#')) return h;
+  let s = h.slice(1);
+  if (s.length === 3) s = s.split('').map(c => c + c).join('');
+  if (s.length !== 6) return h;
+  const r = parseInt(s.slice(0, 2), 16);
+  const g = parseInt(s.slice(2, 4), 16);
+  const b = parseInt(s.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 export default function PMCalendarPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -446,11 +459,12 @@ export default function PMCalendarPage() {
                     </div>
                     <div style={{ fontSize: 13 }}>
                       {items.slice(0,4).map((it, idx) => {
-                        const isForecast = !!it.__forecast;
-                        const st = itemStatus(it);
-                        const color = isForecast ? FORECAST_COLOR : (STATUS_COLORS[st] || '#888');
-                        return (
-                          <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: isForecast ? '#f7f0ff' : '#fff', borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${it.nama_alat} — ${it.pm_label || it.next_pm_engine_hour}`}>
+                          const isForecast = !!it.__forecast;
+                          const st = itemStatus(it);
+                          const color = isForecast ? FORECAST_COLOR : (STATUS_COLORS[st] || '#888');
+                          const itemBg = hexToRgba(color, 0.12);
+                          return (
+                            <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: itemBg, borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${it.nama_alat} — ${it.pm_label || it.next_pm_engine_hour}`}>
                             <div style={{ width: 10, height: 10, borderRadius: 10, background: color, marginTop: 6 }} />
                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                               <div style={{ fontWeight: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nama_alat || `Alat ${it.alat_id}`}{it.kode_alat ? ` · ${it.kode_alat}` : ''}</div>
