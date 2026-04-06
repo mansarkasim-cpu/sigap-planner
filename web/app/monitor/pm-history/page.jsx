@@ -126,13 +126,16 @@ export default function PMHistoryPage(){
           <div style={{color:'#666'}}>Record PM performed on equipments</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <TextField select size="small" label="Site" value={filterSiteId} onChange={e=>setFilterSiteId(e.target.value)} style={{minWidth:180}}>
+          <TextField select size="small" label="Site" value={filterSiteId} onChange={e=>{ setFilterSiteId(e.target.value); setFilterAlatId(''); }} style={{minWidth:180}}>
             <MenuItem value="">All Sites</MenuItem>
             {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.label || s.id}</MenuItem>)}
           </TextField>
           <TextField select size="small" label="Alat" value={filterAlatId} onChange={e=>setFilterAlatId(e.target.value)} style={{minWidth:220}}>
             <MenuItem value="">All Alat</MenuItem>
-            {alats.map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.name} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
+            {alats.filter(a=>{
+              if (!filterSiteId) return true
+              return (a.site && String(a.site.id) === String(filterSiteId)) || String(a.site_id) === String(filterSiteId)
+            }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.name} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
           </TextField>
           <TextField size="small" label="From" type="date" value={filterStartDate} onChange={e=>setFilterStartDate(e.target.value)} InputLabelProps={{shrink:true}} />
           <TextField size="small" label="To" type="date" value={filterEndDate} onChange={e=>setFilterEndDate(e.target.value)} InputLabelProps={{shrink:true}} />
