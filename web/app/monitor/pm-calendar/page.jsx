@@ -453,8 +453,8 @@ export default function PMCalendarPage() {
                           <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: isForecast ? '#f7f0ff' : '#fff', borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${it.nama_alat} — ${it.pm_label || it.next_pm_engine_hour}`}>
                             <div style={{ width: 10, height: 10, borderRadius: 10, background: color, marginTop: 6 }} />
                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                              <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nama_alat || `Alat ${it.alat_id}`}{it.kode_alat ? ` · ${it.kode_alat}` : ''}</div>
-                              <div style={{ fontSize: 12, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.pm_label || it.kode_rule || (it.next_pm_engine_hour ? `PM${it.next_pm_engine_hour}` : '-')}</div>
+                              <div style={{ fontWeight: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nama_alat || `Alat ${it.alat_id}`}{it.kode_alat ? ` · ${it.kode_alat}` : ''}</div>
+                              <div style={{ fontSize: 11, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.pm_label || it.kode_rule || (it.next_pm_engine_hour ? `PM${it.next_pm_engine_hour}` : '-')}</div>
                             </div>
                             {isForecast ? null : null}
                           </div>
