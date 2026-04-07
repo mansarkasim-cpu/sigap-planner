@@ -486,12 +486,19 @@ export default function PMCalendarPage() {
       <Dialog open={dayModalOpen} onClose={() => setDayModalOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
         <DialogTitle>Events</DialogTitle>
         <DialogContent>
-          {dayModalItems.map((it, idx) => (
-            <div key={idx} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => { setDayModalOpen(false); openDetail(it); }}>
-              <div style={{ fontWeight: 600 }}>{it.nama_alat}</div>
-              <div style={{ fontSize: 13, color: '#444' }}>Next: {it.pm_label || it.next_pm_engine_hour} — Last: {it.last_engine_hour ?? '-'}</div>
-            </div>
-          ))}
+          {dayModalItems.map((it, idx) => {
+            const st = itemStatus(it);
+            const badgeColor = STATUS_COLORS[st] || '#6f42c1';
+            return (
+              <div key={idx} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => { setDayModalOpen(false); openDetail(it); }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Chip label={statusLabel(st)} size="small" style={{ background: badgeColor, color: '#fff', height: 22 }} />
+                  <div style={{ fontWeight: 600 }}>{it.nama_alat}</div>
+                </div>
+                <div style={{ fontSize: 13, color: '#444', marginTop: 6 }}>Next: {it.pm_label || it.next_pm_engine_hour} — Last: {it.last_engine_hour ?? '-'}</div>
+              </div>
+            )
+          })}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDayModalOpen(false)}>Close</Button>
