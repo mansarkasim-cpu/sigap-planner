@@ -78,6 +78,15 @@ function hexToRgba(hex, alpha = 0.12) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function displayLabelForItem(it) {
+  // prefer kode_alias from various possible shapes, then nama_alat
+  const alias = it?.kode_alias || it?.kodeAlias || (it.alat && (it.alat.kode_alias || it.alat.kodeAlias)) || null;
+  const name = it?.nama_alat || it?.alat_name || (it.alat && (it.alat.nama || it.alat.name)) || (it.alat_id ? `Alat ${it.alat_id}` : '');
+  const kodeAlat = it?.kode_alat || (it.alat && it.alat.kode) || '';
+  const primary = alias || name;
+  return primary + (kodeAlat ? ` · ${kodeAlat}` : '');
+}
+
 export default function PMCalendarPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -416,7 +425,7 @@ export default function PMCalendarPage() {
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Unscheduled</div>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
             {noDate.map((r) => (
-              <Chip key={r.alat_id || r.id} onClick={() => openDetail(r)} label={`${r.nama_alat || `Alat ${r.alat_id}`}${r.kode_alat ? ` · ${r.kode_alat}` : ''} → ${r.next_pm_engine_hour ?? '-'}h`} clickable color="default" />
+              <Chip key={r.alat_id || r.id} onClick={() => openDetail(r)} label={`${displayLabelForItem(r)} → ${r.next_pm_engine_hour ?? '-'}h`} clickable color="default" />
             ))}
           </div>
         </div>
@@ -464,10 +473,10 @@ export default function PMCalendarPage() {
                           const color = isForecast ? FORECAST_COLOR : (STATUS_COLORS[st] || '#888');
                           const itemBg = hexToRgba(color, 0.12);
                           return (
-                            <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: itemBg, borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${it.nama_alat} — ${it.pm_label || it.next_pm_engine_hour}`}>
+                            <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: itemBg, borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${displayLabelForItem(it)} — ${it.pm_label || it.next_pm_engine_hour}`}>
                             <div style={{ width: 10, height: 10, borderRadius: 10, background: color, marginTop: 6 }} />
                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                              <div style={{ fontWeight: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nama_alat || `Alat ${it.alat_id}`}{it.kode_alat ? ` · ${it.kode_alat}` : ''}</div>
+                              <div style={{ fontWeight: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabelForItem(it)}</div>
                             </div>
                             {isForecast ? null : null}
                           </div>
@@ -493,7 +502,7 @@ export default function PMCalendarPage() {
               <div key={idx} style={{ padding: 8, borderBottom: '1px solid #eee', cursor: 'pointer' }} onClick={() => { setDayModalOpen(false); openDetail(it); }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Chip label={statusLabel(st)} size="small" style={{ background: badgeColor, color: '#fff', height: 22 }} />
-                  <div style={{ fontWeight: 600 }}>{it.nama_alat}</div>
+                  <div style={{ fontWeight: 600 }}>{displayLabelForItem(it)}</div>
                 </div>
                 <div style={{ fontSize: 13, color: '#444', marginTop: 6 }}>Next: {it.pm_label || it.next_pm_engine_hour} — Last: {it.last_engine_hour ?? '-'}</div>
               </div>
@@ -507,7 +516,7 @@ export default function PMCalendarPage() {
 
       <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
         <DialogTitle>
-          {detailItem ? (detailItem.nama_alat || `Alat ${detailItem.alat_id}`) : 'Detail'}
+          {detailItem ? displayLabelForItem(detailItem) : 'Detail'}
           <IconButton onClick={() => setDetailOpen(false)} style={{ position:'absolute', right:8, top:8 }}><CloseIcon/></IconButton>
         </DialogTitle>
         <DialogContent>
