@@ -28,7 +28,7 @@ export async function listPmHistory(req: Request, res: Response) {
 
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
 
-    const sql = `SELECT ph.*, a.nama AS nama_alat, a.kode AS kode_alat, a.site_id AS site_id, r.description AS pm_rule_label, r.kode_rule, u.name AS performed_by_name
+    const sql = `SELECT ph.*, a.nama AS nama_alat, a.kode AS kode_alat, a.kode_alias AS kode_alias, a.site_id AS site_id, r.description AS pm_rule_label, r.kode_rule, u.name AS performed_by_name
       FROM pm_history ph
       LEFT JOIN master_alat a ON a.id = ph.alat_id
       LEFT JOIN pm_rules r ON r.id = ph.pm_rule_id

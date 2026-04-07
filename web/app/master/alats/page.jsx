@@ -65,8 +65,8 @@ export default function AlatsPage(){
     load(1, pageSize, q);
   }, [filterJenis, filterSite]);
 
-  function openCreate(){ setEditing({ nama:'', kode:'', serial_no:'', jenis_alat_id: null, site_id: null, notes:'' }); setModalOpen(true); }
-  function openEdit(r){ setEditing({...r, jenis_alat_id: r.jenis_alat? r.jenis_alat.id : null, site_id: r.site? r.site.id: null}); setModalOpen(true); }
+  function openCreate(){ setEditing({ nama:'', kode:'', kode_alias:'', serial_no:'', jenis_alat_id: null, site_id: null, notes:'' }); setModalOpen(true); }
+  function openEdit(r){ setEditing({...r, jenis_alat_id: r.jenis_alat? r.jenis_alat.id : null, site_id: r.site? r.site.id: null, kode_alias: r.kode_alias || r.kodeAlias || ''}); setModalOpen(true); }
 
   async function save(){ if(!editing || !editing.nama) return alert('Nama required'); if(!editing.jenis_alat_id) return alert('jenis_alat_id required'); try{ if(editing.id) await apiClient(`/master/alats/${editing.id}`, { method:'PATCH', body: editing }); else await apiClient('/master/alats', { method:'POST', body: editing }); setModalOpen(false); setEditing(null); await load(); }catch(err){ alert(err?.body?.message||err?.message||'Save failed'); } }
   async function remove(id){ if(!confirm('Hapus alat?')) return; try{ await apiClient(`/master/alats/${id}`, { method:'DELETE' }); await load(); }catch(err){ alert(err?.body?.message||err?.message||'Delete failed'); } }
@@ -110,6 +110,7 @@ export default function AlatsPage(){
                 <TableCell>Status</TableCell>
                 <TableCell>Site</TableCell>
                 <TableCell>Serial/Kode</TableCell>
+                <TableCell>Kode Alias</TableCell>
                 <TableCell align="right">Action</TableCell>
               </TableRow>
             </TableHead>
@@ -140,6 +141,7 @@ export default function AlatsPage(){
                   </TableCell>
                   <TableCell>{r.site? r.site.name : '-'}</TableCell>
                   <TableCell>{r.kode || r.serial_no || '-'}</TableCell>
+                  <TableCell>{r.kode_alias || '-'}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="Edit"><IconButton size="small" onClick={()=>openEdit(r)}><EditIcon fontSize="small"/></IconButton></Tooltip>
                     <Tooltip title="Delete"><IconButton size="small" color="error" onClick={()=>remove(r.id)}><DeleteIcon fontSize="small"/></IconButton></Tooltip>
@@ -173,6 +175,7 @@ export default function AlatsPage(){
           <Box sx={{ display:'grid', gap:2, mt:1 }}>
             <TextField label="Nama" size="small" value={editing?.nama||''} onChange={e=>setEditing({...editing, nama: e.target.value})} />
             <TextField label="Kode" size="small" value={editing?.kode||''} onChange={e=>setEditing({...editing, kode: e.target.value})} />
+            <TextField label="Kode Alias" size="small" value={editing?.kode_alias||''} onChange={e=>setEditing({...editing, kode_alias: e.target.value})} />
             <TextField label="Serial No" size="small" value={editing?.serial_no||''} onChange={e=>setEditing({...editing, serial_no: e.target.value})} />
             <Select size="small" value={editing?.jenis_alat_id ?? ''} onChange={e=>setEditing({...editing, jenis_alat_id: e.target.value || null})}>
               <MenuItem value=""><em>Select jenis</em></MenuItem>

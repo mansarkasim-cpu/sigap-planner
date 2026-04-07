@@ -6,7 +6,7 @@ export async function getPMCalendar(req: Request, res: Response) {
   try {
     const limit = Math.max(1, Number(req.query.limit || 200));
     const rows = await AppDataSource.manager.query(
-      `SELECT es.*, m.kode AS kode_alat, m.nama AS nama_alat, m.jenis_alat_id, m.site_id AS site_id,
+      `SELECT es.*, m.kode AS kode_alat, m.nama AS nama_alat, m.kode_alias AS kode_alias, m.jenis_alat_id, m.site_id AS site_id,
          COALESCE(es.chosen_kode_rule,
            (SELECT pr.kode_rule FROM pm_history ph JOIN pm_rules pr ON pr.id = ph.pm_rule_id WHERE ph.alat_id = es.alat_id ORDER BY ph.performed_at DESC LIMIT 1)
          ) AS last_kode_rule,

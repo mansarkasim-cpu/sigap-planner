@@ -14,6 +14,9 @@ export class MasterAlat {
   kode?: string;
 
   @Column({ length: 128, nullable: true })
+  kode_alias?: string;
+
+  @Column({ length: 128, nullable: true })
   serial_no?: string;
 
   @ManyToOne(() => MasterJenisAlat)
