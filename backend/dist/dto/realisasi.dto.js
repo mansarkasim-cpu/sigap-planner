@@ -205,6 +205,30 @@ async function createRealisasi(req, res) {
             console.warn('Failed to pushNotify lead_shift for createRealisasi (catch)', ee);
         }
     }
+    // after saving realisasi and marking assignment complete, update workorder status
+    try {
+        const wo = task.workOrder;
+        if (wo) {
+            try {
+                const prog = await (0, workOrderService_1.computeWorkOrderProgress)(String(wo.id));
+                const p = (prog || 0);
+                if (p >= 0.999) {
+                    wo.status = 'COMPLETED';
+                    await woRepo().save(wo);
+                }
+                else if (p > 0 && wo.status !== 'COMPLETED') {
+                    wo.status = 'IN_PROGRESS';
+                    await woRepo().save(wo);
+                }
+            }
+            catch (e) {
+                // fallback: do not change workorder status if check fails
+            }
+        }
+    }
+    catch (e) {
+        // ignore
+    }
     return res.status(201).json({ id: realisasi.id });
 }
 exports.createRealisasi = createRealisasi;

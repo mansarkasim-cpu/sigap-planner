@@ -213,15 +213,12 @@ export default function PMCalendarPage() {
   for (const r of filteredRows) {
     const ymd = toYMD(r.next_pm_due_at, 8);
     if (ymd) {
-      // If this scheduled row is already satisfied by engine hours but has no PM history,
-      // don't show it in the calendar as a 'done' event to avoid confusing users.
+      // If this scheduled row is already satisfied by engine hours, mark it as inferred-done
+      // but still show it in the calendar so users can see it (UI will render 'done').
       const lastEngine = r.last_engine_hour != null ? Number(r.last_engine_hour) : null;
       const nextEngine = r.next_pm_engine_hour != null ? Number(r.next_pm_engine_hour) : null;
       const isInferredDone = (lastEngine != null && nextEngine != null && lastEngine >= nextEngine);
-      if (isInferredDone && !r.__history) {
-        // skip showing inferred-done scheduled rows; they will still be visible in reports/history
-        continue;
-      }
+      if (isInferredDone) r.__inferredDone = true;
       eventsByDate[ymd] = eventsByDate[ymd] || [];
       eventsByDate[ymd].push(r);
     } else {
@@ -291,8 +288,9 @@ export default function PMCalendarPage() {
       if (st === 'COMPLETED' || st === 'DONE' || st === 'CLOSED') return 'done';
       return 'in_progress';
     }
-    // Completed if last engine hour already reached or exceeded nextEngine
-    if (nextEngine != null && lastEngine != null && lastEngine >= nextEngine) return 'done';
+    // If last engine hour already reached or exceeded nextEngine, treat as overdue
+    // (PM was not recorded as history) — don't mark as 'done' here.
+    if (nextEngine != null && lastEngine != null && lastEngine >= nextEngine) return 'overdue';
     // Overdue if due date passed and passed beyond tolerance (convert tolerance hours to days using avg)
     if (dueAt) {
       try {
@@ -414,7 +412,6 @@ export default function PMCalendarPage() {
             {isFull ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
           <Button variant="outlined" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</Button>
-          <Button variant="contained" onClick={runNow} disabled={running}>{running ? 'Running...' : 'Run PM Now'}</Button>
         </div>
       </Box>
 

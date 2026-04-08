@@ -1,6 +1,6 @@
 import { AppDataSource } from '../ormconfig';
 
-export async function updateEquipmentStatusAll() {
+export async function updateEquipmentStatusAll(alatFilter?: number[]) {
   // Load active PM rules
   const rules: any[] = await AppDataSource.manager.query(`SELECT * FROM pm_rules WHERE active = true`);
 
@@ -18,16 +18,25 @@ export async function updateEquipmentStatusAll() {
     }
   }
 
-  // Fetch all equipments that have rules (either specific or by jenis)
-  const alatRows: any[] = await AppDataSource.manager.query(`
-    SELECT a.id, a.jenis_alat_id
-    FROM master_alat a
-    WHERE a.id IN (
-      SELECT DISTINCT COALESCE(alat_id, -1) FROM pm_rules WHERE alat_id IS NOT NULL
-    ) OR a.jenis_alat_id IN (
-      SELECT DISTINCT jenis_alat_id FROM pm_rules WHERE jenis_alat_id IS NOT NULL
-    )
-  `);
+  // Fetch equipments that have rules (either specific or by jenis).
+  // If `alatFilter` provided, limit to those alat ids.
+  let alatRows: any[] = [];
+  if (Array.isArray(alatFilter) && alatFilter.length > 0) {
+    alatRows = await AppDataSource.manager.query(
+      `SELECT a.id, a.jenis_alat_id FROM master_alat a WHERE a.id = ANY($1)`,
+      [alatFilter]
+    );
+  } else {
+    alatRows = await AppDataSource.manager.query(`
+      SELECT a.id, a.jenis_alat_id
+      FROM master_alat a
+      WHERE a.id IN (
+        SELECT DISTINCT COALESCE(alat_id, -1) FROM pm_rules WHERE alat_id IS NOT NULL
+      ) OR a.jenis_alat_id IN (
+        SELECT DISTINCT jenis_alat_id FROM pm_rules WHERE jenis_alat_id IS NOT NULL
+      )
+    `);
+  }
 
   const results: any[] = [];
 
@@ -225,4 +234,77 @@ export async function updateEquipmentStatusAll() {
   return results;
 }
 
-export default { updateEquipmentStatusAll };
+export async function updateEquipmentStatusFromMeter(alatId: number) {
+  if (!alatId) return;
+  const lastRow = await AppDataSource.manager.query(
+    `SELECT engine_hour, recorded_at, teknisi_id FROM daily_equipment_hour_meter WHERE alat_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+    [alatId]
+  );
+  if (!lastRow || !lastRow.length) return;
+  const last = lastRow[0];
+  const lastEngineHour = last ? Number(last.engine_hour || 0) : null;
+  const lastRecordedAt = last ? last.recorded_at : null;
+  const lastTechnician = last ? last.teknisi_id : null;
+
+  // Upsert only the last-engine fields; do NOT set or modify next_pm_engine_hour
+  // Determine whether we should regenerate next_pm_due_at: only when next_pm_engine_hour exists
+  // and the newly recorded lastEngineHour is <= next_pm_engine_hour
+  let newNextDueAt: string | null = null;
+  try {
+    const esRows: any[] = await AppDataSource.manager.query(
+      `SELECT next_pm_engine_hour, next_pm_due_at FROM equipment_status WHERE alat_id = $1 LIMIT 1`,
+      [alatId]
+    );
+    const es = esRows && esRows.length ? esRows[0] : null;
+    const nextEngine = es && es.next_pm_engine_hour != null ? Number(es.next_pm_engine_hour) : null;
+
+    if (nextEngine != null && lastEngineHour != null && lastEngineHour <= nextEngine) {
+      // fetch jenis_alat.avg_hours_per_day if available
+      const alatRows: any[] = await AppDataSource.manager.query(`SELECT jenis_alat_id FROM master_alat WHERE id = $1 LIMIT 1`, [alatId]);
+      const jenisId = alatRows && alatRows.length ? (alatRows[0].jenis_alat_id || null) : null;
+      let avgHoursPerDay = Number(process.env.PM_AVG_HOURS_PER_DAY) || 24;
+      if (jenisId != null) {
+        try {
+          const jenisRows: any[] = await AppDataSource.manager.query(`SELECT avg_hours_per_day FROM master_jenis_alat WHERE id = $1 LIMIT 1`, [jenisId]);
+          if (jenisRows && jenisRows.length && jenisRows[0].avg_hours_per_day != null) {
+            avgHoursPerDay = Number(jenisRows[0].avg_hours_per_day) || avgHoursPerDay;
+          }
+        } catch (e) {
+          // ignore and use fallback
+        }
+      }
+
+      try {
+        const hoursLeft = Number(nextEngine) - Number(lastEngineHour);
+        if (hoursLeft <= 0) {
+          newNextDueAt = new Date().toISOString();
+        } else if (avgHoursPerDay > 0) {
+          const days = Math.ceil(hoursLeft / avgHoursPerDay);
+          const refDate = lastRecordedAt ? new Date(lastRecordedAt) : new Date();
+          const d = new Date(refDate);
+          d.setHours(0,0,0,0);
+          d.setDate(d.getDate() + days);
+          newNextDueAt = d.toISOString();
+        }
+      } catch (e) {
+        newNextDueAt = null;
+      }
+    }
+  } catch (e) {
+    // ignore errors and proceed with basic upsert
+  }
+
+  await AppDataSource.manager.query(
+    `INSERT INTO equipment_status (alat_id, last_engine_hour, last_recorded_at, last_technician, next_pm_due_at, updated_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, now(), now())
+     ON CONFLICT (alat_id) DO UPDATE SET
+       last_engine_hour = EXCLUDED.last_engine_hour,
+       last_recorded_at = EXCLUDED.last_recorded_at,
+       last_technician = EXCLUDED.last_technician,
+       next_pm_due_at = COALESCE(EXCLUDED.next_pm_due_at, equipment_status.next_pm_due_at),
+       updated_at = now();`,
+    [alatId, lastEngineHour, lastRecordedAt, lastTechnician, newNextDueAt]
+  );
+}
+
+export default { updateEquipmentStatusAll, updateEquipmentStatusFromMeter };

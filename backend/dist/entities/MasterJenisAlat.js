@@ -26,6 +26,10 @@ __decorate([
     __metadata("design:type", String)
 ], MasterJenisAlat.prototype, "description", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'numeric', name: 'avg_hours_per_day', nullable: true, default: 24 }),
+    __metadata("design:type", Number)
+], MasterJenisAlat.prototype, "avg_hours_per_day", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
 ], MasterJenisAlat.prototype, "created_at", void 0);

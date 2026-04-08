@@ -29,4 +29,7 @@ const ctrl = __importStar(require("../controllers/monitoringController"));
 const router = (0, express_1.Router)();
 // Weekly monitoring (admin/planner)
 router.get('/monitoring/daily-weekly', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.weeklyChecklistStatus);
+// Equipment hour meter listing and creation
+router.get('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.listEquipmentHourMeter);
+router.post('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.createEquipmentHourMeter);
 exports.default = router;
