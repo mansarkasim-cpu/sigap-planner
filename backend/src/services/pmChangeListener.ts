@@ -34,13 +34,23 @@ export async function startPmChangeListener() {
             const table = parts[0] || '';
             const id = parts[1] ? Number(parts[1]) : null;
 
-            // If the change was from daily_equipment_hour_meter, only update last-engine fields
+            // Handle notifications:
+            // - daily_equipment_hour_meter: update last-engine fields only for that alat
+            // - pm_history: update equipment_status for that alat only (avoid full run)
+            // - otherwise: run full PM update
             if (table === 'daily_equipment_hour_meter' && id) {
               try {
                 console.debug('[pmChangeListener] daily meter change detected, updating last-engine only for alat', id);
                 await pmService.updateEquipmentStatusFromMeter(id);
               } catch (err) {
                 console.error('[pmChangeListener] error updating from meter', err);
+              }
+            } else if (table === 'pm_history' && id) {
+              try {
+                console.debug('[pmChangeListener] pm_history change detected, updating equipment status for alat', id);
+                await pmService.updateEquipmentStatusAll([id]);
+              } catch (err) {
+                console.error('[pmChangeListener] error updating equipment status for alat after pm_history', err);
               }
             } else {
               try {
