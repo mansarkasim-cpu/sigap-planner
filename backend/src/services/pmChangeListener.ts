@@ -29,10 +29,29 @@ export async function startPmChangeListener() {
           if (running) return;
           running = true;
           try {
-            console.debug('[pmChangeListener] change detected, running updateEquipmentStatusAll');
-            await pmService.updateEquipmentStatusAll();
+            const payload = msg && msg.payload ? String(msg.payload) : '';
+            const parts = payload.split(':');
+            const table = parts[0] || '';
+            const id = parts[1] ? Number(parts[1]) : null;
+
+            // If the change was from daily_equipment_hour_meter, only update last-engine fields
+            if (table === 'daily_equipment_hour_meter' && id) {
+              try {
+                console.debug('[pmChangeListener] daily meter change detected, updating last-engine only for alat', id);
+                await pmService.updateEquipmentStatusFromMeter(id);
+              } catch (err) {
+                console.error('[pmChangeListener] error updating from meter', err);
+              }
+            } else {
+              try {
+                console.debug('[pmChangeListener] change detected, running updateEquipmentStatusAll');
+                await pmService.updateEquipmentStatusAll();
+              } catch (err) {
+                console.error('[pmChangeListener] error running PM update', err);
+              }
+            }
           } catch (err) {
-            console.error('[pmChangeListener] error running PM update', err);
+            console.error('[pmChangeListener] notification handler inner error', err);
           } finally {
             running = false;
           }

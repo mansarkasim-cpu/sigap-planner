@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.weeklyChecklistStatus = void 0;
+exports.createEquipmentHourMeter = exports.listEquipmentHourMeter = exports.weeklyChecklistStatus = void 0;
 const ormconfig_1 = require("../ormconfig");
 const MasterAlat_1 = require("../entities/MasterAlat");
 const DailyChecklist_1 = require("../entities/DailyChecklist");
 const DailyChecklistItem_1 = require("../entities/DailyChecklistItem");
+const DailyEquipmentHourMeter_1 = require("../entities/DailyEquipmentHourMeter");
 function startOfDay(d) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -164,3 +165,80 @@ async function weeklyChecklistStatus(req, res) {
     }
 }
 exports.weeklyChecklistStatus = weeklyChecklistStatus;
+// GET /api/monitor/equipment-hour-meter
+async function listEquipmentHourMeter(req, res) {
+    try {
+        const siteId = req.query.site_id ? Number(req.query.site_id) : undefined;
+        const jenisAlatId = req.query.jenis_alat_id ? Number(req.query.jenis_alat_id) : undefined;
+        const dateQ = req.query.date || '';
+        const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+        const perPage = req.query.per_page ? Math.max(1, Number(req.query.per_page)) : 10;
+        const repo = ormconfig_1.AppDataSource.getRepository(DailyEquipmentHourMeter_1.DailyEquipmentHourMeter);
+        const qb = repo.createQueryBuilder('e')
+            .leftJoinAndSelect('e.alat', 'alat')
+            .leftJoinAndSelect('e.jenis_alat', 'jenis')
+            .leftJoinAndSelect('e.site', 'site')
+            .leftJoinAndSelect('e.teknisi', 'teknisi')
+            .orderBy('e.recorded_at', 'DESC');
+        if (siteId)
+            qb.andWhere('site.id = :sid', { sid: siteId });
+        if (jenisAlatId)
+            qb.andWhere('jenis.id = :jid', { jid: jenisAlatId });
+        if (dateQ) {
+            // Expect YYYY-MM-DD
+            const parsed = new Date(dateQ);
+            if (isNaN(parsed.getTime()))
+                return res.status(400).json({ message: 'Invalid date' });
+            const s = `${dateQ}T00:00:00Z`;
+            const e = `${dateQ}T23:59:59Z`;
+            qb.andWhere('e.recorded_at BETWEEN :s AND :e', { s, e });
+        }
+        const total = await qb.getCount();
+        const items = await qb.skip((page - 1) * perPage).take(perPage).getMany();
+        return res.json({ page, per_page: perPage, total, items });
+    }
+    catch (err) {
+        console.error('listEquipmentHourMeter error', err);
+        return res.status(500).json({ message: 'Failed to list equipment hour meter entries' });
+    }
+}
+exports.listEquipmentHourMeter = listEquipmentHourMeter;
+// POST /api/monitor/equipment-hour-meter
+async function createEquipmentHourMeter(req, res) {
+    try {
+        const body = req.body || {};
+        const repo = ormconfig_1.AppDataSource.getRepository(DailyEquipmentHourMeter_1.DailyEquipmentHourMeter);
+        // Validate required fields
+        if (!body.alat_id)
+            return res.status(400).json({ message: 'alat_id is required' });
+        // determine date window (local date of recorded_at) to prevent duplicate per day
+        const recordedAt = body.recorded_at ? new Date(body.recorded_at) : new Date();
+        const dayStart = new Date(recordedAt);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(recordedAt);
+        dayEnd.setHours(23, 59, 59, 999);
+        // check existing entries for same alat within the same day
+        const existingCount = await repo.createQueryBuilder('e')
+            .where('e.alat_id = :aid', { aid: Number(body.alat_id) })
+            .andWhere('e.recorded_at BETWEEN :s AND :e', { s: dayStart.toISOString(), e: dayEnd.toISOString() })
+            .getCount();
+        if (existingCount > 0)
+            return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
+        const ent = repo.create({
+            alat: body.alat_id ? { id: Number(body.alat_id) } : undefined,
+            jenis_alat: body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } : undefined,
+            site: body.site_id ? { id: Number(body.site_id) } : undefined,
+            engine_hour: body.engine_hour !== undefined ? Number(body.engine_hour) : undefined,
+            teknisi: body.teknisi_id ? { id: String(body.teknisi_id) } : undefined,
+            recorded_at: recordedAt,
+            notes: body.notes,
+        });
+        const saved = await repo.save(ent);
+        return res.status(201).json({ data: saved });
+    }
+    catch (err) {
+        console.error('createEquipmentHourMeter error', err);
+        return res.status(500).json({ message: 'Failed to create entry' });
+    }
+}
+exports.createEquipmentHourMeter = createEquipmentHourMeter;

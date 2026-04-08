@@ -30,12 +30,20 @@ require("reflect-metadata");
 const ormconfig_1 = require("./ormconfig");
 const app_1 = __importDefault(require("./app"));
 const dotenv = __importStar(require("dotenv"));
+const pmChangeListener_1 = require("./services/pmChangeListener");
 dotenv.config();
 const PORT = process.env.PORT || 4000;
 ormconfig_1.AppDataSource.initialize()
     .then(() => {
-    app_1.default.listen(PORT, () => {
+    app_1.default.listen(PORT, async () => {
         console.log(`Server listening on ${PORT}`);
+        // start DB notification listener to auto-run PM worker on data changes
+        try {
+            await (0, pmChangeListener_1.startPmChangeListener)();
+        }
+        catch (err) {
+            console.error('pmChangeListener start failed', err);
+        }
     });
 })
     .catch((err) => {

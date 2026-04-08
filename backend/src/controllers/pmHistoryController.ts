@@ -88,8 +88,8 @@ export async function createPmHistory(req: Request, res: Response) {
       console.error('failed to clear equipment_status workorder after pm_history insert', e);
     }
 
-    // refresh equipment status cache (simple approach: run full update)
-    try { await pmService.updateEquipmentStatusAll(); } catch (e) { console.error('pm update after history insert failed', e); }
+    // refresh equipment status for this alat only
+    try { await pmService.updateEquipmentStatusAll([Number(alat_id)]); } catch (e) { console.error('pm update after history insert failed', e); }
 
     return res.json({ data: inserted && inserted[0] ? inserted[0] : inserted });
   } catch (err) {

@@ -8,6 +8,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const ormconfig_1 = require("../ormconfig");
 const User_1 = require("../entities/User");
+const MasterSite_1 = require("../entities/MasterSite");
 const JWT_SECRET = process.env.JWT_SECRET || "change_this_secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 async function registerHandler(req, res) {
@@ -96,6 +97,46 @@ async function meHandler(req, res) {
         const user = await repo.findOne({ where: { id: reqUser.id } });
         if (!user)
             return res.status(404).json({ code: "NOT_FOUND", message: "User not found" });
+        // include site information when available (user.site may contain site id or code)
+        let siteInfo = null;
+        try {
+            const sVal = user.site;
+            if (sVal != null && String(sVal).trim() !== '') {
+                const siteRepo = ormconfig_1.AppDataSource.getRepository(MasterSite_1.MasterSite);
+                let foundSite = null;
+                // try numeric id lookup first
+                const asNum = Number(sVal);
+                if (!Number.isNaN(asNum) && asNum > 0) {
+                    foundSite = await siteRepo.findOne({ where: { id: asNum } });
+                }
+                // fallback to code lookup
+                if (!foundSite) {
+                    try {
+                        foundSite = await siteRepo.findOne({ where: { code: String(sVal) } });
+                    }
+                    catch (_) { }
+                }
+                // fallback to name lookup (some users store site name in user.site)
+                if (!foundSite) {
+                    try {
+                        foundSite = await siteRepo.findOne({ where: { name: String(sVal) } });
+                    }
+                    catch (_) { }
+                }
+                if (foundSite) {
+                    siteInfo = {
+                        id: foundSite.id,
+                        code: foundSite.code ?? null,
+                        name: foundSite.name ?? null,
+                        timezone: foundSite.timezone ?? null,
+                    };
+                }
+            }
+        }
+        catch (e) {
+            // swallow site lookup errors — don't break /auth/me
+            console.error('me: site lookup failed', e);
+        }
         return res.json({
             id: user.id,
             username: user.name,
@@ -104,6 +145,7 @@ async function meHandler(req, res) {
             city: user.city ?? null,
             location: user.location ?? null,
             role: user.role,
+            site: siteInfo,
         });
     }
     catch (err) {

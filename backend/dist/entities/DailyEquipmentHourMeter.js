@@ -9,59 +9,59 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MasterAlat = void 0;
+exports.DailyEquipmentHourMeter = void 0;
 const typeorm_1 = require("typeorm");
+const MasterAlat_1 = require("./MasterAlat");
 const MasterJenisAlat_1 = require("./MasterJenisAlat");
 const MasterSite_1 = require("./MasterSite");
-let MasterAlat = class MasterAlat {
+const User_1 = require("./User");
+let DailyEquipmentHourMeter = class DailyEquipmentHourMeter {
 };
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('increment'),
     __metadata("design:type", Number)
-], MasterAlat.prototype, "id", void 0);
+], DailyEquipmentHourMeter.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ length: 255 }),
-    __metadata("design:type", String)
-], MasterAlat.prototype, "nama", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ length: 128, nullable: true }),
-    __metadata("design:type", String)
-], MasterAlat.prototype, "kode", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ length: 128, nullable: true }),
-    __metadata("design:type", String)
-], MasterAlat.prototype, "kode_alias", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ length: 128, nullable: true }),
-    __metadata("design:type", String)
-], MasterAlat.prototype, "serial_no", void 0);
+    (0, typeorm_1.ManyToOne)(() => MasterAlat_1.MasterAlat),
+    (0, typeorm_1.JoinColumn)({ name: 'alat_id' }),
+    __metadata("design:type", MasterAlat_1.MasterAlat)
+], DailyEquipmentHourMeter.prototype, "alat", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => MasterJenisAlat_1.MasterJenisAlat),
     (0, typeorm_1.JoinColumn)({ name: 'jenis_alat_id' }),
     __metadata("design:type", MasterJenisAlat_1.MasterJenisAlat)
-], MasterAlat.prototype, "jenis_alat", void 0);
+], DailyEquipmentHourMeter.prototype, "jenis_alat", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => MasterSite_1.MasterSite, { nullable: true }),
+    (0, typeorm_1.ManyToOne)(() => MasterSite_1.MasterSite),
     (0, typeorm_1.JoinColumn)({ name: 'site_id' }),
     __metadata("design:type", MasterSite_1.MasterSite)
-], MasterAlat.prototype, "site", void 0);
+], DailyEquipmentHourMeter.prototype, "site", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'numeric', nullable: true }),
+    __metadata("design:type", Number)
+], DailyEquipmentHourMeter.prototype, "engine_hour", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => User_1.User),
+    (0, typeorm_1.JoinColumn)({ name: 'teknisi_id' }),
+    __metadata("design:type", User_1.User)
+], DailyEquipmentHourMeter.prototype, "teknisi", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamptz', name: 'recorded_at', nullable: false }),
+    __metadata("design:type", Date)
+], DailyEquipmentHourMeter.prototype, "recorded_at", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
-], MasterAlat.prototype, "notes", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ length: 20, default: 'ACTIVE' }),
-    __metadata("design:type", String)
-], MasterAlat.prototype, "status", void 0);
+], DailyEquipmentHourMeter.prototype, "notes", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
-], MasterAlat.prototype, "created_at", void 0);
+], DailyEquipmentHourMeter.prototype, "created_at", void 0);
 __decorate([
     (0, typeorm_1.UpdateDateColumn)({ name: 'updated_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
-], MasterAlat.prototype, "updated_at", void 0);
-MasterAlat = __decorate([
-    (0, typeorm_1.Entity)({ name: 'master_alat' })
-], MasterAlat);
-exports.MasterAlat = MasterAlat;
+], DailyEquipmentHourMeter.prototype, "updated_at", void 0);
+DailyEquipmentHourMeter = __decorate([
+    (0, typeorm_1.Entity)({ name: 'daily_equipment_hour_meter' })
+], DailyEquipmentHourMeter);
+exports.DailyEquipmentHourMeter = DailyEquipmentHourMeter;

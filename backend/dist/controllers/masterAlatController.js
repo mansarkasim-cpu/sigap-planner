@@ -17,7 +17,7 @@ async function listAlats(req, res) {
             // default sort by equipment name
             .orderBy('a.nama', 'ASC');
         if (search) {
-            qb.where('(a.nama ILIKE :q OR a.kode ILIKE :q OR a.serial_no ILIKE :q OR jenis.nama ILIKE :q OR site.name ILIKE :q)', { q: `%${search}%` });
+            qb.where('(a.nama ILIKE :q OR a.kode ILIKE :q OR a.serial_no ILIKE :q OR a.kode_alias ILIKE :q OR jenis.nama ILIKE :q OR site.name ILIKE :q)', { q: `%${search}%` });
         }
         if (siteId !== undefined) {
             if (search)
@@ -66,6 +66,11 @@ async function createAlat(req, res) {
     try {
         const repo = ormconfig_1.AppDataSource.getRepository(MasterAlat_1.MasterAlat);
         const payload = req.body || {};
+        // ignore any client-supplied id to avoid duplicate-pkey inserts
+        if (payload.id !== undefined) {
+            console.warn('createAlat: client supplied id ignored', payload.id);
+            delete payload.id;
+        }
         if (!payload.nama || String(payload.nama).trim() === '')
             return res.status(400).json({ message: 'nama is required' });
         if (!payload.jenis_alat_id)
@@ -73,6 +78,7 @@ async function createAlat(req, res) {
         const ent = repo.create({
             nama: String(payload.nama).trim(),
             kode: payload.kode,
+            kode_alias: payload.kode_alias,
             serial_no: payload.serial_no,
             jenis_alat: payload.jenis_alat_id ? { id: payload.jenis_alat_id } : undefined,
             site: payload.site_id ? { id: payload.site_id } : undefined,
