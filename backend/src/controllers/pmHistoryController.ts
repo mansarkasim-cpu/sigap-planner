@@ -89,7 +89,47 @@ export async function createPmHistory(req: Request, res: Response) {
     }
 
     // refresh equipment status for this alat only
-    try { await pmService.updateEquipmentStatusAll([Number(alat_id)]); } catch (e) { console.error('pm update after history insert failed', e); }
+      // Compute next_pm_due_at based on performed_at + days derived from engine hours and avg_hours_per_day
+      try {
+        // determine jenis_alat for this alat
+        const maRows: any[] = await AppDataSource.manager.query(`SELECT jenis_alat_id FROM master_alat WHERE id = $1 LIMIT 1`, [alat_id]);
+        const jenisId = maRows && maRows.length ? maRows[0].jenis_alat_id : null;
+        let avgHoursPerDay = Number(process.env.PM_AVG_HOURS_PER_DAY) || 24;
+        if (jenisId != null) {
+          const jRows: any[] = await AppDataSource.manager.query(`SELECT avg_hours_per_day FROM master_jenis_alat WHERE id = $1 LIMIT 1`, [jenisId]);
+          if (jRows && jRows.length && jRows[0].avg_hours_per_day != null) avgHoursPerDay = Number(jRows[0].avg_hours_per_day) || avgHoursPerDay;
+        }
+
+        let nextDueAt: string | null = null;
+        if (next_due_engine_hour != null && engine_hour != null && avgHoursPerDay > 0) {
+          const hoursLeft = Number(next_due_engine_hour) - Number(engine_hour);
+          if (hoursLeft <= 0) nextDueAt = new Date(performed_at).toISOString();
+          else {
+            const days = Math.ceil(hoursLeft / avgHoursPerDay);
+            const d = new Date(performed_at);
+            d.setHours(0,0,0,0);
+            d.setDate(d.getDate() + days);
+            nextDueAt = d.toISOString();
+          }
+        }
+
+        // Upsert equipment_status for this alat to set next PM engine hour and due date, and last engine fields
+        await AppDataSource.manager.query(
+          `INSERT INTO equipment_status (alat_id, last_engine_hour, last_recorded_at, last_technician, next_pm_engine_hour, next_pm_due_at, updated_at, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+           ON CONFLICT (alat_id) DO UPDATE SET
+             last_engine_hour = EXCLUDED.last_engine_hour,
+             last_recorded_at = EXCLUDED.last_recorded_at,
+             last_technician = EXCLUDED.last_technician,
+             next_pm_engine_hour = EXCLUDED.next_pm_engine_hour,
+             next_pm_due_at = COALESCE(EXCLUDED.next_pm_due_at, equipment_status.next_pm_due_at),
+             updated_at = now();`,
+          [alat_id, engine_hour, performed_at, performed_by, next_due_engine_hour, nextDueAt]
+        );
+      } catch (e) {
+        console.error('pmHistory: failed to upsert equipment_status with computed next due', e);
+        try { await pmService.updateEquipmentStatusAll([Number(alat_id)]); } catch (ee) { console.error('pm update after history insert fallback failed', ee); }
+      }
 
     return res.json({ data: inserted && inserted[0] ? inserted[0] : inserted });
   } catch (err) {
