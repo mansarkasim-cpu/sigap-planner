@@ -8,6 +8,7 @@ import '../screens/profile.dart';
 import '../screens/checklist.dart';
 import '../screens/checklist_history.dart';
 import '../screens/daily_work_orders.dart';
+import '../screens/equipment_hour_meter.dart';
 import '../screens/login.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -379,6 +380,14 @@ class _AppDrawerState extends State<AppDrawer> {
                         builder: (_) => const DailyWorkOrdersScreen()));
                 // refresh the count after returning
                 await _loadDailyCount();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timer),
+              title: const Text('Equipment Hour Meter'),
+              onTap: () async {
+                Navigator.pop(context);
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => const EquipmentHourMeterScreen()));
               },
             ),
             ListTile(
