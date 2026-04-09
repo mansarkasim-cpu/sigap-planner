@@ -173,6 +173,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
   export async function listEquipmentHourMeter(req: Request, res: Response) {
     try {
       const siteId = req.query.site_id ? Number(req.query.site_id) : undefined;
+      const alatId = req.query.alat_id ? Number(req.query.alat_id) : undefined;
       const jenisAlatId = req.query.jenis_alat_id ? Number(req.query.jenis_alat_id) : undefined;
       const dateQ = (req.query.date as string) || '';
       const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
@@ -187,6 +188,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
         .orderBy('e.recorded_at', 'DESC');
 
       if (siteId) qb.andWhere('site.id = :sid', { sid: siteId });
+      if (alatId) qb.andWhere('e.alat_id = :aid', { aid: alatId });
       if (jenisAlatId) qb.andWhere('jenis.id = :jid', { jid: jenisAlatId });
       if (dateQ) {
         // Expect YYYY-MM-DD
@@ -215,6 +217,9 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       // Validate required fields
       if (!body.alat_id) return res.status(400).json({ message: 'alat_id is required' });
 
+    // capture authenticated user (if any) so we can attribute teknisi automatically
+    const authUser: any = (req as any).user || null;
+
       // determine date window (local date of recorded_at) to prevent duplicate per day
       const recordedAt = body.recorded_at ? new Date(body.recorded_at) : new Date();
       const dayStart = new Date(recordedAt);
@@ -229,12 +234,30 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
         .getCount();
       if (existingCount > 0) return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
 
+      // determine site: prefer body.site_id, otherwise use authenticated user's site when available
+      let siteIdValue: number | undefined = undefined;
+      if (body.site_id) {
+        siteIdValue = Number(body.site_id);
+      } else if (authUser) {
+        try {
+          if (authUser.site_id) siteIdValue = Number(authUser.site_id);
+          else if (authUser.site && authUser.site.id) siteIdValue = Number(authUser.site.id);
+          else if (Array.isArray(authUser.sites) && authUser.sites.length > 0) {
+            const s0 = authUser.sites[0];
+            if (s0 && (s0.id || s0.site_id)) siteIdValue = Number(s0.id ?? s0.site_id);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
       const ent = repo.create({
         alat: body.alat_id ? { id: Number(body.alat_id) } : undefined,
         jenis_alat: body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } : undefined,
-        site: body.site_id ? { id: Number(body.site_id) } : undefined,
+        site: siteIdValue ? { id: siteIdValue } : undefined,
         engine_hour: body.engine_hour !== undefined ? Number(body.engine_hour) : undefined,
-        teknisi: body.teknisi_id ? { id: String(body.teknisi_id) } : undefined,
+        // prefer explicit teknisi_id from body, otherwise attribute to authenticated user if available
+        teknisi: body.teknisi_id ? { id: String(body.teknisi_id) } : (authUser && authUser.id ? { id: String(authUser.id) } : undefined),
         recorded_at: recordedAt,
         notes: body.notes,
       });
