@@ -852,7 +852,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       if (userSiteVal) {
         setSites([userSiteVal])
         setSite(userSiteVal)
-        try{ await load(undefined, userSiteVal) }catch(e){}
+        try{ await load(userSiteVal) }catch(e){}
         return
       }
 
