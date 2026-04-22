@@ -10,5 +10,6 @@ router.get('/monitoring/daily-weekly', authMiddleware, requireRole(['planner','a
 // Allow technicians to list/create their equipment hour meter entries as well
 router.get('/monitor/equipment-hour-meter', authMiddleware, requireRole(['planner','admin','technician']), ctrl.listEquipmentHourMeter);
 router.post('/monitor/equipment-hour-meter', authMiddleware, requireRole(['planner','admin','technician']), ctrl.createEquipmentHourMeter);
+router.patch('/monitor/equipment-hour-meter/:id', authMiddleware, requireRole(['planner','admin','technician']), ctrl.updateEquipmentHourMeter);
 
 export default router;
