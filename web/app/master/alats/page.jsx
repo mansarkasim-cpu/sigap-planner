@@ -137,6 +137,7 @@ export default function AlatsPage(){
             } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); e.target.value = ''; }
           }} />
           <Button variant="outlined" sx={{ ml:1 }} onClick={()=>document.getElementById('alats-excel').click()}>Upload Excel</Button>
+          <Button variant="outlined" component="a" href="/templates/alats-template.csv" download sx={{ ml:1 }}>Download Template</Button>
         </Box>
       </Box>
 
