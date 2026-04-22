@@ -3,6 +3,9 @@ import * as hubCtrl from '../controllers/masterHubController';
 import * as siteCtrl from '../controllers/masterSiteController';
 import * as jenisCtrl from '../controllers/masterJenisAlatController';
 import * as alatCtrl from '../controllers/masterAlatController';
+import multer from 'multer';
+
+const upload = multer({ dest: 'uploads/' });
 import * as qCtrl from '../controllers/masterQuestionController';
 import * as rolesCtrl from '../controllers/masterRolesController';
 import { authMiddleware, requireRole } from '../middleware/auth';
@@ -34,6 +37,7 @@ router.delete('/master/jenis-alat/:id', authMiddleware, requireRole(['admin']), 
 router.get('/master/alats', authMiddleware, requireRole(['admin','technician','planner','terminal']), alatCtrl.listAlats);
 router.get('/master/alats/:id', authMiddleware, requireRole(['admin','technician','planner','terminal']), alatCtrl.getAlat);
 router.post('/master/alats', authMiddleware, requireRole(['admin']), alatCtrl.createAlat);
+router.post('/master/alats/import', authMiddleware, requireRole(['admin']), upload.single('file'), alatCtrl.importAlats);
 router.patch('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.deleteAlat);
 
