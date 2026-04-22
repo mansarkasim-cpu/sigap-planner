@@ -125,7 +125,7 @@ export default function AlatsPage(){
 
           <Box sx={{ ml:1, display:'flex', alignItems:'center', gap:1 }}>
             <Button variant="contained" startIcon={<AddIcon/>} onClick={openCreate} sx={{ textTransform:'none' }}>Create Alat</Button>
-            <input id="alats-excel" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={async (e) => {
+            <input id="alats-excel" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={async (e) => {
             const f = e.target.files && e.target.files[0];
             if (!f) return;
             if (!confirm('Upload and import selected Excel file?')) { e.target.value = ''; return }
@@ -138,8 +138,9 @@ export default function AlatsPage(){
               await load(1);
             } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); e.target.value = ''; }
             }} />
-            <Button size="small" variant="outlined" onClick={()=>document.getElementById('alats-excel').click()} sx={{ textTransform:'none' }}>Upload Excel</Button>
-            <Button size="small" variant="outlined" component="a" href="/templates/alats-template.csv" download sx={{ textTransform:'none' }}>Download Template</Button>
+            <Button size="small" variant="outlined" onClick={()=>document.getElementById('alats-excel').click()} sx={{ textTransform:'none' }}>Upload File</Button>
+            <Button size="small" variant="outlined" component="a" href="/templates/alats-template.csv" download sx={{ textTransform:'none' }}>CSV Template</Button>
+            <Button size="small" variant="outlined" component="a" href="/templates/alats-template.xlsx" download sx={{ textTransform:'none' }}>XLSX Template</Button>
           </Box>
         </Box>
       </Box>
