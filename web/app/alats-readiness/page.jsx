@@ -75,13 +75,33 @@ export default function AlatReadiness(){
     setLoading(true)
     setError(null)
     try{
+      // determine current user's site (prefer /auth/me, fallback to localStorage)
+      let siteFilter = null
+      let siteIdForMaster = null
+      try{
+        const me = await apiClient('/auth/me')
+        const userSite = me?.site ?? (me?.data && me.data.site) ?? null
+        if (userSite) {
+          siteFilter = userSite.name || userSite.code || (userSite.id ? String(userSite.id) : null) || String(userSite)
+          const sid = userSite.id ?? userSite.site_id ?? null
+          if (sid) {
+            siteIdForMaster = Number(sid)
+            try{ setFilterSite(String(siteIdForMaster)) } catch(e){}
+          }
+        } else {
+          try{ siteFilter = localStorage.getItem('sigap_site') } catch(e){}
+        }
+      }catch(e){
+        try{ siteFilter = localStorage.getItem('sigap_site') } catch(err){}
+      }
       async function fetchAllWorkOrders(){
         const out = []
         let effectivePageSize = 2000
         const MAX_PAGES = 50
         let page = 1
         while (page <= MAX_PAGES){
-          const res = await apiClient(`/work-orders?page=${page}&pageSize=${effectivePageSize}`)
+          const url = `/work-orders?page=${page}&pageSize=${effectivePageSize}${siteFilter ? ('&site=' + encodeURIComponent(siteFilter)) : ''}`
+          const res = await apiClient(url)
           const rows = res?.data ?? res ?? []
           const meta = res?.meta ?? null
           if (!Array.isArray(rows) || rows.length === 0) break
@@ -110,15 +130,22 @@ export default function AlatReadiness(){
 
       const rows = await fetchAllWorkOrders()
 
+      const alatUrl = siteIdForMaster ? (`/master/alats?site_id=${siteIdForMaster}`) : '/master/alats'
       const [alatRes, sitesRes, jenisRes] = await Promise.all([
-        apiClient('/master/alats'),
+        apiClient(alatUrl),
         apiClient('/master/sites'),
         apiClient('/master/jenis-alat'),
       ])
 
       const alats = Array.isArray(alatRes) ? alatRes : (alatRes?.data || [])
       setAssets(alats)
-      setSites(Array.isArray(sitesRes) ? sitesRes : (sitesRes?.data || []))
+      const allSites = Array.isArray(sitesRes) ? sitesRes : (sitesRes?.data || [])
+      if (siteIdForMaster) {
+        const matched = allSites.find(s => String(s.id) === String(siteIdForMaster))
+        setSites(matched ? [matched] : allSites)
+      } else {
+        setSites(allSites)
+      }
       setJenisOptions(Array.isArray(jenisRes) ? jenisRes : (jenisRes?.data || []))
 
       // collect assets that have at least one IN_PROGRESS work order

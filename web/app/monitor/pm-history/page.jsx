@@ -36,7 +36,7 @@ export default function PMHistoryPage(){
   const [form, setForm] = useState({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' })
   const [error, setError] = useState('')
 
-  useEffect(()=>{ load(); loadAlats(); loadRules(); loadUsers(); loadSites(); }, [])
+  useEffect(()=>{ loadSites(); loadRules(); }, [])
 
   // Auto-refresh list when filters change (skip initial mount duplicate)
   const firstFilterRun = React.useRef(true)
@@ -44,17 +44,36 @@ export default function PMHistoryPage(){
     if (firstFilterRun.current) { firstFilterRun.current = false; return }
     load()
   }, [filterSiteId, filterAlatId, filterStartDate, filterEndDate])
-
   async function loadSites(){
-    try{ const r = await apiClient('/master/sites?limit=1000'); setSites(r?.data || r || []) }catch(e){ console.error(e) }
+    try{
+      const me = await apiClient('/auth/me').catch(()=>null)
+      const userSite = me?.site || me?.data?.site || null
+      if (userSite && (userSite.id || userSite.code || userSite.name)){
+        const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, name: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id) }
+        setSites([siteObj])
+        setFilterSiteId(siteObj.id)
+        setForm(f=>({...f, site_id: siteObj.id}))
+        await loadAlats(siteObj.id)
+        await loadUsers(siteObj.id)
+        await load(undefined, siteObj.id)
+        return
+      }
+      const r = await apiClient('/master/sites?limit=1000')
+      const list = r?.data || r || []
+      setSites(list)
+      await loadAlats()
+      await loadUsers()
+      await load()
+    }catch(e){ console.error(e) }
   }
 
-  async function load(p){
+  async function load(p, explicitSiteId){
     setLoading(true)
     try{
       const qs = []
       qs.push('limit=200')
-      if (filterSiteId) qs.push(`site_id=${encodeURIComponent(filterSiteId)}`)
+      const siteToUse = explicitSiteId ?? filterSiteId
+      if (siteToUse) qs.push(`site_id=${encodeURIComponent(siteToUse)}`)
       if (filterAlatId) qs.push(`alat_id=${encodeURIComponent(filterAlatId)}`)
       if (filterStartDate) qs.push(`start_date=${encodeURIComponent(filterStartDate)}`)
       if (filterEndDate) qs.push(`end_date=${encodeURIComponent(filterEndDate)}`)
@@ -67,8 +86,12 @@ export default function PMHistoryPage(){
     finally{ setLoading(false) }
   }
 
-  async function loadAlats(){
-    try{ const r = await apiClient('/master/alats?page=1&pageSize=1000'); setAlats(r?.data || r || []) }catch(e){ console.error(e) }
+  async function loadAlats(siteId){
+    try{
+      const qs = siteId ? `?site_id=${encodeURIComponent(siteId)}&page=1&pageSize=1000` : '?page=1&pageSize=1000'
+      const r = await apiClient(`/master/alats${qs}`)
+      setAlats(r?.data || r || [])
+    }catch(e){ console.error(e) }
   }
   async function loadRules(jenis_alat_id){
     try{

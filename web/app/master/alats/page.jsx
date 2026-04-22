@@ -55,7 +55,34 @@ export default function AlatsPage(){
     finally{ setLoading(false); }
   }
 
-  async function loadRefs(){ try{ const j = await apiClient('/master/jenis-alat'); setJenis(Array.isArray(j)?j:[]); const s = await apiClient('/master/sites'); setSites(Array.isArray(s)?s:[]); }catch(e){console.error(e);} }
+  async function loadRefs(){
+    try{
+      const j = await apiClient('/master/jenis-alat');
+      setJenis(Array.isArray(j)?j:[]);
+
+      // prefer user's site when available
+      let userSiteId = null
+      try{
+        const me = await apiClient('/auth/me')
+        const u = me?.site ?? (me?.data && me.data.site) ?? null
+        if (u) userSiteId = u.id ?? u.site_id ?? null
+      }catch(e){ /* ignore */ }
+
+      const s = await apiClient('/master/sites');
+      const items = Array.isArray(s) ? s : (s?.data ?? []);
+      if (userSiteId) {
+        const found = items.find(si => String(si.id) === String(userSiteId) || String(si.code) === String(userSiteId) || String(si.name).toLowerCase() === String(userSiteId).toLowerCase())
+        if (found) {
+          setSites([found])
+          setFilterSite(found.id)
+        } else {
+          setSites(items)
+        }
+      } else {
+        setSites(items)
+      }
+    }catch(e){console.error(e);} }
+
 
   useEffect(()=>{ load(); loadRefs(); },[]);
 

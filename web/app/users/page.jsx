@@ -93,9 +93,22 @@ export default function UsersPage() {
 
   async function loadRefs() {
     try {
+      // prefer user's site when available
+      let userSiteName = null
+      try{
+        const me = await apiClient('/auth/me')
+        const u = me?.site ?? (me?.data && me.data.site) ?? null
+        if (u) userSiteName = u.name || u.code || (u.id ? String(u.id) : null) || String(u)
+      }catch(e){ /* ignore */ }
       const s = await apiClient('/master/sites');
-      if (Array.isArray(s)) setSites(s.map(si => si.name));
-      else setSites([]);
+      const items = Array.isArray(s) ? s : (s?.data ?? []);
+      if (userSiteName) {
+        const found = items.find(si => String(si.name).toLowerCase() === String(userSiteName).toLowerCase() || String(si.id) === String(userSiteName) || String(si.code).toLowerCase() === String(userSiteName).toLowerCase())
+        if (found) setSites([found.name])
+        else setSites(items.map(si => si.name))
+      } else {
+        setSites(items.map(si => si.name))
+      }
     } catch (e) { console.error('load master sites', e); }
   }
 

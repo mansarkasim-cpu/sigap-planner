@@ -32,9 +32,28 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Prefer a release signing config from a key.properties file if present,
+            // otherwise fall back to the debug signing config so local release runs still work.
+            val keyPropsFile = rootProject.file("key.properties")
+            if (keyPropsFile.exists()) {
+                val keyProps = java.util.Properties()
+                keyProps.load(java.io.FileInputStream(keyPropsFile))
+
+                val storeFilePath = keyProps.getProperty("storeFile") ?: ""
+                signingConfigs.create("release") {
+                    if (storeFilePath.isNotEmpty()) {
+                        storeFile = file(storeFilePath)
+                    }
+                    storePassword = keyProps.getProperty("storePassword")
+                    keyAlias = keyProps.getProperty("keyAlias")
+                    keyPassword = keyProps.getProperty("keyPassword")
+                }
+
+                signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            } else {
+                // No key.properties found — use debug signing so `flutter run --release` still works.
+                signingConfig = signingConfigs.getByName("debug")
+            }
             // Disable code shrinking and resource shrinking so bundled raw sounds are preserved
             isMinifyEnabled = false
             isShrinkResources = false

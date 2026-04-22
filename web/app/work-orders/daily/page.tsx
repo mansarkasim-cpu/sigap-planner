@@ -145,7 +145,7 @@ export default function DailyWorkOrdersPage(){
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [unassignedDays, setUnassignedDays] = useState<string[]>([]);
 
-  useEffect(()=>{ load(page) }, [])
+  useEffect(()=>{ /* initial load is handled by loadSiteOptions to ensure site scoping */ }, [])
 
   useEffect(()=>{ loadJenisOptions() }, [])
   useEffect(()=>{ loadSiteOptions() }, [])
@@ -208,9 +208,19 @@ export default function DailyWorkOrdersPage(){
 
   async function loadSiteOptions(){
     try{
+      const me = await apiClient('/auth/me').catch(()=>null)
+      const userSite = me?.site || me?.data?.site || null
+      if (userSite && (userSite.id || userSite.code || userSite.name)){
+        const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, name: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id) }
+        setSiteOptions([siteObj])
+        setSiteFilter(siteObj.id)
+        await load(1, siteObj.id)
+        return
+      }
       const res = await apiClient('/master/sites');
       const rows = res?.data ?? res ?? [];
       setSiteOptions(Array.isArray(rows) ? rows : []);
+      await load(1)
     }catch(e){ setSiteOptions([]); }
   }
 
@@ -574,7 +584,7 @@ export default function DailyWorkOrdersPage(){
     }
   }
 
-  async function load(pageArg = 1){
+  async function load(pageArg = 1, explicitSiteId?: string){
     setLoading(true); setError(null)
     try{
       const qs = []
@@ -583,7 +593,8 @@ export default function DailyWorkOrdersPage(){
       qs.push(`pageSize=${pageSize}`)
       if (dateFilter && dateFilter.trim()) qs.push(`date=${encodeURIComponent(dateFilter.trim())}`)
       if (jenisFilter && jenisFilter.toString().trim()) qs.push(`jenis=${encodeURIComponent(jenisFilter.toString().trim())}`)
-      if (siteFilter && siteFilter.toString().trim()) qs.push(`site=${encodeURIComponent(siteFilter.toString().trim())}`)
+      const siteToUse = explicitSiteId ?? (siteFilter && siteFilter.toString().trim() ? siteFilter : '')
+      if (siteToUse) qs.push(`site=${encodeURIComponent(siteToUse)}`)
       // Only show DAILY work orders in this view
       qs.push(`work_type=DAILY`)
       const url = `/work-orders${qs.length ? ('?' + qs.join('&')) : ''}`

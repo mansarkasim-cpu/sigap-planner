@@ -178,7 +178,7 @@ export default function WeeklyMonitoring(){
     }
   }, [containerRef])
 
-  useEffect(()=>{ loadSites(); load(); }, [])
+  useEffect(()=>{ loadSites(); }, [])
 
   // reload immediately when site or weekStart changes (e.g., user selects site or date)
   useEffect(()=>{
@@ -214,16 +214,27 @@ export default function WeeklyMonitoring(){
 
   async function loadSites(){
     try{
+      const me = await apiClient('/auth/me').catch(()=>null)
+      const userSite = me?.site || me?.data?.site || null
+      if (userSite && (userSite.id || userSite.code || userSite.name)){
+        const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, name: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id) }
+        setSites([siteObj])
+        setSiteId(siteObj.id)
+        await load(siteObj.id)
+        return
+      }
       const res = await apiClient('/master/sites')
       setSites(res?.data || res || [])
+      await load()
     }catch(e){ console.error('load sites', e) }
   }
 
-  async function load(){
+  async function load(explicitSiteId){
     setLoading(true)
     try{
+      const sid = explicitSiteId ?? siteId
       const qs = []
-      if (siteId) qs.push(`site_id=${encodeURIComponent(siteId)}`)
+      if (sid) qs.push(`site_id=${encodeURIComponent(sid)}`)
       if (weekStart) qs.push(`week_start=${encodeURIComponent(weekStart)}`)
       const url = `/monitoring/daily-weekly${qs.length?('?'+qs.join('&')):''}`
       const res = await apiClient(url)
