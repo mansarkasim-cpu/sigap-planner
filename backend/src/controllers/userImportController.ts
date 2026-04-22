@@ -31,7 +31,10 @@ export async function importUsersFromFile(req: Request, res: Response) {
     const rows = parseWorkbook(tmpPath);
     console.log('[IMPORT] parsed rows count:', rows?.length ?? 0);
 
+    const isPreview = String(req.query.preview || '').toLowerCase() === '1' || String(req.query.preview || '').toLowerCase() === 'true';
+
     const results: Array<{ row: number; status: 'created'|'updated'|'skipped'|'error'; message?: string; id?: string }> = [];
+    const previewRows: Array<any> = [];
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -43,12 +46,26 @@ export async function importUsersFromFile(req: Request, res: Response) {
       const site = r.site ?? r.Site ?? null;
       const password = r.password ?? r.Password ?? null;
 
+      const rowInfo: any = { row: rowNum, name, nipp, email, role, site };
+
       if (!name || !nipp) {
+        if (isPreview) { rowInfo.status = 'skipped'; rowInfo.message = 'name or nipp missing'; previewRows.push(rowInfo); continue; }
         results.push({ row: rowNum, status: 'skipped', message: 'name or nipp missing' });
         continue;
       }
       if (!/^[0-9]{1,15}$/.test(String(nipp))) {
+        if (isPreview) { rowInfo.status = 'error'; rowInfo.message = 'nipp must be numeric and <=15'; previewRows.push(rowInfo); continue; }
         results.push({ row: rowNum, status: 'error', message: 'nipp must be numeric and <=15' });
+        continue;
+      }
+
+      if (isPreview) {
+        // in preview mode, don't save; just show what would happen (created/updated)
+        try {
+          const existing = await repo().findOneBy({ nipp } as any);
+          rowInfo.status = existing ? 'updated' : 'created';
+        } catch (e) { rowInfo.status = 'error'; rowInfo.message = String((e as any)?.message || e); }
+        previewRows.push(rowInfo);
         continue;
       }
 
