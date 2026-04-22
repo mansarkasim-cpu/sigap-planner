@@ -51,6 +51,10 @@ export default function UsersPage() {
   const [resetUser, setResetUser] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [previewResults, setPreviewResults] = useState([]);
+  const [previewFile, setPreviewFile] = useState(null);
 
   async function load() {
     setLoading(true); setError(null);
@@ -160,6 +164,21 @@ export default function UsersPage() {
         <Box sx={{ display:'flex', gap:1 }}>
           <Button variant="outlined" color="inherit" onClick={() => load()} startIcon={loading ? <CircularProgress size={18} /> : null}>Refresh</Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Create User</Button>
+          <input id="users-file" type="file" accept=".xlsx,.xls,.csv" style={{ display:'none' }} onChange={async (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            try {
+              setPreviewFile(f);
+              const fd = new FormData(); fd.append('file', f);
+              const res = await apiClient('/users/import?preview=1', { method: 'POST', body: fd });
+              console.info('users import preview', res);
+              setPreviewResults(res?.results || []);
+              setPreviewRows(res?.previewRows || []);
+              setPreviewOpen(true);
+            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Preview failed'); e.target.value = ''; }
+          }} />
+          <Button variant="outlined" onClick={()=>document.getElementById('users-file').click()}>Upload Users</Button>
+          <Button variant="outlined" component="a" href="/templates/users-template.csv" download>Download Template</Button>
         </Box>
       </Box>
 
@@ -301,6 +320,54 @@ export default function UsersPage() {
         <DialogActions>
           <Button onClick={()=>{ setModalOpen(false); setEditing(null); }}>Cancel</Button>
           <Button variant="contained" onClick={save}>{editing?.id ? 'Save' : 'Create'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={previewOpen} onClose={()=>{ setPreviewOpen(false); setPreviewRows([]); setPreviewFile(null); }} fullWidth maxWidth="lg">
+        <DialogTitle>Preview Users Import</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb:1 }}>Preview rows: {previewRows.length}</Box>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Row</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>NIPP</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell>Site</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {previewRows.map(r => (
+                <TableRow key={r.row} hover>
+                  <TableCell>{r.row}</TableCell>
+                  <TableCell>{r.name}</TableCell>
+                  <TableCell>{r.nipp}</TableCell>
+                  <TableCell>{r.email}</TableCell>
+                  <TableCell>{r.role}</TableCell>
+                  <TableCell>{r.site}</TableCell>
+                  <TableCell>{r.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setPreviewOpen(false); setPreviewRows([]); setPreviewFile(null); document.getElementById('users-file').value = ''; }}>Cancel</Button>
+          <Button variant="contained" onClick={async ()=>{
+            if (!previewFile) return alert('No file selected');
+            if (!confirm('Proceed to import users?')) return;
+            try {
+              const fd = new FormData(); fd.append('file', previewFile);
+              const res = await apiClient('/users/import', { method: 'POST', body: fd });
+              console.info('users import result', res);
+              alert('Import result:\n' + JSON.stringify(res, null, 2));
+              setPreviewOpen(false); setPreviewRows([]); setPreviewFile(null); document.getElementById('users-file').value = '';
+              await load();
+            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); }
+          }}>Import</Button>
         </DialogActions>
       </Dialog>
 
