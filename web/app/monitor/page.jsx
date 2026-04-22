@@ -133,7 +133,7 @@ export default function Monitor(){
         <Typography variant="h5">Monitoring Teknisi</Typography>
         <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
           <TextField size="small" label="Tanggal" type="date" value={date} onChange={e=>setDate(e.target.value)} InputLabelProps={{shrink:true}} />
-          <Button variant="contained" size="small" onClick={load}>Refresh</Button>
+          <Button variant="contained" size="small" onClick={() => load()}>Refresh</Button>
         </Box>
       </Box>
 

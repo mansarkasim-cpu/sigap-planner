@@ -422,7 +422,7 @@ export default function PMCalendarPage() {
           <IconButton size="small" onClick={toggleFullScreen} aria-label="fullscreen">
             {isFull ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
-          <Button variant="outlined" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</Button>
+          <Button variant="outlined" onClick={() => load()} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</Button>
         </div>
       </Box>
 
