@@ -123,6 +123,20 @@ export default function AlatsPage(){
             {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
           </Select>
           <Button variant="contained" sx={{ ml:1 }} startIcon={<AddIcon/>} onClick={openCreate}>Create Alat</Button>
+          <input id="alats-excel" type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={async (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            if (!confirm('Upload and import selected Excel file?')) { e.target.value = ''; return }
+            try {
+              const fd = new FormData();
+              fd.append('file', f);
+              const res = await apiClient('/master/alats/import', { method: 'POST', body: fd });
+              alert('Import complete: ' + (res?.results ? `created=${res.results.created}, skipped=${res.results.skipped}` : JSON.stringify(res)));
+              e.target.value = '';
+              await load(1);
+            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); e.target.value = ''; }
+          }} />
+          <Button variant="outlined" sx={{ ml:1 }} onClick={()=>document.getElementById('alats-excel').click()}>Upload Excel</Button>
         </Box>
       </Box>
 
