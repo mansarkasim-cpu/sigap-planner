@@ -133,7 +133,9 @@ export default function AlatsPage(){
               const fd = new FormData();
               fd.append('file', f);
               const res = await apiClient('/master/alats/import', { method: 'POST', body: fd });
-              alert('Import complete: ' + (res?.results ? `created=${res.results.created}, skipped=${res.results.skipped}` : JSON.stringify(res)));
+              console.info('alats import response', res);
+              // Show full response to aid debugging
+              alert('Import response:\n' + JSON.stringify(res, null, 2));
               e.target.value = '';
               await load(1);
             } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); e.target.value = ''; }
