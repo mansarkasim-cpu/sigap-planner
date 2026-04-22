@@ -236,7 +236,24 @@ export default function PMHistoryPage(){
             <TextField size="small" label="Engine Hour" type="number" value={form.engine_hour} onChange={e=>setForm(f=>({...f, engine_hour: e.target.value}))} />
             <TextField select size="small" label="Performed By" value={form.performed_by} onChange={e=>setForm(f=>({...f, performed_by: e.target.value}))}>
               <MenuItem value="">-- Select --</MenuItem>
-              {users.map(u=> <MenuItem key={u.id} value={u.id}>{u.name} {u.nipp ? `(${u.nipp})` : ''}</MenuItem>)}
+              {(() => {
+                const selSite = form.site_id || filterSiteId || ''
+                return users
+                  .filter(u => {
+                    if (!selSite) return true
+                    try{
+                      if (u.site && (u.site.id || u.site.name || u.site.nama)){
+                        if (String(u.site.id) === String(selSite)) return true
+                        if (String(u.site.name) === String(selSite)) return true
+                        if (String(u.site.nama) === String(selSite)) return true
+                      }
+                      if (u.site_id && String(u.site_id) === String(selSite)) return true
+                      if (u.site && typeof u.site === 'string' && String(u.site) === String(selSite)) return true
+                    }catch(e){/* ignore */}
+                    return false
+                  })
+                  .map(u=> <MenuItem key={u.id} value={u.id}>{u.name} {u.nipp ? `(${u.nipp})` : ''}</MenuItem>)
+              })()}
             </TextField>
             <TextField size="small" label="Performed At" type="datetime-local" value={form.performed_at} onChange={e=>setForm(f=>({...f, performed_at: e.target.value}))} InputLabelProps={{shrink:true}} />
             <TextField size="small" label="Workorder No" value={form.workorder_no || ''} onChange={e=>setForm(f=>({...f, workorder_no: e.target.value}))} />
