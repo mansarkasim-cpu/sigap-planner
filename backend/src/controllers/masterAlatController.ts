@@ -184,6 +184,12 @@ export async function importAlats(req: Request, res: Response) {
             jenis_alat = await jenisRepo.findOne({ where: { nama: String(jenisVal) } });
           }
         }
+        // jenis_alat is required by DB schema; if not found, skip and record error
+        if (!jenis_alat) {
+          results.skipped++;
+          results.errors.push({ row: i + 1, error: `jenis_alat not found for value: ${jenisVal}` });
+          continue;
+        }
 
         let site = undefined;
         if (siteVal) {
