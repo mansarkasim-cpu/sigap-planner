@@ -39,6 +39,11 @@ export default function AlatsPage(){
   const [filterJenis,setFilterJenis] = useState(null);
   const [filterSite,setFilterSite] = useState(null);
   const [showFilters,setShowFilters] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewRows, setPreviewRows] = useState([]);
+  const [previewErrors, setPreviewErrors] = useState([]);
+  const [previewParsedCount, setPreviewParsedCount] = useState(0);
+  const [previewFile, setPreviewFile] = useState(null);
 
   async function load(p = page, ps = pageSize, search = q){
     setLoading(true);
@@ -128,17 +133,18 @@ export default function AlatsPage(){
             <input id="alats-excel" type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={async (e) => {
             const f = e.target.files && e.target.files[0];
             if (!f) return;
-            if (!confirm('Upload and import selected Excel file?')) { e.target.value = ''; return }
             try {
+              // store selected file and request preview from server
+              setPreviewFile(f);
               const fd = new FormData();
               fd.append('file', f);
-              const res = await apiClient('/master/alats/import', { method: 'POST', body: fd });
-              console.info('alats import response', res);
-              // Show full response to aid debugging
-              alert('Import response:\n' + JSON.stringify(res, null, 2));
-              e.target.value = '';
-              await load(1);
-            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); e.target.value = ''; }
+              const res = await apiClient('/master/alats/import?preview=1', { method: 'POST', body: fd });
+              console.info('alats import preview response', res);
+              setPreviewParsedCount(res?.parsedCount || 0);
+              setPreviewRows(res?.previewRows || []);
+              setPreviewErrors(res?.errors || []);
+              setPreviewOpen(true);
+            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Preview failed'); e.target.value = ''; }
             }} />
             <Button size="small" variant="outlined" onClick={()=>document.getElementById('alats-excel').click()} sx={{ textTransform:'none' }}>Upload File</Button>
             <Button size="small" variant="outlined" component="a" href="/templates/alats-template.csv" download sx={{ textTransform:'none' }}>CSV Template</Button>
@@ -248,6 +254,63 @@ export default function AlatsPage(){
         <DialogActions>
           <Button onClick={()=>{ setModalOpen(false); setEditing(null); }}>Cancel</Button>
           <Button variant="contained" onClick={save}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={previewOpen} onClose={()=>{ setPreviewOpen(false); setPreviewRows([]); setPreviewErrors([]); setPreviewFile(null); }} fullWidth maxWidth="lg">
+        <DialogTitle>Preview Import ({previewParsedCount} rows)</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb:1 }}>
+            {previewErrors && previewErrors.length > 0 && (
+              <Box sx={{ color:'error.main', mb:1 }}>Errors in preview: {previewErrors.length} (these rows will be skipped)</Box>
+            )}
+          </Box>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Row</TableCell>
+                <TableCell>Nama</TableCell>
+                <TableCell>Jenis (input)</TableCell>
+                <TableCell>Jenis Resolved</TableCell>
+                <TableCell>Site (input)</TableCell>
+                <TableCell>Site Resolved</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {previewRows.map(r => (
+                <TableRow key={r.row} hover>
+                  <TableCell>{r.row}</TableCell>
+                  <TableCell>{r.nama}</TableCell>
+                  <TableCell>{r.jenisVal}</TableCell>
+                  <TableCell>{r.jenisFound ? (r.jenis ? r.jenis.nama : 'found') : 'NOT FOUND'}</TableCell>
+                  <TableCell>{r.siteVal}</TableCell>
+                  <TableCell>{r.siteFound ? (r.site ? r.site.name : 'found') : '-'}</TableCell>
+                  <TableCell>{r.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setPreviewOpen(false); setPreviewRows([]); setPreviewErrors([]); setPreviewFile(null); document.getElementById('alats-excel').value = ''; }}>Cancel</Button>
+          <Button variant="contained" onClick={async ()=>{
+            if (!previewFile) return alert('No file selected');
+            if (!confirm('Proceed to import parsed rows?')) return;
+            try {
+              const fd = new FormData();
+              fd.append('file', previewFile);
+              const res = await apiClient('/master/alats/import', { method: 'POST', body: fd });
+              console.info('import result', res);
+              alert('Import result:\n' + JSON.stringify(res, null, 2));
+              setPreviewOpen(false);
+              setPreviewRows([]);
+              setPreviewErrors([]);
+              setPreviewFile(null);
+              document.getElementById('alats-excel').value = '';
+              await load(1);
+            } catch (err) { console.error(err); alert(err?.body?.message || err?.message || 'Import failed'); }
+          }}>Import</Button>
         </DialogActions>
       </Dialog>
     </Box>
