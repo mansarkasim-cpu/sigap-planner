@@ -180,15 +180,12 @@ export async function importAlats(req: Request, res: Response) {
             jenis_alat = await jenisRepo.findOne({ where: { id: num } });
           }
           if (!jenis_alat) {
-            // try by name
-            jenis_alat = await jenisRepo.findOne({ where: { nama: String(jenisVal) } });
+            // try by name (case-insensitive)
+            const name = String(jenisVal).trim();
+            jenis_alat = await jenisRepo.createQueryBuilder('j')
+              .where('LOWER(j.nama) = LOWER(:name)', { name })
+              .getOne();
           }
-        }
-        // jenis_alat is required by DB schema; if not found, skip and record error
-        if (!jenis_alat) {
-          results.skipped++;
-          results.errors.push({ row: i + 1, error: `jenis_alat not found for value: ${jenisVal}` });
-          continue;
         }
 
         let site = undefined;
@@ -198,11 +195,21 @@ export async function importAlats(req: Request, res: Response) {
             site = await siteRepo.findOne({ where: { id: num } });
           }
           if (!site) {
-            site = await siteRepo.findOne({ where: { name: String(siteVal) } });
+            const sname = String(siteVal).trim();
+            site = await siteRepo.createQueryBuilder('s')
+              .where('LOWER(s.name) = LOWER(:sname)', { sname })
+              .getOne();
           }
         }
 
-        const ent = repo.create({ nama: String(nama).trim(), kode, kode_alias, serial_no, jenis_alat: jenis_alat || undefined, site: site || undefined, notes, status: status || 'ACTIVE' });
+        // If jenis_alat is required by DB and not found, skip and record error
+        if (!jenis_alat) {
+          results.errors.push({ row: i+1, error: `jenis not found or invalid: ${jenisVal}` });
+          results.skipped++;
+          continue;
+        }
+
+        const ent = repo.create({ nama: String(nama).trim(), kode, kode_alias, serial_no, jenis_alat: jenis_alat, site: site || undefined, notes, status: status || 'ACTIVE' });
         await repo.save(ent);
         results.created++;
       } catch (e) {
