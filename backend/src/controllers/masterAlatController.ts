@@ -207,7 +207,12 @@ export async function importAlats(req: Request, res: Response) {
     // clean up uploaded file
     try { fs.unlinkSync(path); } catch (e) { /* ignore */ }
 
-    return res.json({ message: 'import complete', results });
+    // Include debug info to help troubleshooting empty imports
+    const preview = rows.slice(0, 10);
+    console.info('importAlats: parsedRows=', rows.length, 'created=', results.created, 'skipped=', results.skipped);
+    if (preview.length > 0) console.info('importAlats: preview row 1 keys=', Object.keys(preview[0]));
+
+    return res.json({ message: 'import complete', results, parsedCount: rows.length, preview });
   } catch (err) {
     console.error('importAlats error', err);
     return res.status(500).json({ message: 'Failed to import alats', detail: err instanceof Error ? err.message : err });
