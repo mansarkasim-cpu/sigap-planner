@@ -138,7 +138,7 @@ export default function Nav(){
             <ul className="sub-menu">
               {!isTerminal && (<li><Link href="/work-orders" className="nav-link">List</Link></li>)}
               <li><Link href="/gantt" className="nav-link">Gantt Chart</Link></li>
-              {!isTerminal && (<li><Link href="/monitor" className="nav-link">Monitoring</Link></li>)}
+              {/* Monitoring menu hidden temporarily */}
               <li><Link href="/realisasi" className="nav-link">Realisasi</Link></li>
            </ul>
         </li>
