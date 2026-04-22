@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
 import { AppDataSource } from '../ormconfig';
+import bcrypt from 'bcryptjs';
 import { User } from '../entities/User';
 
 const repo = () => AppDataSource.getRepository(User);
@@ -78,12 +79,16 @@ export async function importUsersFromFile(req: Request, res: Response) {
           existing.email = email ?? existing.email;
           existing.role = role ?? existing.role;
           existing.site = site ?? existing.site;
-          if (password) existing.password = password;
+          if (password) {
+            const hashed = await bcrypt.hash(String(password), 10);
+            existing.password = hashed;
+          }
           const saved = await repo().save(existing as any);
           console.log('[IMPORT] updated user id=', (saved as any).id);
           results.push({ row: rowNum, status: 'updated', id: (saved as any).id });
         } else {
-          const u = repo().create({ name, nipp, email: email ?? undefined, role, site, password } as any);
+          const hashed = password ? await bcrypt.hash(String(password), 10) : undefined;
+          const u = repo().create({ name, nipp, email: email ?? undefined, role, site, password: hashed } as any);
           const saved = await repo().save(u as any);
           console.log('[IMPORT] created user id=', (saved as any).id);
           results.push({ row: rowNum, status: 'created', id: (saved as any).id });
