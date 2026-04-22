@@ -145,7 +145,9 @@ export async function importAlats(req: Request, res: Response) {
     const jenisRepo = AppDataSource.getRepository(MasterJenisAlat);
     const siteRepo = AppDataSource.getRepository(MasterSite);
 
+    const isPreview = String(req.query.preview || '').toLowerCase() === '1' || String(req.query.preview || '').toLowerCase() === 'true';
     const results: { created: number; skipped: number; errors: any[] } = { created: 0, skipped: 0, errors: [] };
+    const previewRows: any[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -202,6 +204,28 @@ export async function importAlats(req: Request, res: Response) {
           }
         }
 
+        // build preview row info
+        const previewRow = {
+          row: i+1,
+          nama: String(nama).trim(),
+          kode,
+          kode_alias,
+          serial_no,
+          jenisVal,
+          jenisFound: !!jenis_alat,
+          jenis: jenis_alat ? { id: jenis_alat.id, nama: jenis_alat.nama } : null,
+          siteVal,
+          siteFound: !!site,
+          site: site ? { id: site.id, name: site.name } : null,
+          notes,
+          status
+        };
+
+        if (isPreview) {
+          previewRows.push(previewRow);
+          continue;
+        }
+
         // If jenis_alat is required by DB and not found, skip and record error
         if (!jenis_alat) {
           results.errors.push({ row: i+1, error: `jenis not found or invalid: ${jenisVal}` });
@@ -221,11 +245,12 @@ export async function importAlats(req: Request, res: Response) {
     try { fs.unlinkSync(path); } catch (e) { /* ignore */ }
 
     // Include debug info to help troubleshooting empty imports
-    const preview = rows.slice(0, 10);
     console.info('importAlats: parsedRows=', rows.length, 'created=', results.created, 'skipped=', results.skipped);
-    if (preview.length > 0) console.info('importAlats: preview row 1 keys=', Object.keys(preview[0]));
+    if (isPreview) {
+      return res.json({ message: 'preview parsed', parsedCount: rows.length, previewRows, errors: results.errors });
+    }
 
-    return res.json({ message: 'import complete', results, parsedCount: rows.length, preview });
+    return res.json({ message: 'import complete', results, parsedCount: rows.length, errors: results.errors });
   } catch (err) {
     console.error('importAlats error', err);
     return res.status(500).json({ message: 'Failed to import alats', detail: err instanceof Error ? err.message : err });
