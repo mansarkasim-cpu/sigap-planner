@@ -42,7 +42,7 @@ export default function DailyEquipmentHourMeter(){
   const [form, setForm] = useState({ site_id: '', alat_id: '', kode_alat: '', nama_alat: '', jenis_alat_id: '', engine_hour: '', teknisi_id: '', jam: '' })
   const [formError, setFormError] = useState('')
 
-  useEffect(()=>{ loadSites(); loadJenisAlats(); load() }, [])
+  useEffect(()=>{ loadSites(); loadJenisAlats(); }, [])
 
   useEffect(()=>{ loadAlats() }, [])
   // reload users when site filter in form changes
@@ -51,15 +51,35 @@ export default function DailyEquipmentHourMeter(){
   useEffect(()=>{ setPage(1); load() }, [siteId, jenisAlatId, date, perPage])
 
   async function loadSites(){
-    try{ const res = await apiClient('/master/sites'); setSites(res?.data || res || []) }catch(e){ console.error(e) }
+    try{
+      const me = await apiClient('/auth/me').catch(()=>null)
+      const userSite = me?.site || me?.data?.site || null
+      if (userSite && (userSite.id || userSite.code || userSite.name)){
+        const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, name: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id) }
+        setSites([siteObj])
+        setSiteId(siteObj.id)
+        setForm(f=>({...f, site_id: siteObj.id}))
+        await loadAlats(siteObj.id)
+        await load(1, siteObj.id)
+        return
+      }
+      const res = await apiClient('/master/sites')
+      setSites(res?.data || res || [])
+      await loadAlats()
+      await load(1)
+    }catch(e){ console.error(e) }
   }
 
   async function loadJenisAlats(){
     try{ const res = await apiClient('/master/jenis-alat'); setJenisAlats(res?.data || res || []) }catch(e){ console.error(e) }
   }
 
-  async function loadAlats(){
-    try{ const res = await apiClient('/master/alats?page=1&pageSize=1000'); setAlats(res?.data || res || []) }catch(e){ console.error(e) }
+  async function loadAlats(siteIdForAlats){
+    try{
+      const qs = siteIdForAlats ? `?site_id=${encodeURIComponent(siteIdForAlats)}&page=1&pageSize=1000` : '?page=1&pageSize=1000'
+      const res = await apiClient(`/master/alats${qs}`)
+      setAlats(res?.data || res || [])
+    }catch(e){ console.error(e) }
   }
 
   async function loadUsers(siteFilter){
@@ -80,11 +100,12 @@ export default function DailyEquipmentHourMeter(){
     }catch(e){ console.error(e) }
   }
 
-  async function load(p = page){
+  async function load(p = page, explicitSiteId){
     setLoading(true)
     try{
+      const sid = explicitSiteId ?? siteId
       const qs = []
-      if (siteId) qs.push(`site_id=${encodeURIComponent(siteId)}`)
+      if (sid) qs.push(`site_id=${encodeURIComponent(sid)}`)
       if (jenisAlatId) qs.push(`jenis_alat_id=${encodeURIComponent(jenisAlatId)}`)
       if (date) qs.push(`date=${encodeURIComponent(date)}`)
       qs.push(`page=${p}`)

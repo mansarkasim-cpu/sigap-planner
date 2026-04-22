@@ -38,12 +38,27 @@ export default function ShiftManager() {
 
   async function loadSites() {
     try {
+      // try to determine current user's site first
+      let userSite = null
+      try{
+        const me = await apiClient('/auth/me')
+        const u = me?.site ?? (me?.data && me.data.site) ?? null
+        if (u) userSite = u.name || u.code || (u.id ? String(u.id) : null) || String(u)
+      }catch(e){ /* ignore */ }
+
       const res = await apiClient('/users?page=1&pageSize=1000');
       const rows = (res?.data ?? res) || [];
       // users may store site in different fields depending on source: prefer `site`, fall back to `vendor_cabang`
       const uniqueSites = Array.from(new Set(rows.map(r => r.site || r.vendor_cabang || ''))).filter(Boolean);
-      setSites(uniqueSites);
-      if (!site && uniqueSites[0]) setSite(uniqueSites[0]);
+      if (userSite) {
+        const found = uniqueSites.find(s => String(s).toLowerCase() === String(userSite).toLowerCase());
+        const option = found || userSite;
+        setSites([option]);
+        setSite(option);
+      } else {
+        setSites(uniqueSites);
+        if (!site && uniqueSites[0]) setSite(uniqueSites[0]);
+      }
     } catch (err) {
       console.error('load sites', err);
     }

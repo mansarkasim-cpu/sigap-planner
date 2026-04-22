@@ -66,6 +66,19 @@ export default function Dashboard(){
   async function loadDashboard(){
     setLoading(true)
     try{
+      // try to determine current user's site from /auth/me or localStorage
+      let siteFilter = null
+      try{
+        const me = await apiClient('/auth/me')
+        const userSite = me?.site ?? (me?.data && me.data.site) ?? null
+        if (userSite) {
+          siteFilter = userSite.name || userSite.code || (userSite.id ? String(userSite.id) : null) || String(userSite)
+        } else {
+          try{ siteFilter = localStorage.getItem('sigap_site') } catch(e) { /* ignore */ }
+        }
+      }catch(e){
+        try{ siteFilter = localStorage.getItem('sigap_site') } catch(err) { /* ignore */ }
+      }
       async function fetchAllWorkOrders(){
         // Use optimized backend endpoint to reduce payload and improve query performance
         const out = []
@@ -73,7 +86,8 @@ export default function Dashboard(){
         const MAX_PAGES = 20
         let page = 1
         while (page <= MAX_PAGES){
-          const res = await apiClient(`/work-orders/list-optimized?page=${page}&pageSize=${effectivePageSize}&exclude_work_type=DAILY`)
+          const url = `/work-orders/list-optimized?page=${page}&pageSize=${effectivePageSize}&exclude_work_type=DAILY${siteFilter ? ('&site=' + encodeURIComponent(siteFilter)) : ''}`
+          const res = await apiClient(url)
           const rows = res?.data ?? res ?? []
           const meta = res?.meta ?? null
           if (!Array.isArray(rows) || rows.length === 0) break

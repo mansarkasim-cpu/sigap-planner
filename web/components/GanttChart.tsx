@@ -840,6 +840,21 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
   async function loadSites() {
     try {
+      // prefer user's site when available
+      let userSiteVal: string | null = null
+      try{
+        const me = await apiClient('/auth/me')
+        const u = me?.site ?? (me?.data && me.data.site) ?? null
+        if (u) userSiteVal = (u.name || u.code || (u.id ? String(u.id) : null) || String(u)).toString()
+      }catch(e){ /* ignore */ }
+
+      if (userSiteVal) {
+        setSites([userSiteVal])
+        setSite(userSiteVal)
+        return
+      }
+
+      // fallback: derive site list from users as before
       const res = await apiClient('/users?page=1&pageSize=1000');
       const rows: any[] = (res?.data ?? res) || [];
       const uniqueSites: string[] = Array.from(new Set(rows.map((r: any) => (r.site || r.vendor_cabang || '').toString()))).filter(Boolean);

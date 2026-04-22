@@ -249,10 +249,33 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     let mounted = true;
     async function loadSites() {
       try {
+        // prefer user's site when available
+        let userSiteName: string | null = null
+        try{
+          const me = await apiClient('/auth/me')
+          const us = me?.site ?? (me?.data && me.data.site) ?? null
+          if (us) userSiteName = (us.name || us.code || (us.id ? String(us.id) : null) || String(us)).toString()
+        }catch(e){ /* ignore */ }
+
         const res = await apiClient('/master/sites');
         const rows = res?.data ?? res ?? [];
         const names = Array.isArray(rows) ? rows.map((r: any) => (r?.name || r?.nama || r?.location || r?.code || '').toString()).filter(Boolean) : [];
-        if (mounted) setLocations(names);
+        if (mounted) {
+          if (userSiteName) {
+            // try to find matching site by name/code/id and restrict options
+            const found = names.find(n => String(n).toLowerCase() === String(userSiteName).toLowerCase());
+            if (found) {
+              setLocations([found]);
+              setLocationFilter(found);
+            } else {
+              // if no exact name match, still set filter to userSiteName and show all options
+              setLocations(names);
+              setLocationFilter(userSiteName);
+            }
+          } else {
+            setLocations(names);
+          }
+        }
       } catch (e) {
         if (mounted) setLocations([]);
       }

@@ -183,9 +183,29 @@ export default function Page() {
     async function loadSites() {
       setSitesLoading(true)
       try {
+        // prefer user's site from /auth/me, fallback to master/sites
+        let userSiteVal = null
+        try{
+          const me = await apiClient('/auth/me')
+          const u = me?.site ?? (me?.data && me.data.site) ?? null
+          if (u) userSiteVal = (u.name || u.code || (u.id ? String(u.id) : null) || String(u)).toString()
+        }catch(e){ /* ignore */ }
+
         const res = await apiClient('/master/sites')
         const items = Array.isArray(res) ? res : (res?.data ?? [])
-        if (mounted) setSites(items)
+        if (!mounted) return
+        if (userSiteVal) {
+          const found = items.find(si => String(si.name).toLowerCase() === String(userSiteVal).toLowerCase() || String(si.code).toLowerCase() === String(userSiteVal).toLowerCase() || String(si.id) === String(userSiteVal))
+          if (found) {
+            setSites([found])
+            setSite(found.name || found.code || String(found.id))
+          } else {
+            setSites(items)
+            setSite(userSiteVal)
+          }
+        } else {
+          setSites(items)
+        }
       } catch (e) {
         console.error('failed to load sites', e)
         if (mounted) setSites([])

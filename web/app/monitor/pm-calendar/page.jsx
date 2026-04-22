@@ -106,11 +106,13 @@ export default function PMCalendarPage() {
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
 
-  async function load() {
+  async function load(explicitSiteId) {
     setLoading(true);
     setError('');
     try {
-      const json = await apiFetch('/pm/calendar?limit=1000');
+      const sid = explicitSiteId ?? siteId
+      const params = sid ? `?limit=1000&site_id=${encodeURIComponent(sid)}` : '?limit=1000'
+      const json = await apiFetch('/pm/calendar' + params);
       setRows(json.data || []);
     } catch (e) {
       console.error('load pm calendar', e);
@@ -134,9 +136,18 @@ export default function PMCalendarPage() {
   useEffect(() => {
     async function fetchSites() {
       try {
+        const me = await apiFetch('/auth/me').catch(() => null)
+        const userSite = me?.site || me?.data?.site || null
+        if (userSite && (userSite.id || userSite.code || userSite.name)){
+          const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, nama_site: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id), name: userSite.name || userSite.nama }
+          setSites([siteObj])
+          setSiteId(siteObj.id)
+          await load(siteObj.id)
+          return
+        }
         const j = await apiFetch('/master/sites?limit=1000');
-        // response may be { data: [...] } or array
         setSites(j.data || j || []);
+        await load()
       } catch (err) {
         console.error('fetch sites', err);
       }
@@ -179,7 +190,7 @@ export default function PMCalendarPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  // initial load is triggered from fetchSites to ensure site scoping
 
   // Auto-refresh calendar and visible history every 5 minutes
   useEffect(() => {
