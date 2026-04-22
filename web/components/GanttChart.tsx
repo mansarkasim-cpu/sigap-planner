@@ -500,7 +500,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     return () => clearInterval(id);
   }, [site, selectedDate, pageSize]);
 
-  async function load() {
+  async function load(explicitSite?: string) {
     setLoading(true);
     setError(null);
     try {
@@ -550,10 +550,11 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
         return Array.from(map.values());
       }
 
-      const siteParam = site ? `&site=${encodeURIComponent(site)}` : '';
+      const siteToUse = explicitSite ?? site
+      const siteParam = siteToUse ? `&site=${encodeURIComponent(siteToUse)}` : '';
       // If client didn't choose a site, include a timezone hint so server can
       // correctly interpret stored naive timestamps for the default site.
-      const tzParam = site ? '' : `&tz=${encodeURIComponent('Asia/Makassar')}`;
+      const tzParam = siteToUse ? '' : `&tz=${encodeURIComponent('Asia/Makassar')}`;
       const startIso = new Date(dayStartMs).toISOString();
       const endIso = new Date(dayEndMs).toISOString();
       // Use the new optimized Gantt endpoint which returns only workorders overlapping the window
@@ -851,6 +852,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       if (userSiteVal) {
         setSites([userSiteVal])
         setSite(userSiteVal)
+        try{ await load(undefined, userSiteVal) }catch(e){}
         return
       }
 
