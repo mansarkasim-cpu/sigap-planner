@@ -39,6 +39,9 @@ export default function DailyEquipmentHourMeter(){
   const [perPage, setPerPage] = useState(10)
   const [total, setTotal] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [editForm, setEditForm] = useState({ site_id: '', alat_id: '', kode_alat: '', nama_alat: '', jenis_alat_id: '', engine_hour: '', teknisi_id: '', jam: '', notes: '' })
   const [form, setForm] = useState({ site_id: '', alat_id: '', kode_alat: '', nama_alat: '', jenis_alat_id: '', engine_hour: '', teknisi_id: '', jam: '' })
   const [formError, setFormError] = useState('')
 
@@ -217,6 +220,7 @@ export default function DailyEquipmentHourMeter(){
               <TableHead>
                 <TableRow>
                   <TableCell>No</TableCell>
+                  <TableCell>Actions</TableCell>
                   <TableCell>Kode Alat</TableCell>
                   <TableCell>Nama Alat</TableCell>
                   <TableCell>Jenis Alat</TableCell>
@@ -229,6 +233,26 @@ export default function DailyEquipmentHourMeter(){
                 {items.map((it, idx)=> (
                   <TableRow key={it.id || idx}>
                     <TableCell>{(page-1)*perPage + idx + 1}</TableCell>
+                    <TableCell>
+                      <Button size="small" onClick={()=>{
+                        // open edit dialog
+                        setEditId(it.id)
+                        setEditForm({
+                          site_id: it.site?.id || it.site_id || '',
+                          alat_id: it.alat?.id || it.alat_id || '',
+                          kode_alat: it.alat?.kode || it.kode_alat || '',
+                          nama_alat: it.alat?.nama || it.nama_alat || '',
+                          jenis_alat_id: it.jenis_alat?.id || it.jenis_alat_id || '',
+                          engine_hour: it.engine_hour ?? it.hour_meter ?? it.value ?? '',
+                          teknisi_id: (it.teknisi && (it.teknisi.id || it.teknisi.user_id)) ? (it.teknisi.id || it.teknisi.user_id) : (it.teknisi_id || ''),
+                          jam: it.recorded_at || it.created_at || it.time || '',
+                          notes: it.notes || ''
+                        })
+                        // ensure teknisi list includes site technicians
+                        loadUsers(it.site?.id || it.site_id || '')
+                        setEditOpen(true)
+                      }}>Edit</Button>
+                    </TableCell>
                     <TableCell>{it.alat?.kode || it.alat?.code || it.alat?.serial_no || '-'}</TableCell>
                     <TableCell>{it.alat?.nama || it.alat?.name || '-'}</TableCell>
                     <TableCell>{it.jenis_alat?.nama || it.jenis_alat?.name || it.jenis || '-'}</TableCell>
@@ -250,6 +274,59 @@ export default function DailyEquipmentHourMeter(){
           </>
         )}
       </Paper>
+
+      <Dialog open={editOpen} onClose={()=>setEditOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit Equipment Hour Meter</DialogTitle>
+        <DialogContent>
+          {formError && <Alert severity="error" sx={{mb:1}}>{formError}</Alert>}
+          <Box sx={{display:'flex',flexDirection:'column',gap:1,mt:1}}>
+            <TextField select size="small" label="Site" value={editForm.site_id || ''} onChange={e=>setEditForm(f=>({...f, site_id: e.target.value}))}>
+              <MenuItem value="">-- Select site --</MenuItem>
+              {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama}</MenuItem>)}
+            </TextField>
+
+            <TextField select size="small" label="Alat" value={editForm.alat_id} onChange={e=>{ const val = e.target.value; const selected = alats.find(a=>String(a.id)===String(val)); setEditForm(f=>({ ...f, alat_id: val, kode_alat: selected?.kode || '', nama_alat: selected?.nama || '' })) }}>
+              <MenuItem value="">-- Select alat --</MenuItem>
+              {alats.filter(a=>{
+                const matchJenis = !editForm.jenis_alat_id || (a.jenis_alat && String(a.jenis_alat.id) === String(editForm.jenis_alat_id)) || String(a.jenis_alat_id) === String(editForm.jenis_alat_id)
+                const matchSite = !editForm.site_id || (a.site && String(a.site.id) === String(editForm.site_id)) || String(a.site_id) === String(editForm.site_id)
+                return matchJenis && matchSite
+              }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
+            </TextField>
+
+            <TextField size="small" label="Engine/Hour Meter" type="number" value={editForm.engine_hour} onChange={e=>setEditForm(f=>({...f, engine_hour: e.target.value}))} />
+            <TextField select size="small" label="Teknisi" value={editForm.teknisi_id || ''} onChange={e=>setEditForm(f=>({...f, teknisi_id: e.target.value}))}>
+              <MenuItem value="">-- Select teknisi --</MenuItem>
+              {users.map(u=> <MenuItem key={u.id} value={u.id}>{u.name} {u.nipp? `(${u.nipp})` : ''}</MenuItem>)}
+            </TextField>
+            <TextField size="small" label="Jam" type="datetime-local" value={editForm.jam ? (new Date(editForm.jam)).toISOString().slice(0,16) : ''} onChange={e=>setEditForm(f=>({...f, jam: e.target.value}))} InputLabelProps={{shrink:true}} />
+            <TextField size="small" label="Notes" value={editForm.notes || ''} onChange={e=>setEditForm(f=>({...f, notes: e.target.value}))} multiline minRows={2} />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setEditOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={async ()=>{
+            try{
+              setFormError('')
+              if (!editId) return setFormError('Missing id')
+              if (!editForm.alat_id) return setFormError('Silakan pilih alat')
+              if (!editForm.engine_hour) return setFormError('Masukkan nilai engine/hour')
+              const payload = {
+                site_id: editForm.site_id || undefined,
+                alat_id: editForm.alat_id,
+                jenis_alat_id: editForm.jenis_alat_id || undefined,
+                engine_hour: Number(editForm.engine_hour),
+                teknisi_id: editForm.teknisi_id || undefined,
+                recorded_at: editForm.jam ? new Date(editForm.jam).toISOString() : undefined,
+                notes: editForm.notes || undefined
+              }
+              await apiClient(`/monitor/equipment-hour-meter/${editId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+              setEditOpen(false)
+              load(1)
+            }catch(e){ console.error(e); setFormError('Failed to update entry') }
+          }}>Save</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

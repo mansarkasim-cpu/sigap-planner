@@ -269,3 +269,32 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       return res.status(500).json({ message: 'Failed to create entry' });
     }
   }
+
+  // PATCH /api/monitor/equipment-hour-meter/:id
+  export async function updateEquipmentHourMeter(req: Request, res: Response) {
+    try {
+      const id = req.params.id ? Number(req.params.id) : undefined
+      if (!id) return res.status(400).json({ message: 'Missing id' })
+      const body = req.body || {}
+      const repo = AppDataSource.getRepository(DailyEquipmentHourMeter)
+      const existing = await repo.findOne({ where: { id }, relations: ['alat','jenis_alat','site','teknisi'] })
+      if (!existing) return res.status(404).json({ message: 'Not found' })
+
+      // allow updating selected fields
+      if (body.engine_hour !== undefined) existing.engine_hour = Number(body.engine_hour)
+      if (body.teknisi_id !== undefined) existing.teknisi = body.teknisi_id ? { id: String(body.teknisi_id) } as any : undefined
+      if (body.recorded_at !== undefined) existing.recorded_at = body.recorded_at ? new Date(body.recorded_at) : existing.recorded_at
+      if (body.notes !== undefined) existing.notes = body.notes
+
+      // optionally allow changing site/alarm references (only if provided)
+      if (body.site_id !== undefined) existing.site = body.site_id ? { id: Number(body.site_id) } as any : undefined
+      if (body.alat_id !== undefined) existing.alat = body.alat_id ? { id: Number(body.alat_id) } as any : existing.alat
+      if (body.jenis_alat_id !== undefined) existing.jenis_alat = body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } as any : existing.jenis_alat
+
+      const saved = await repo.save(existing as any)
+      return res.json({ data: saved })
+    } catch (err) {
+      console.error('updateEquipmentHourMeter error', err)
+      return res.status(500).json({ message: 'Failed to update entry' })
+    }
+  }
