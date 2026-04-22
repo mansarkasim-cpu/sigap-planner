@@ -268,7 +268,7 @@ export default function WeeklyMonitoring(){
             {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.id}</MenuItem>)}
           </TextField>
           <TextField size="small" label="Week Start" type="date" value={weekStart} onChange={e=>setWeekStart(e.target.value)} InputLabelProps={{shrink:true}} />
-          <Button variant="contained" onClick={load}>Refresh</Button>
+          <Button variant="contained" onClick={() => load()}>Refresh</Button>
           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ml:1}}>
             <Tooltip title={isFullscreen? 'Exit fullscreen' : 'Enter fullscreen'}>
               <IconButton size="small" onClick={async ()=>{

@@ -1138,7 +1138,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   <IconButton size="small" onClick={() => setScale(s => Math.min(4, s * 1.1))}><ZoomInIcon /></IconButton>
                 </Tooltip>
                 <Tooltip title="Refresh">
-                  <IconButton size="small" onClick={load}><RefreshIcon /></IconButton>
+                  <IconButton size="small" onClick={() => load()}><RefreshIcon /></IconButton>
                 </Tooltip>
                 {/* Debug WO button hidden in production */}
                 <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>

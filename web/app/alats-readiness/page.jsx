@@ -291,7 +291,7 @@ export default function AlatReadiness(){
           </FormControl>
 
           <Button size="small" sx={{mr:1}} onClick={() => router.push('/dashboard')}>Kembali</Button>
-          <Button size="small" variant="contained" onClick={load}>Refresh</Button>
+          <Button size="small" variant="contained" onClick={() => load()}>Refresh</Button>
         </Box>
       </Box>
 
@@ -301,7 +301,7 @@ export default function AlatReadiness(){
         <Paper sx={{p:1, mb:2, background:'#fff3f3', color:'#8a1f1f'}}>
           <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <Box>Gagal memuat data: {String(error)}</Box>
-            <Button size="small" onClick={load}>Coba lagi</Button>
+            <Button size="small" onClick={() => load()}>Coba lagi</Button>
           </Box>
         </Paper>
       )}

@@ -158,7 +158,7 @@ export default function UsersPage() {
         </Box>
 
         <Box sx={{ display:'flex', gap:1 }}>
-          <Button variant="outlined" color="inherit" onClick={load} startIcon={loading ? <CircularProgress size={18} /> : null}>Refresh</Button>
+          <Button variant="outlined" color="inherit" onClick={() => load()} startIcon={loading ? <CircularProgress size={18} /> : null}>Refresh</Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Create User</Button>
         </Box>
       </Box>
@@ -187,7 +187,7 @@ export default function UsersPage() {
             </FormControl>
           </Grid>
           <Grid item xs={12} md={2}>
-            <Button fullWidth variant="contained" onClick={load}>Apply</Button>
+            <Button fullWidth variant="contained" onClick={() => load()}>Apply</Button>
           </Grid>
         </Grid>
       </Paper>
