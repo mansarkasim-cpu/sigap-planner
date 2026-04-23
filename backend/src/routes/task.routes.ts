@@ -23,8 +23,8 @@ router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: R
       .where('t.workOrder = :wo', { wo: workOrderId });
 
     if (filterTaskId) {
-      // match by UUID id OR by external_id (legacy SIGAP id)
-      qb.andWhere('(t.id = :tid OR t.external_id = :tid)', { tid: filterTaskId });
+      // cast t.id to text to avoid PostgreSQL UUID type mismatch with string param
+      qb.andWhere('(CAST(t.id AS TEXT) = :tid OR t.external_id = :tid)', { tid: filterTaskId });
     }
 
     const rows = await qb.orderBy('t.task_number', 'ASC').getMany();
