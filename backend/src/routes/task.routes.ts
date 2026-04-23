@@ -11,16 +11,23 @@ import { validate, IsNotEmpty, IsOptional, IsInt } from 'class-validator';
 const router = Router();
 
 // GET /api/work-orders/:id/tasks
+// Optional query param: ?taskId=<uuid>  → returns only that one task (for mobile WODetail)
 router.get('/work-orders/:id/tasks', authMiddleware, async (req: Request, res: Response) => {
   try {
     const workOrderId = req.params.id;
+    const filterTaskId = req.query.taskId ? String(req.query.taskId).trim() : null;
     const repo = AppDataSource.getRepository(Task);
-    const rows = await repo.createQueryBuilder('t')
+    const qb = repo.createQueryBuilder('t')
       .leftJoinAndSelect('t.assignments', 'a')
       .leftJoinAndSelect('a.user', 'u')
-      .where('t.workOrder = :wo', { wo: workOrderId })
-      .orderBy('t.task_number', 'ASC')
-      .getMany();
+      .where('t.workOrder = :wo', { wo: workOrderId });
+
+    if (filterTaskId) {
+      // match by UUID id OR by external_id (legacy SIGAP id)
+      qb.andWhere('(t.id = :tid OR t.external_id = :tid)', { tid: filterTaskId });
+    }
+
+    const rows = await qb.orderBy('t.task_number', 'ASC').getMany();
 
     // compute per-task realisasi counts by joining task->realisasi for this workorder
     try {

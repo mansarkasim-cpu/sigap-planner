@@ -16,11 +16,13 @@ class WODetailScreen extends StatefulWidget {
   final String assignmentId;
   final String baseUrl;
   final String token;
+  final String? taskId;
   const WODetailScreen(
       {required this.woId,
       required this.assignmentId,
       required this.baseUrl,
       required this.token,
+      this.taskId,
       super.key});
 
   @override
@@ -50,6 +52,9 @@ class _WODetailScreenState extends State<WODetailScreen>
   @override
   void initState() {
     super.initState();
+    if (widget.taskId != null && widget.taskId!.isNotEmpty) {
+      _selectedTaskId = widget.taskId;
+    }
     _loadPrefs().then((_) => _loadAll());
     // swipe hint animation: slight left slide to indicate swipe direction
     _swipeController = AnimationController(
@@ -149,7 +154,10 @@ class _WODetailScreenState extends State<WODetailScreen>
               (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
           if (tid.isNotEmpty) {
             setState(() {
-              _selectedTaskId = tid;
+              // only update if not already set from the constructor (passed from Inbox)
+              if (_selectedTaskId == null || _selectedTaskId!.isEmpty) {
+                _selectedTaskId = tid;
+              }
               assignmentDetail =
                   (found is Map) ? Map<String, dynamic>.from(found) : null;
               // prefer explicit start fields from assignment if available
@@ -496,8 +504,13 @@ class _WODetailScreenState extends State<WODetailScreen>
   Future<void> _loadTasks() async {
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
+      // If we know which task was selected in Inbox, fetch only that task server-side.
+      // This avoids loading all tasks and guarantees the correct task is shown.
+      final taskParam = (_selectedTaskId != null && _selectedTaskId!.isNotEmpty)
+          ? '?taskId=${Uri.encodeComponent(_selectedTaskId!)}'
+          : '';
       final tres = await api
-          .get('/work-orders/${Uri.encodeComponent(widget.woId)}/tasks');
+          .get('/work-orders/${Uri.encodeComponent(widget.woId)}/tasks$taskParam');
       setState(() {
         tasks = (tres is List) ? tres : (tres['data'] ?? tres);
       });
@@ -1598,14 +1611,18 @@ class _WODetailScreenState extends State<WODetailScreen>
                         if (tasks.isEmpty)
                           return const Text('No tasks available',
                               style: TextStyle(color: Colors.grey));
-                        // filter tasks to only those selected from Inbox when available
-                        final filteredTasks = (tasks.where((t) {
-                          if (_selectedTaskId == null) return true;
-                          final id =
-                              (t['id'] ?? t['external_id'] ?? '')?.toString() ??
-                                  '';
-                          return id == _selectedTaskId;
-                        })).toList();
+                        // Server already filters by taskId when _selectedTaskId is set.
+                        // This client-side filter is a safety net for any residual mismatch.
+                        final filteredTasks = (_selectedTaskId == null || _selectedTaskId!.isEmpty)
+                            ? tasks
+                            : tasks.where((t) {
+                                if (t is! Map) return false;
+                                for (final k in ['id', 'external_id', 'task_id', 'taskId']) {
+                                  final v = t[k]?.toString() ?? '';
+                                  if (v.isNotEmpty && v == _selectedTaskId) return true;
+                                }
+                                return false;
+                              }).toList();
 
                         // compute weighted progress
                         double total = 0.0;
