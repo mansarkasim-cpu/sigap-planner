@@ -2,11 +2,64 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../lib/api-client';
 import { Button, TextField, MenuItem, Paper, IconButton, Chip, Box, Typography, Checkbox } from '@mui/material';
-const SHIFT_DEFS = [
-  { id: 1, label: 'Shift 1', time: '07:00 - 15:00' },
-  { id: 2, label: 'Shift 2', time: '15:00 - 23:00' },
-  { id: 3, label: 'Shift 3', time: '23:00 - 07:00' },
-];
+const SITE_SHIFT_SCHEMAS = {
+  MAKASSAR_NEW_PORT: [
+    { id: 1, label: 'Shift 1', time: '07:00 - 15:00' },
+    { id: 2, label: 'Shift 2', time: '15:00 - 23:00' },
+    { id: 3, label: 'Shift 3', time: '23:00 - 07:00' },
+  ],
+  TPK_BELAWAN_DOMESTIK: [
+    { id: 1, label: 'Shift 1', time: '00:00 - 08:00' },
+    { id: 2, label: 'Shift 2', time: '08:00 - 16:00' },
+    { id: 3, label: 'Shift 3', time: '16:00 - 24:00', end_next_day: true },
+  ],
+};
+
+function getShiftDefsForSite(site) {
+  if (!site) return SITE_SHIFT_SCHEMAS.MAKASSAR_NEW_PORT;
+  // normalize common variants like "SITE TPK BELAWAN DOMESTIK" -> "TPK_BELAWAN_DOMESTIK"
+  let normalized = String(site).toUpperCase().trim();
+  // remove leading word "SITE" if present
+  normalized = normalized.replace(/^SITE\b\s*/i, '');
+  // replace runs of whitespace or non-word chars with underscore
+  normalized = normalized.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return SITE_SHIFT_SCHEMAS[normalized] || SITE_SHIFT_SCHEMAS.MAKASSAR_NEW_PORT;
+}
+
+function _pad(n) { return String(n).padStart(2, '0'); }
+
+function getShiftPreview(shift, dateStr) {
+  if (!shift || !dateStr) return null;
+  // shift.time expected like '23:00 - 07:00' or '16:00 - 24:00'
+  const parts = String(shift.time || '').split('-').map(s => s.trim());
+  if (parts.length < 2) return null;
+  const startStr = parts[0];
+  const endStr = parts[1];
+  const [shH, shM] = (startStr.split(':').map(Number));
+  const [ehRaw, emRaw] = (endStr.split(':').map(Number));
+  const eh = Number.isFinite(ehRaw) ? ehRaw : 0;
+  const em = Number.isFinite(emRaw) ? emRaw : 0;
+
+  // build start and end Date objects using local timezone
+  const start = new Date(`${dateStr}T${_pad(shH)}:${_pad(shM || 0)}:00`);
+  let endHour = eh === 24 ? 0 : eh;
+  let end = new Date(`${dateStr}T${_pad(endHour)}:${_pad(em)}:00`);
+
+  // if end is <= start, it's next day (also treat 24:00 as next day)
+  if (eh === 24 || end.getTime() <= start.getTime()) {
+    end.setDate(end.getDate() + 1);
+  }
+
+  // only show preview when end day differs from start day
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth() && start.getDate() === end.getDate()) {
+    return null;
+  }
+
+  function fmt(d) {
+    return `${_pad(d.getDate())}/${_pad(d.getMonth()+1)}/${d.getFullYear()} ${_pad(d.getHours())}:${_pad(d.getMinutes())}`;
+  }
+  return `${fmt(start)} → ${fmt(end)}`;
+}
 
 function Badge({ children, color = '#2563eb' }) {
   return <Chip label={children} sx={{ backgroundColor: color, color: '#fff', fontWeight: 700 }} size="small" />;
@@ -15,6 +68,7 @@ function Badge({ children, color = '#2563eb' }) {
 export default function ShiftManager() {
   const [sites, setSites] = useState([]);
   const [site, setSite] = useState('');
+  const shiftDefs = useMemo(() => getShiftDefsForSite(site), [site]);
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -404,7 +458,7 @@ export default function ShiftManager() {
           <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
             <TextField type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} size="small" />
             <TextField select value={selectedShift} onChange={e => setSelectedShift(Number(e.target.value))} size="small">
-              {SHIFT_DEFS.map(s => <MenuItem key={s.id} value={s.id}>{s.label} — {s.time}</MenuItem>)}
+              {shiftDefs.map(s => <MenuItem key={s.id} value={s.id}>{s.label} — {s.time}</MenuItem>)}
             </TextField>
           </Box>
 
@@ -454,11 +508,13 @@ export default function ShiftManager() {
                       <Typography variant="caption" color="text.secondary">{dStr === (new Date().toISOString().slice(0,10)) ? 'Today' : ''}</Typography>
                     </Box>
                     <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                      {SHIFT_DEFS.map(s => {
+                      {shiftDefs.map(s => {
                         const sAssigns = dayAssigns.filter(a => Number(a.shift) === s.id);
+                        const preview = getShiftPreview(s, dStr);
                         return sAssigns.length === 0 ? null : (
                           <Box key={s.id}>
-                            <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>{s.label}</Typography>
+                                    <Typography sx={{ fontSize: 12, color: 'text.primary', fontWeight: 600 }}>{s.label} <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary', ml: 0.5 }}>{s.time}</Box></Typography>
+                                    {preview ? <Typography variant="caption" color="text.secondary">{preview}</Typography> : null}
                             {sAssigns.map(sa => {
                               const group = groupsById[sa.groupId];
                               return (<Box key={sa.id} sx={{ mt: 0.5 }}><Badge color="#2563eb">{group ? group.name : `Group ${sa.groupId}`}</Badge></Box>);
@@ -474,12 +530,14 @@ export default function ShiftManager() {
           </Box>
         ) : (
           <Box sx={{ display: 'grid', gap: 1 }}>
-          {SHIFT_DEFS.map(s => {
+          {shiftDefs.map(s => {
             const assigns = assignmentMap[s.id] || [];
+            const preview = getShiftPreview(s, selectedDate);
             return (
               <Paper key={s.id} sx={{ p: 1, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography sx={{ fontWeight: 800 }}>{s.label} <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary', ml: 1 }}>{s.time}</Box></Typography>
+                  {preview ? <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{preview}</Typography> : null}
                   {assigns.length > 0 ? (
                     <Box sx={{ mt: 1 }}>
                       {assigns.map(ass => {
