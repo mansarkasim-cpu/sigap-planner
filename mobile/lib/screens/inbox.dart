@@ -1935,8 +1935,16 @@ class _InboxScreenState extends State<InboxScreen> {
                 final Map<String, List<dynamic>> taskGroups = {};
                 for (final a in items) {
                   try {
-                    final tId =
-                        (a['task_id'] ?? a['task'] ?? '')?.toString() ?? '';
+                    String tId = '';
+                    final rawTaskId = a['task_id'];
+                    final rawTask = a['task'];
+                    if (rawTaskId != null && rawTaskId is! Map) {
+                      tId = rawTaskId.toString();
+                    } else if (rawTask is Map) {
+                      tId = (rawTask['id'] ?? rawTask['external_id'] ?? '').toString();
+                    } else if (rawTask != null && rawTask is! Map) {
+                      tId = rawTask.toString();
+                    }
                     final key = tId.isNotEmpty
                         ? tId
                         : ('__no_task__' + (a['id']?.toString() ?? ''));
@@ -1984,11 +1992,21 @@ class _InboxScreenState extends State<InboxScreen> {
                   final idx = entry.key;
                   final group = entry.value.value;
                   final firstAssign = group.isNotEmpty ? group.first : null;
-                  final taskId = (firstAssign != null)
-                      ? ((firstAssign['task_id'] ?? firstAssign['task'] ?? '')
-                              ?.toString() ??
-                          '')
-                      : '';
+                  // Extract taskId safely: task field may be a nested Map object
+                  String taskId = '';
+                  if (firstAssign != null) {
+                    final rawTaskId = firstAssign['task_id'];
+                    final rawTask = firstAssign['task'];
+                    if (rawTaskId != null && rawTaskId is String && rawTaskId.isNotEmpty) {
+                      taskId = rawTaskId;
+                    } else if (rawTaskId != null && rawTaskId is! Map) {
+                      taskId = rawTaskId.toString();
+                    } else if (rawTask is Map) {
+                      taskId = (rawTask['id'] ?? rawTask['external_id'] ?? '').toString();
+                    } else if (rawTask != null && rawTask is! Map) {
+                      taskId = rawTask.toString();
+                    }
+                  }
                   final task = taskId.isNotEmpty
                       ? (tasksById[taskId] ?? {})
                       : (firstAssign != null
@@ -2145,6 +2163,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                           : woKey),
                                       assignmentId:
                                           firstAssignmentId.toString(),
+                                      taskId: taskId.isNotEmpty ? taskId : null,
                                       baseUrl: API_BASE,
                                       token: _token ?? '')));
                       },
