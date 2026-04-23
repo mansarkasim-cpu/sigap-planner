@@ -55,7 +55,7 @@ class _WODetailScreenState extends State<WODetailScreen>
     if (widget.taskId != null && widget.taskId!.isNotEmpty) {
       _selectedTaskId = widget.taskId;
     }
-    _loadPrefs().then((_) => _loadAll());
+    _initLoad();
     // swipe hint animation: slight left slide to indicate swipe direction
     _swipeController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 900));
@@ -72,7 +72,8 @@ class _WODetailScreenState extends State<WODetailScreen>
     super.dispose();
   }
 
-  Future<void> _loadPrefs() async {
+  // Reads SharedPreferences (fast/local), then starts _loadAll() and role-check in parallel.
+  Future<void> _initLoad() async {
     try {
       final p = await SharedPreferences.getInstance();
       setState(() {
@@ -83,7 +84,11 @@ class _WODetailScreenState extends State<WODetailScreen>
         _techId = '';
       });
     }
-    // detect if current user is a lead_shift (so they can auto-approve their own submissions)
+    await Future.wait([_loadAll(), _checkLeadRole()]);
+  }
+
+  // Role-check runs in parallel with _loadAll; _isLead is only needed at submit time.
+  Future<void> _checkLeadRole() async {
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
       final me = await api.get('/auth/me');
@@ -94,7 +99,6 @@ class _WODetailScreenState extends State<WODetailScreen>
           : (role is List && role.isNotEmpty ? role[0] : '');
       bool leaderFlag = false;
       if (roleStr.toString().toLowerCase().contains('lead')) leaderFlag = true;
-      // also consider technician with shift_group.leader equal to user id (some backends use this pattern)
       if (!leaderFlag && user is Map) {
         try {
           final userId =
@@ -128,77 +132,113 @@ class _WODetailScreenState extends State<WODetailScreen>
     setState(() {
       loading = true;
     });
-    await Future.wait([
-      _loadDetail(),
-      _loadTasks(),
-      _loadAssignmentStatus(),
-      _loadAssignmentDetail()
-    ]);
+    if (_selectedTaskId != null && _selectedTaskId!.isNotEmpty) {
+      // taskId already known (passed from Inbox): all requests can run in parallel.
+      await Future.wait([
+        _loadDetail(),
+        _loadAssignmentInfo(),
+        _loadTasks(),
+      ]);
+    } else {
+      // taskId unknown: _loadAssignmentInfo must finish first to set _selectedTaskId.
+      await Future.wait([_loadDetail(), _loadAssignmentInfo()]);
+      await _loadTasks();
+    }
     await _loadLocalChecklist();
     setState(() {
       loading = false;
     });
   }
 
-  Future<void> _loadAssignmentDetail() async {
+  // Single API call that replaces both _loadAssignmentStatus and _loadAssignmentDetail.
+  Future<void> _loadAssignmentInfo() async {
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      final res = await api.get('/assignments');
-      final list = (res is List) ? res : (res['data'] ?? res);
-      if (list is List) {
-        final found = list.firstWhere(
-            (e) => (e['id'] ?? '')?.toString() == widget.assignmentId,
-            orElse: () => null);
-        if (found != null) {
-          final tid =
-              (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
-          if (tid.isNotEmpty) {
-            setState(() {
-              // only update if not already set from the constructor (passed from Inbox)
-              if (_selectedTaskId == null || _selectedTaskId!.isEmpty) {
-                _selectedTaskId = tid;
-              }
-              assignmentDetail =
-                  (found is Map) ? Map<String, dynamic>.from(found) : null;
-              // prefer explicit start fields from assignment if available
-              try {
-                final s = (found['start_date'] ??
-                    found['start_time'] ??
-                    found['start'] ??
-                    found['startTime']);
-                if (s != null) {
-                  try {
-                    final dt = DateTime.parse(s.toString());
-                    assignmentStart = dt.toUtc().toIso8601String();
-                  } catch (_) {
-                    assignmentStart = s.toString();
-                  }
-                }
-              } catch (_) {}
-            });
-            // also try LocalDB stored start time (swipe timestamp)
-            try {
-              final localStart = await LocalDB.instance
-                  .getAssignmentStart(widget.assignmentId);
-              if (localStart != null)
-                setState(() {
-                  assignmentStart = localStart.toUtc().toIso8601String();
-                });
-            } catch (_) {}
-            return;
+      Map<String, dynamic>? found;
+
+      // Try for-tech endpoints first (server-filtered, faster than fetching all assignments).
+      if (_techId != null && _techId!.isNotEmpty) {
+        try {
+          final res = await api.get(
+              '/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
+          final list = (res is Map && res['assignments'] != null)
+              ? res['assignments']
+              : ((res is List) ? res : (res['data'] ?? res));
+          if (list is List) {
+            final f = list.firstWhere(
+                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
+                orElse: () => null);
+            if (f != null) found = Map<String, dynamic>.from(f);
           }
+        } catch (_) {}
+      }
+
+      if (found == null) {
+        try {
+          final res = await api.get('/assignments/for-tech');
+          final list = (res is Map && res['assignments'] != null)
+              ? res['assignments']
+              : ((res is List) ? res : (res['data'] ?? res));
+          if (list is List) {
+            final f = list.firstWhere(
+                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
+                orElse: () => null);
+            if (f != null) found = Map<String, dynamic>.from(f);
+          }
+        } catch (_) {}
+      }
+
+      if (found == null) {
+        final res = await api.get('/assignments');
+        final list = (res is List) ? res : (res['data'] ?? res);
+        if (list is List) {
+          final f = list.firstWhere(
+              (e) => (e['id'] ?? '').toString() == widget.assignmentId,
+              orElse: () => null);
+          if (f != null) found = Map<String, dynamic>.from(f);
         }
       }
-      setState(() {
-        _selectedTaskId = null;
-        assignmentDetail = null;
-      });
+
+      if (found != null) {
+        final tid = (found['task_id'] ?? found['task'] ?? '')?.toString() ?? '';
+        setState(() {
+          assignmentStatus = found!['status']?.toString();
+          assignmentDetail = found;
+          if ((_selectedTaskId == null || _selectedTaskId!.isEmpty) &&
+              tid.isNotEmpty) {
+            _selectedTaskId = tid;
+          }
+          try {
+            final s = (found['start_date'] ??
+                found['start_time'] ??
+                found['start'] ??
+                found['startTime']);
+            if (s != null) {
+              try {
+                final dt = DateTime.parse(s.toString());
+                assignmentStart = dt.toUtc().toIso8601String();
+              } catch (_) {
+                assignmentStart = s.toString();
+              }
+            }
+          } catch (_) {}
+        });
+        try {
+          final localStart =
+              await LocalDB.instance.getAssignmentStart(widget.assignmentId);
+          if (localStart != null)
+            setState(() {
+              assignmentStart = localStart.toUtc().toIso8601String();
+            });
+        } catch (_) {}
+      } else {
+        setState(() {
+          assignmentStatus = null;
+          assignmentDetail = null;
+        });
+      }
     } catch (e) {
-      debugPrint('load assignment detail failed: $e');
-      setState(() {
-        _selectedTaskId = null;
-        assignmentDetail = null;
-      });
+      debugPrint('load assignment info failed: $e');
     }
   }
 
@@ -563,67 +603,7 @@ class _WODetailScreenState extends State<WODetailScreen>
     return null;
   }
 
-  Future<void> _loadAssignmentStatus() async {
-    try {
-      final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
-      // Try dedicated for-tech endpoint with explicit user id (handles leaders who fetch group assignments elsewhere)
-      try {
-        if (_techId != null && _techId!.isNotEmpty) {
-          try {
-            final res = await api.get(
-                '/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
-            final list = (res is Map && res['assignments'] != null)
-                ? res['assignments']
-                : ((res is List) ? res : (res['data'] ?? res));
-            if (list is List) {
-              final found = list.firstWhere(
-                  (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-                  orElse: () => <String, dynamic>{});
-              setState(() {
-                assignmentStatus =
-                    found.isNotEmpty ? (found['status'] ?? '') : null;
-              });
-              if (assignmentStatus != null) return;
-            }
-          } catch (_) {}
-        }
 
-        // prefer dedicated for-tech endpoint without user param but fallback to /assignments
-        try {
-          final res = await api.get('/assignments/for-tech');
-          final list = (res is Map && res['assignments'] != null)
-              ? res['assignments']
-              : ((res is List) ? res : (res['data'] ?? res));
-          if (list is List) {
-            final found = list.firstWhere(
-                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-                orElse: () => <String, dynamic>{});
-            setState(() {
-              assignmentStatus =
-                  found.isNotEmpty ? (found['status'] ?? '') : null;
-            });
-            if (assignmentStatus != null) return;
-          }
-        } catch (_) {}
-
-        final res2 = await api.get('/assignments');
-        final list2 = (res2 is List) ? res2 : (res2['data'] ?? res2);
-        if (list2 is List) {
-          final found = list2.firstWhere(
-              (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-              orElse: () => <String, dynamic>{});
-          setState(() {
-            assignmentStatus =
-                found.isNotEmpty ? (found['status'] ?? '') : null;
-          });
-        }
-      } catch (e) {
-        debugPrint('failed to load assignment status: $e');
-      }
-    } catch (e) {
-      debugPrint('failed to load assignment status: $e');
-    }
-  }
 
   Future<void> _acceptAssignment() async {
     final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
