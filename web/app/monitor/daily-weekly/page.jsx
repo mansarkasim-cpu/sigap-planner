@@ -27,6 +27,7 @@ import Divider from '@mui/material/Divider'
 import Avatar from '@mui/material/Avatar'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CloseIcon from '@mui/icons-material/Close'
+import PrintIcon from '@mui/icons-material/Print'
 import SortIcon from '@mui/icons-material/Sort'
 
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
@@ -254,6 +255,108 @@ export default function WeeklyMonitoring(){
     autoRefreshRef.current = setInterval(()=>{ try{ load() }catch(e){} }, AUTO_REFRESH_MS)
     return ()=>{ if (autoRefreshRef.current) { clearInterval(autoRefreshRef.current); autoRefreshRef.current = null } }
   }, [autoRefresh, siteId, weekStart])
+
+  const printChecklist = () => {
+    if (!detailData || !detailData.checklist) return;
+    const checklist = detailData.checklist;
+    const items = detailItemsSorted || detailData.items || detailData.checklist_items || [];
+    const htmlItems = (Array.isArray(items) ? items : []).map((it, idx) => {
+      const rawVal = (it?.option?.option_text ?? it?.option?.name ?? it?.answer_text ?? (it?.answer_number !== undefined ? String(it.answer_number) : ''));
+      const qtext = it?.question?.question_text || it?.question?.text || it?.question || '';
+      const low = rawVal == null ? null : String(rawVal).toLowerCase();
+      let ans = '-';
+      let noteHtml = '';
+      if (low === null) ans = 'N/A';
+      else if (['true','1','yes','y'].includes(low)) ans = '<strong style="color:#2e7d32">OK</strong>';
+      else if (['false','0','no','n'].includes(low)) {
+        ans = '<strong style="color:#d32f2f">NOT OK</strong>';
+        const note = it.evidence_note || it.evidence_description || it.notes || it.note || it.answer_text || '';
+        if (note) noteHtml = `<div style="margin-top:6px;font-size:12px;color:#444">Note: ${String(note).replace(/\n/g,'<br/>')}</div>`;
+      } else ans = String(rawVal);
+
+      // evidence image
+      let imgHtml = '';
+      try{
+        const ev = it.evidence_photo_url || it.evidence_photo_path || it.evidence_photo || null;
+        const url = ev ? normalizeMediaUrl(ev) : null;
+        if (url) imgHtml = `<div style="margin-top:8px"><img src="${url}" style="max-width:200px;max-height:150px;border:1px solid #ddd;padding:2px;border-radius:4px"/></div>`;
+      }catch(e){ imgHtml = '' }
+
+      return `<tr><td style="vertical-align:top;padding:6px;border:1px solid #ddd;width:40px">${idx+1}</td><td style="padding:6px;border:1px solid #ddd">${qtext}${noteHtml}${imgHtml}</td><td style="padding:6px;border:1px solid #ddd">${ans}</td></tr>`;
+    }).join('');
+
+    const html = `
+      <html><head><title>Checklist ${checklist.id || ''}</title>
+      <meta charset="utf-8" />
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;padding:20px;color:#222}
+        h1{font-size:18px;margin-bottom:6px}
+        .meta{margin-bottom:12px}
+        table{border-collapse:collapse;width:100%;margin-top:8px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:left}
+        th{background:#f5f5f5}
+        .small{font-size:13px;color:#444}
+      </style>
+      </head><body>
+        <h1>Checklist Report</h1>
+        <div class="meta small">
+          <div><strong>Teknisi:</strong> ${checklist.teknisi_name || '-'}</div>
+          <div><strong>Performed at:</strong> ${formatDateTime ? formatDateTime(checklist.performed_at) : (checklist.performed_at||'-')}</div>
+          <div><strong>Alat:</strong> ${checklist.alat?.nama || checklist.alat?.name || '-'}</div>
+          <div style="margin-top:6px"><strong>Notes:</strong> ${checklist.notes ? String(checklist.notes).replace(/\n/g,'<br/>') : '-'}</div>
+        </div>
+        <table>
+          <thead><tr><th style="width:40px">#</th><th>Question</th><th>Answer</th></tr></thead>
+          <tbody>${htmlItems}</tbody>
+        </table>
+      </body></html>
+    `;
+
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.overflow = 'hidden';
+      iframe.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      // give the iframe a moment to render, then print
+      setTimeout(()=>{
+        try{
+          iframe.contentWindow.focus();
+          // Some browsers block iframe.print(); if it fails, fallback to new window
+          iframe.contentWindow.print();
+        }catch(e){
+          try{
+            const win = window.open('', '_blank', 'noopener,noreferrer');
+            if (!win) { alert('Pop-up blocked. Please allow popups for this site.'); return; }
+            win.document.write(html);
+            win.document.close();
+            win.focus();
+            win.print();
+          }catch(_){}
+        }finally{
+          setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch(_){} }, 800);
+        }
+      }, 300);
+    } catch (e) {
+      try{
+        const win = window.open('', '_blank', 'noopener,noreferrer');
+        if (!win) { alert('Pop-up blocked. Please allow popups for this site.'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        win.print();
+      }catch(_){ alert('Unable to open print window. Please enable pop-ups for this site.'); }
+    }
+  };
 
   return (
     <Box sx={{p:2}}>
@@ -525,10 +628,18 @@ export default function WeeklyMonitoring(){
             </Table>
           </Box>
         )}
-      </Paper>
+        </Paper>
         <Dialog open={detailOpen} onClose={()=>{ setDetailOpen(false); setDetailData(null) }} fullWidth maxWidth="md">
           <DialogTitle sx={{ m: 0, p: 2 }}>
             Checklist Detail
+            <IconButton
+              aria-label="print"
+              onClick={() => { printChecklist(); }}
+              sx={{ position: 'absolute', right: 48, top: 8 }}
+              size="small"
+            >
+              <PrintIcon />
+            </IconButton>
             <IconButton
               aria-label="close"
               onClick={() => { setDetailOpen(false); setDetailData(null) }}
@@ -574,13 +685,21 @@ export default function WeeklyMonitoring(){
                           if (raw === null) node = <Typography component="span" variant="body2" color="text.secondary">N/A</Typography>
                           else {
                             const low = raw.toLowerCase()
-                            if (['true','1','yes','y'].includes(low)) node = <CheckCircleIcon sx={{color:'success.main'}} />
-                            else if (['false','0','no','n'].includes(low)) node = <CloseIcon sx={{color:'error.main'}} />
+                            if (['true','1','yes','y'].includes(low)) node = <Typography component="span" variant="body2" sx={{color:'success.main',fontWeight:600}}>OK</Typography>
+                            else if (['false','0','no','n'].includes(low)) node = <Typography component="span" variant="body2" sx={{color:'error.main',fontWeight:600}}>NOT OK</Typography>
                             else node = <Typography component="span" variant="body2" color="text.primary">{raw}</Typography>
                           }
                           return (
-                            <Box sx={{minWidth:120, textAlign:'center', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                            <Box sx={{minWidth:120, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
                               {node}
+                              {(() => {
+                                const note = it.evidence_note || it.evidence_description || it.notes || it.note || it.answer_text || null
+                                const low = raw ? String(raw).toLowerCase() : null
+                                if (low && ['false','0','no','n'].includes(low) && note) {
+                                  return <Typography variant="caption" color="text.secondary" sx={{mt:0.5, maxWidth:160, textAlign:'center'}}>{note}</Typography>
+                                }
+                                return null
+                              })()}
                             </Box>
                           )
                         })()
