@@ -376,6 +376,7 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
     // determine shift(s) from local start/end times if provided
     const shiftIdStart = findShiftIdForTime(localTimeStr || time, site);
     const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime, site);
+    const defs = getShiftDefsForSite(site);
     let shiftCond = '';
     // If only start time provided, filter by that shift
     if (shiftIdStart !== null && !shiftIdEnd) {
@@ -386,7 +387,7 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
       // If start and end fall on the same local date, include the range of shifts between them (inclusive)
       if (localDateStr === localEndDateStr) {
         const shifts: number[] = [];
-        const maxShift = SHIFT_DEFS.length;
+        const maxShift = defs.length;
         let cur = shiftIdStart;
         while (true) {
           shifts.push(cur);
