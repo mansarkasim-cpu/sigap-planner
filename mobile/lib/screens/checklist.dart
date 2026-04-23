@@ -259,7 +259,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         debugPrint('checklist: /auth/me lookup failed: $e');
       }
 
-      List<dynamic> filteredAlats = allAlats;
+      // Only allow alats that belong to the user's site(s).
+      // If we couldn't determine the user's site, show no alats (strict behaviour).
+      List<dynamic> filteredAlats = [];
       if (allowedSiteIds.isNotEmpty) {
         try {
           filteredAlats = allAlats.where((a) {
