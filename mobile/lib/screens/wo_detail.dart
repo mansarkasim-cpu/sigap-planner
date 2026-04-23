@@ -128,12 +128,14 @@ class _WODetailScreenState extends State<WODetailScreen>
     setState(() {
       loading = true;
     });
+    // _loadAssignmentDetail must finish first so _selectedTaskId is set
+    // before _loadTasks() uses it to filter via ?taskId= query param.
     await Future.wait([
       _loadDetail(),
-      _loadTasks(),
       _loadAssignmentStatus(),
       _loadAssignmentDetail()
     ]);
+    await _loadTasks();
     await _loadLocalChecklist();
     setState(() {
       loading = false;
@@ -190,13 +192,19 @@ class _WODetailScreenState extends State<WODetailScreen>
         }
       }
       setState(() {
-        _selectedTaskId = null;
+        // never reset _selectedTaskId if already set — it was passed from Inbox
+        if (_selectedTaskId == null || _selectedTaskId!.isEmpty) {
+          _selectedTaskId = null;
+        }
         assignmentDetail = null;
       });
     } catch (e) {
       debugPrint('load assignment detail failed: $e');
       setState(() {
-        _selectedTaskId = null;
+        // never reset _selectedTaskId if already set — it was passed from Inbox
+        if (_selectedTaskId == null || _selectedTaskId!.isEmpty) {
+          _selectedTaskId = null;
+        }
         assignmentDetail = null;
       });
     }
