@@ -9,12 +9,38 @@ import { validate, IsNotEmpty, IsArray, IsOptional, IsISO8601, IsInt } from 'cla
 
 const router = Router();
 
-// Shift definitions (must match frontend ShiftManager)
-const SHIFT_DEFS = [
+// Default shift definitions (frontend has matching per-site schemas)
+const GLOBAL_SHIFT_DEFS = [
   { id: 1, start: '07:00', end: '15:00' },
   { id: 2, start: '15:00', end: '23:00' },
   { id: 3, start: '23:00', end: '07:00' },
 ];
+
+const SITE_SHIFT_SCHEMAS: Record<string, { id: number; start: string; end: string; }[]> = {
+  MAKASSAR_NEW_PORT: [
+    { id: 1, start: '07:00', end: '15:00' },
+    { id: 2, start: '15:00', end: '23:00' },
+    { id: 3, start: '23:00', end: '07:00' },
+  ],
+  TPK_BELAWAN_DOMESTIK: [
+    { id: 1, start: '00:00', end: '08:00' },
+    { id: 2, start: '08:00', end: '16:00' },
+    { id: 3, start: '16:00', end: '24:00' },
+  ],
+};
+
+function normalizeSiteKey(site?: string|null) {
+  if (!site) return 'MAKASSAR_NEW_PORT';
+  let k = String(site).toUpperCase().trim();
+  k = k.replace(/^SITE\b\s*/i, '');
+  k = k.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return k || 'MAKASSAR_NEW_PORT';
+}
+
+function getShiftDefsForSite(site?: string|null) {
+  const key = normalizeSiteKey(site);
+  return SITE_SHIFT_SCHEMAS[key] || GLOBAL_SHIFT_DEFS;
+}
 
 function timeToMinutes(t: string) {
   const m = String(t || '').trim();
@@ -24,16 +50,17 @@ function timeToMinutes(t: string) {
   return hh * 60 + mm;
 }
 
-function findShiftIdForTime(timeStr?: string|null) {
+function findShiftIdForTime(timeStr?: string|null, site?: string|null) {
   if (!timeStr) return null;
   const mins = timeToMinutes(timeStr);
-  for (const s of SHIFT_DEFS) {
+  const defs = getShiftDefsForSite(site);
+  for (const s of defs) {
     const startM = timeToMinutes(s.start);
     const endM = timeToMinutes(s.end === '24:00' ? '24:00' : s.end);
-    if (startM <= mins && mins < endM) return s.id;
-    // handle midnight ranges (not needed for current defs but safe)
-    if (startM > endM) {
-      // e.g., 23:00 - 06:00
+    if (startM <= endM) {
+      if (startM <= mins && mins < endM) return s.id;
+    } else {
+      // crosses midnight e.g., 23:00 - 06:00
       if (mins >= startM || mins < endM) return s.id;
     }
   }
@@ -347,8 +374,8 @@ router.get('/scheduled-technicians', authMiddleware, async (req: Request, res: R
     if (site) { params.push(site); siteCond = ` AND LOWER(COALESCE(a.site,'')) = LOWER($${params.length})`; }
 
     // determine shift(s) from local start/end times if provided
-    const shiftIdStart = findShiftIdForTime(localTimeStr || time);
-    const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime);
+    const shiftIdStart = findShiftIdForTime(localTimeStr || time, site);
+    const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime, site);
     let shiftCond = '';
     // If only start time provided, filter by that shift
     if (shiftIdStart !== null && !shiftIdEnd) {
