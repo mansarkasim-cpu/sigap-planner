@@ -138,4 +138,74 @@ export async function createPmHistory(req: Request, res: Response) {
   }
 }
 
-export default { listPmHistory, createPmHistory };
+export async function updatePmHistory(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ message: 'id is required' });
+    const body = req.body || {};
+    const alat_id = body.alat_id;
+    const pm_rule_id = body.pm_rule_id;
+    const engine_hour = body.engine_hour != null ? Number(body.engine_hour) : null;
+    const performed_by = body.performed_by || null;
+    const performed_at = body.performed_at ? new Date(body.performed_at).toISOString() : null;
+    const notes = body.notes || null;
+    const workorder_no = body.workorder_no || null;
+
+    // Basic validation: require alat_id, pm_rule_id, engine_hour
+    if (!alat_id || !pm_rule_id || engine_hour == null) {
+      return res.status(400).json({ message: 'alat_id, pm_rule_id and engine_hour are required' });
+    }
+
+    // recompute next_due_engine_hour based on rule
+    const ruleRows: any[] = await AppDataSource.manager.query(`SELECT interval_hours, multiplier FROM pm_rules WHERE id = $1`, [pm_rule_id]);
+    const rule = ruleRows && ruleRows.length ? ruleRows[0] : null;
+    let next_due_engine_hour: number | null = null;
+    if (rule) {
+      const interval = Number(rule.interval_hours) || 0;
+      const multiplier = Number(rule.multiplier) || 1;
+      const effective = Math.max(1, interval * multiplier);
+      next_due_engine_hour = Number(engine_hour) + effective;
+    }
+
+    const updateSql = `UPDATE pm_history SET alat_id=$1, pm_rule_id=$2, performed_by=$3, performed_at=$4, engine_hour=$5, next_due_engine_hour=$6, notes=$7, workorder_no=$8, updated_at=now() WHERE id=$9 RETURNING *`;
+    const params = [alat_id, pm_rule_id, performed_by, performed_at, engine_hour, next_due_engine_hour, notes, workorder_no, id];
+    const updated = await AppDataSource.manager.query(updateSql, params);
+
+    // refresh equipment status for this alat
+    try {
+      await pmService.updateEquipmentStatusAll([Number(alat_id)]);
+    } catch (e) {
+      console.error('pm update after history update failed', e);
+    }
+
+    return res.json({ data: updated && updated[0] ? updated[0] : updated });
+  } catch (err) {
+    console.error('updatePmHistory error', err);
+    return res.status(500).json({ message: 'Failed to update PM history' });
+  }
+}
+
+export async function deletePmHistory(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ message: 'id is required' });
+
+    // find record to get alat_id
+    const rows = await AppDataSource.manager.query(`SELECT * FROM pm_history WHERE id = $1 LIMIT 1`, [id]);
+    const rec = rows && rows.length ? rows[0] : null;
+    if (!rec) return res.status(404).json({ message: 'PM history not found' });
+
+    await AppDataSource.manager.query(`DELETE FROM pm_history WHERE id = $1`, [id]);
+
+    try {
+      if (rec.alat_id) await pmService.updateEquipmentStatusAll([Number(rec.alat_id)]);
+    } catch (e) { console.error('pm update after history delete failed', e); }
+
+    return res.json({ data: rec });
+  } catch (err) {
+    console.error('deletePmHistory error', err);
+    return res.status(500).json({ message: 'Failed to delete PM history' });
+  }
+}
+
+export default { listPmHistory, createPmHistory, updatePmHistory, deletePmHistory };
