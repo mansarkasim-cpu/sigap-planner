@@ -294,6 +294,23 @@ router.get('/assignments/for-group', authMiddleware, async (req: Request, res: R
 });
 
 /**
+ * GET /api/assignments/:id
+ * Fetch a single assignment by id. Accessible by any authenticated user
+ * (needed for leaders viewing team members' assignments in wo_detail).
+ */
+router.get('/assignments/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const repo = AppDataSource.getRepository(Assignment);
+    const a = await repo.findOne({ where: { id: req.params.id }, relations: ['wo'] as any });
+    if (!a) return res.status(404).json({ code: 'NOT_FOUND', message: 'Assignment not found' });
+    return res.json(a);
+  } catch (err) {
+    console.error('get assignment by id', err);
+    return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Failed to get assignment' });
+  }
+});
+
+/**
  * PATCH /api/assignments/:id
  * body: { status?: string }
  */

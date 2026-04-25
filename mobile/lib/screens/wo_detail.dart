@@ -151,28 +151,25 @@ class _WODetailScreenState extends State<WODetailScreen>
   }
 
   // Single API call that replaces both _loadAssignmentStatus and _loadAssignmentDetail.
+  // Works for both technicians and leaders (who may view team members' assignments).
   Future<void> _loadAssignmentInfo() async {
     try {
       final api = ApiClient(baseUrl: widget.baseUrl, token: widget.token);
       Map<String, dynamic>? found;
 
-      // Try for-tech endpoints first (server-filtered, faster than fetching all assignments).
-      if (_techId != null && _techId!.isNotEmpty) {
-        try {
-          final res = await api.get(
-              '/assignments/for-tech?user=${Uri.encodeComponent(_techId!)}');
-          final list = (res is Map && res['assignments'] != null)
-              ? res['assignments']
-              : ((res is List) ? res : (res['data'] ?? res));
-          if (list is List) {
-            final f = list.firstWhere(
-                (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-                orElse: () => null);
-            if (f != null) found = Map<String, dynamic>.from(f);
-          }
-        } catch (_) {}
-      }
+      // 1. Direct fetch by id — fastest, works for both own assignments and
+      //    leader viewing a team member's assignment. Added GET /assignments/:id
+      //    to backend to support this.
+      try {
+        final res = await api.get(
+            '/assignments/${Uri.encodeComponent(widget.assignmentId)}');
+        if (res is Map && (res['id'] ?? '').toString().isNotEmpty) {
+          found = Map<String, dynamic>.from(res);
+        }
+      } catch (_) {}
 
+      // 2. Fallback: search through user's own assignment list (in case the
+      //    direct endpoint is unavailable on older server versions).
       if (found == null) {
         try {
           final res = await api.get('/assignments/for-tech');
@@ -186,17 +183,6 @@ class _WODetailScreenState extends State<WODetailScreen>
             if (f != null) found = Map<String, dynamic>.from(f);
           }
         } catch (_) {}
-      }
-
-      if (found == null) {
-        final res = await api.get('/assignments');
-        final list = (res is List) ? res : (res['data'] ?? res);
-        if (list is List) {
-          final f = list.firstWhere(
-              (e) => (e['id'] ?? '').toString() == widget.assignmentId,
-              orElse: () => null);
-          if (f != null) found = Map<String, dynamic>.from(f);
-        }
       }
 
       if (found != null) {
