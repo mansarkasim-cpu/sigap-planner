@@ -350,6 +350,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   const isTerminal = hasRole(roleRaw, 'terminal');
   // displayMode: 'both' | 'planned' | 'actual'
   const [displayMode, setDisplayMode] = useState<string>('both');
+  const [sitesReady, setSitesReady] = useState<boolean>(false);
 
   // drag / resize state for interactive Gantt
   const [dragState, setDragState] = useState<null | {
@@ -479,11 +480,9 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => { load(); }, []);
-
   useEffect(() => { loadSites(); }, []);
 
-  useEffect(() => { load(); }, [site, selectedDate, workType, pageSize]);
+  useEffect(() => { if (sitesReady) load(); }, [sitesReady, site, selectedDate, workType, pageSize]);
 
   // Auto-refresh: call `load()` every 60 seconds without recreating the interval.
   const loadRef = useRef<any>(null);
@@ -852,7 +851,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       if (userSiteVal) {
         setSites([userSiteVal])
         setSite(userSiteVal)
-        try{ await load(userSiteVal) }catch(e){}
+        setSitesReady(true)
         return
       }
 
@@ -861,6 +860,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       const rows: any[] = (res?.data ?? res) || [];
       const uniqueSites: string[] = Array.from(new Set(rows.map((r: any) => (r.site || r.vendor_cabang || '').toString()))).filter(Boolean);
       setSites(uniqueSites);
+      setSitesReady(true);
     } catch (err) {
       console.error('load sites for gantt', err);
     }
