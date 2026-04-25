@@ -136,7 +136,7 @@ export default function PMHistoryPage(){
       }
 
       if (editingId) {
-        await apiClient(`/pm/history/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) })
+        await apiClient(`/pm/history/${editingId}`, { method: 'PATCH', body: JSON.stringify(payload) })
       } else {
         await apiClient('/pm/history', { method: 'POST', body: JSON.stringify(payload) })
       }
