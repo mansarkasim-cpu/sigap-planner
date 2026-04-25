@@ -46,4 +46,7 @@ router.delete('/pm/rules/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['
 // PM history: list (planner/admin) and create (technician/planner/admin)
 router.get('/pm/history', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.listPmHistory);
 router.post('/pm/history', auth_1.authMiddleware, (0, auth_1.requireRole)(['technician', 'planner', 'admin']), historyCtrl.createPmHistory);
+router.put('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.updatePmHistory);
+router.patch('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.updatePmHistory);
+router.delete('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.deletePmHistory);
 exports.default = router;
