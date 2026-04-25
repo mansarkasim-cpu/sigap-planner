@@ -1273,6 +1273,17 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   />
                 ))}
 
+                {/* hour column shading: odd hours slightly darker */}
+                {Array.from({ length: 24 }, (_, h) => {
+                  const hourStartMs = dayStartMs + h * 60 * 60 * 1000;
+                  const hourEndMs = hourStartMs + 60 * 60 * 1000;
+                  const x1 = msToX(hourStartMs);
+                  const x2 = msToX(hourEndMs);
+                  return h % 2 === 1 ? (
+                    <rect key={'hbg'+h} x={x1} y={30} width={x2 - x1} height={Math.max(20, svgHeight - 40)} fill="#f5f5f8" />
+                  ) : null;
+                })}
+
                 {/* ticks (30 min) */}
                 {ticks.map((t, i) => {
                   const x = msToX(t);
@@ -1281,7 +1292,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                   return (
                     <g key={'tick'+i}>
                       <line x1={x} y1={30} x2={x} y2={30 + Math.max(20, svgHeight - 40)} stroke="#e7e7e7" />
-                      {showLabel && <text x={x + 4} y={20} fontSize={11} fill="#333">{new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</text>}
+                      {showLabel && <text x={x} y={20} fontSize={11} fill="#333" textAnchor="middle">{new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</text>}
                     </g>
                   );
                 })}
