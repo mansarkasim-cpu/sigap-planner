@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../lib/api-client';
 import { Button, TextField, MenuItem, Paper, IconButton, Chip, Box, Typography, Checkbox } from '@mui/material';
+import MonthlyShiftPlanner from './MonthlyShiftPlanner';
 const SITE_SHIFT_SCHEMAS = {
   MAKASSAR_NEW_PORT: [
     { id: 1, label: 'Shift 1', time: '07:00 - 15:00' },
@@ -474,10 +475,11 @@ export default function ShiftManager() {
 
       <Box sx={{ flex: 1 }}>
         <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ m: 0 }}>{viewMode === 'calendar' ? 'Calendar' : `Schedule — ${selectedDate}`}</Typography>
+          <Typography variant="h6" sx={{ m: 0 }}>{viewMode === 'calendar' ? 'Calendar' : viewMode === 'monthly' ? 'Monthly Planner' : `Schedule — ${selectedDate}`}</Typography>
           <Box sx={{ ml: 1.5, display: 'flex', gap: 1 }}>
             <Button variant={viewMode === 'schedule' ? 'contained' : 'outlined'} size="small" onClick={() => setViewMode('schedule')}>Schedule</Button>
             <Button variant={viewMode === 'calendar' ? 'contained' : 'outlined'} size="small" onClick={() => setViewMode('calendar')}>Calendar</Button>
+            <Button variant={viewMode === 'monthly' ? 'contained' : 'outlined'} size="small" onClick={() => setViewMode('monthly')} color="secondary">Monthly Planner</Button>
           </Box>
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
             {viewMode === 'calendar' ? (
@@ -486,12 +488,14 @@ export default function ShiftManager() {
                 <Typography sx={{ minWidth: 200, textAlign: 'center', fontWeight: 700 }}>{calendarMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Typography>
                 <IconButton size="small" onClick={nextMonth}>▶</IconButton>
               </>
-            ) : (
+            ) : viewMode === 'monthly' ? null : (
               <TextField type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} size="small" />
             )}
           </Box>
         </Box>
-        {viewMode === 'calendar' ? (
+        {viewMode === 'monthly' ? (
+          <MonthlyShiftPlanner site={site} groups={groups} shiftDefs={shiftDefs} />
+        ) : viewMode === 'calendar' ? (
           <Box sx={{ display: 'grid', gap: 1 }}>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0.5, mb: 0.5, textAlign: 'center', color: 'text.secondary' }}>
               {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <Box key={d} sx={{ fontWeight: 700 }}>{d}</Box>)}

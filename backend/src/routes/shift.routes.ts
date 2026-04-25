@@ -230,11 +230,61 @@ router.post('/shift-assignments', authMiddleware, async (req: Request, res: Resp
   }
 });
 
+router.post('/shift-assignments/bulk', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { site, yearMonth, entries } = req.body || {};
+    if (!yearMonth || !/^\d{4}-\d{2}$/.test(String(yearMonth))) {
+      return res.status(400).json({ message: 'yearMonth harus dalam format YYYY-MM' });
+    }
+
+    const repo = AppDataSource.getRepository(ShiftAssignment);
+    const groupRepo = AppDataSource.getRepository(ShiftGroup);
+
+    // Delete all existing assignments for this site+month
+    const monthStart = `${yearMonth}-01`;
+    const monthEnd = `${yearMonth}-31`;
+    const deleteQb = AppDataSource.createQueryBuilder()
+      .delete()
+      .from(ShiftAssignment)
+      .where('date >= :start AND date <= :end', { start: monthStart, end: monthEnd });
+    if (site) {
+      deleteQb.andWhere('site = :site', { site });
+    } else {
+      deleteQb.andWhere('site IS NULL');
+    }
+    await deleteQb.execute();
+
+    // Recreate from entries
+    const toSave: any[] = [];
+    for (const entry of (entries || [])) {
+      if (!entry.groupId || !entry.date || entry.shift == null) continue;
+      const group = await groupRepo.findOneBy({ id: entry.groupId } as any);
+      if (!group) continue;
+      toSave.push(repo.create({
+        date: String(entry.date),
+        shift: Number(entry.shift),
+        group: group as any,
+        site: site || null,
+      }));
+    }
+    const saved = toSave.length > 0 ? await repo.save(toSave) : [];
+    return res.json({ message: 'bulk saved', count: Array.isArray(saved) ? saved.length : 1 });
+  } catch (err) {
+    console.error('bulk shift assignments', err);
+    return res.status(500).json({ message: 'Gagal menyimpan jadwal shift' });
+  }
+});
+
 router.get('/shift-assignments', authMiddleware, async (req: Request, res: Response) => {
   try {
     const repo = AppDataSource.getRepository(ShiftAssignment);
     const qb = repo.createQueryBuilder('a').leftJoinAndSelect('a.group', 'g');
-    if (req.query.date) qb.andWhere('a.date = :date', { date: String(req.query.date) });
+    if (req.query.yearMonth) {
+      const ym = String(req.query.yearMonth);
+      qb.andWhere('a.date >= :start AND a.date <= :end', { start: `${ym}-01`, end: `${ym}-31` });
+    } else if (req.query.date) {
+      qb.andWhere('a.date = :date', { date: String(req.query.date) });
+    }
     if (req.query.site) qb.andWhere('a.site = :site', { site: String(req.query.site) });
     const rows = await qb.getMany();
     return res.json(rows.map(r => ({
