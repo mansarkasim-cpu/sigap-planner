@@ -35,6 +35,7 @@ export default function PMHistoryPage(){
   const [filterEndDate, setFilterEndDate] = useState('')
   const [form, setForm] = useState({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' })
   const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState(null)
 
   useEffect(()=>{ loadSites(); loadRules(); }, [])
 
@@ -134,11 +135,48 @@ export default function PMHistoryPage(){
         notes: form.notes || undefined
       }
 
-      await apiClient('/pm/history', { method: 'POST', body: JSON.stringify(payload) })
+      if (editingId) {
+        await apiClient(`/pm/history/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) })
+      } else {
+        await apiClient('/pm/history', { method: 'POST', body: JSON.stringify(payload) })
+      }
       setOpen(false)
+      setEditingId(null)
       setForm({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' })
       await load()
     }catch(e){ console.error(e); setError('Gagal menyimpan') }
+  }
+
+  async function handleDelete(id){
+    try{
+      if (!window.confirm('Yakin ingin menghapus record ini?')) return
+      await apiClient(`/pm/history/${id}`, { method: 'DELETE' })
+      await load()
+    }catch(e){ console.error(e); alert('Gagal menghapus') }
+  }
+
+  function handleEdit(it){
+    try{
+      const mapped = {
+        site_id: (it.site_id ?? ((it.site && (it.site.id || it.site.site_id)) || '')),
+        alat_id: it.alat_id || it.alat?.id || '',
+        pm_rule_id: it.pm_rule_id || it.pm_rule?.id || '',
+        engine_hour: it.engine_hour ?? '',
+        performed_by: it.performed_by ?? it.performed_by_id ?? '',
+        performed_at: it.performed_at ? (new Date(it.performed_at).toISOString().slice(0,16)) : '',
+        workorder_no: it.workorder_no || it.workorder || '',
+        notes: it.notes || ''
+      }
+      setForm(mapped)
+      setEditingId(it.id)
+      // load rules for the alat if possible
+      try{
+        const a = alats.find(x=> String(x.id) === String(mapped.alat_id)) || null
+        const jenisId = a ? (a.jenis_alat_id || (a.jenis && a.jenis.id) || (a.jenis_alat && a.jenis_alat.id) || null) : null
+        loadRules(jenisId)
+      }catch(e){/* ignore */}
+      setOpen(true)
+    }catch(e){ console.error('failed to open edit', e) }
   }
 
   return (
@@ -162,7 +200,7 @@ export default function PMHistoryPage(){
           </TextField>
           <TextField size="small" label="From" type="date" value={filterStartDate} onChange={e=>setFilterStartDate(e.target.value)} InputLabelProps={{shrink:true}} />
           <TextField size="small" label="To" type="date" value={filterEndDate} onChange={e=>setFilterEndDate(e.target.value)} InputLabelProps={{shrink:true}} />
-          <Button variant="contained" onClick={()=>setOpen(true)}>New PM History</Button>
+          <Button variant="contained" onClick={()=>{ setEditingId(null); setForm({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' }); setOpen(true); }}>New PM History</Button>
         </div>
       </Box>
 
@@ -181,6 +219,7 @@ export default function PMHistoryPage(){
                 <TableCell>Performed By</TableCell>
                 <TableCell>Performed At</TableCell>
                 <TableCell>Notes</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -194,6 +233,10 @@ export default function PMHistoryPage(){
                   <TableCell>{it.performed_by_name || it.performed_by || '-'}</TableCell>
                   <TableCell>{it.performed_at ? new Date(it.performed_at).toLocaleString() : '-'}</TableCell>
                   <TableCell>{it.notes || '-'}</TableCell>
+                  <TableCell>
+                    <Button size="small" onClick={()=>handleEdit(it)}>Edit</Button>
+                    <Button size="small" color="error" onClick={()=>handleDelete(it.id)}>Delete</Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -201,8 +244,8 @@ export default function PMHistoryPage(){
         )}
       </Paper>
 
-      <Dialog open={open} onClose={()=>setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>New PM History</DialogTitle>
+      <Dialog open={open} onClose={()=>{ setOpen(false); setEditingId(null); }} fullWidth maxWidth="sm">
+        <DialogTitle>{editingId ? 'Edit PM History' : 'New PM History'}</DialogTitle>
         <DialogContent>
           {error && <div style={{color:'red',marginBottom:8}}>{error}</div>}
           <Box sx={{display:'flex',flexDirection:'column',gap:1}}>
@@ -261,7 +304,7 @@ export default function PMHistoryPage(){
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={()=>setOpen(false)}>Cancel</Button>
+          <Button onClick={()=>{ setOpen(false); setEditingId(null); }}>Cancel</Button>
           <Button variant="contained" onClick={save}>Save</Button>
         </DialogActions>
       </Dialog>
