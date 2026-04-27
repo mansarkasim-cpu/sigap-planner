@@ -7,7 +7,7 @@ import * as historyCtrl from '../controllers/pmHistoryController';
 const router = Router();
 
 // GET /api/pm/calendar?limit=
-router.get('/pm/calendar', authMiddleware, requireRole(['planner','admin']), ctrl.getPMCalendar);
+router.get('/pm/calendar', authMiddleware, requireRole(['planner','admin','terminal']), ctrl.getPMCalendar);
 
 // POST /api/pm/run -> trigger worker manually
 router.post('/pm/run', authMiddleware, requireRole(['planner','admin']), ctrl.runPmNow);
@@ -25,7 +25,7 @@ router.patch('/pm/rules/:id', authMiddleware, requireRole(['planner','admin']), 
 router.delete('/pm/rules/:id', authMiddleware, requireRole(['planner','admin']), rulesCtrl.deletePmRule);
 
 // PM history: list (planner/admin) and create (technician/planner/admin)
-router.get('/pm/history', authMiddleware, requireRole(['planner','admin']), historyCtrl.listPmHistory);
+router.get('/pm/history', authMiddleware, requireRole(['planner','admin','terminal']), historyCtrl.listPmHistory);
 router.post('/pm/history', authMiddleware, requireRole(['technician','planner','admin']), historyCtrl.createPmHistory);
 router.patch('/pm/history/:id', authMiddleware, requireRole(['planner','admin']), historyCtrl.updatePmHistory);
 router.delete('/pm/history/:id', authMiddleware, requireRole(['planner','admin']), historyCtrl.deletePmHistory);
