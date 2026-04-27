@@ -105,6 +105,17 @@ export default function Nav(){
             </ul>
           </li>
         )}
+        {isTerminal && (
+          <li className="nav-item"><Link href="/monitor/pm-calendar" className="nav-link">PM Calendar</Link></li>
+        )}
+        {isTerminal && (
+          <li className="nav-item has-sub">
+            <span className="nav-link">Daily Checklist</span>
+            <ul className="sub-menu">
+              <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+            </ul>
+          </li>
+        )}
         {!isTerminal && (
           <>
             <li className="nav-item has-sub">
@@ -118,6 +129,7 @@ export default function Nav(){
               <span className="nav-link">Daily Checklist</span>
               <ul className="sub-menu">
                   <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+                <li><Link href="/daily-checklist/scheduler" className="nav-link">Scheduler</Link></li>
                   {/* <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li> */}
                   <li><Link href="/monitor/daily-equipment-hour-meter" className="nav-link">Daily Equipment Hour Meter</Link></li>
                   

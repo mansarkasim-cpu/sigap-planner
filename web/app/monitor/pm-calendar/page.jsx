@@ -87,6 +87,26 @@ function displayLabelForItem(it) {
   return primary + (kodeAlat ? ` · ${kodeAlat}` : '');
 }
 
+function hasRoleRaw(raw, roleName) {
+  if (!raw) return false;
+  try {
+    if (typeof raw === 'string') {
+      if (raw.startsWith('[') || raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(String).some(r => r.toLowerCase() === roleName);
+        if (typeof parsed === 'string') return parsed.toLowerCase() === roleName;
+        if (parsed && parsed.role) return String(parsed.role).toLowerCase() === roleName;
+      }
+      return raw.toLowerCase() === roleName;
+    }
+    if (Array.isArray(raw)) return raw.map(String).some(r => r.toLowerCase() === roleName);
+    if (typeof raw === 'object') {
+      if (raw.role) return String(raw.role).toLowerCase() === roleName;
+    }
+  } catch (e) {}
+  return false;
+}
+
 export default function PMCalendarPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -105,6 +125,7 @@ export default function PMCalendarPage() {
   const [isFull, setIsFull] = useState(false);
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
+  const [isTerminal, setIsTerminal] = useState(false);
 
   async function load(explicitSiteId) {
     setLoading(true);
@@ -137,12 +158,24 @@ export default function PMCalendarPage() {
     async function fetchSites() {
       try {
         const me = await apiFetch('/auth/me').catch(() => null)
+        // detect terminal role for button disabling and site defaulting
+        try {
+          const roleVal = me?.role || me?.user?.role || me?.data?.role || me?.roles || null;
+          const term = hasRoleRaw(roleVal, 'terminal')
+          setIsTerminal(term)
+        } catch (e) {}
         const userSite = me?.site || me?.data?.site || null
         if (userSite && (userSite.id || userSite.code || userSite.name)){
           const siteObj = { id: userSite.id ?? userSite.site_id ?? userSite.code ?? userSite.name, nama_site: userSite.name || userSite.nama || userSite.label || userSite.code || String(userSite.id), name: userSite.name || userSite.nama }
           setSites([siteObj])
-          setSiteId(siteObj.id)
-          await load(siteObj.id)
+          // For terminal users, default to ALL sites to avoid empty results from strict scoping
+          if (!hasRoleRaw(me?.role || me?.user?.role || me?.data?.role || me?.roles || null, 'terminal')){
+            setSiteId(siteObj.id)
+            await load(siteObj.id)
+          } else {
+            setSiteId('')
+            await load()
+          }
           return
         }
         const j = await apiFetch('/master/sites?limit=1000');
@@ -552,9 +585,9 @@ export default function PMCalendarPage() {
                   <p><strong>Workorder Status:</strong> {detailItem.workorder_status ?? '-'}</p>
                   <div style={{ display:'flex', gap:8, marginTop:8 }}>
                     {(!(detailItem.workorder_doc_no || detailItem.workorder_no || detailItem.work_order_id)) && (
-                      <Button variant="outlined" size="small" onClick={() => openAssignModal(detailItem)}>Assign WO</Button>
+                      <Button variant="outlined" size="small" onClick={() => openAssignModal(detailItem)} disabled={isTerminal}>Assign WO</Button>
                     )}
-                    <Button variant="outlined" size="small" color="error" onClick={() => submitUnassign(detailItem)}>Unassign WO</Button>
+                    <Button variant="outlined" size="small" color="error" onClick={() => submitUnassign(detailItem)} disabled={isTerminal}>Unassign WO</Button>
                   </div>
                   <p style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>Status:</strong> {(() => {
                     const st = itemStatus(detailItem);
@@ -599,7 +632,7 @@ export default function PMCalendarPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAssignModalOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={submitAssign}>Save</Button>
+          <Button variant="contained" onClick={submitAssign} disabled={isTerminal}>Save</Button>
         </DialogActions>
       </Dialog>
     </div>
