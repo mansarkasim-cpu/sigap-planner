@@ -9,6 +9,7 @@ import 'dart:convert';
 import '../config.dart';
 import '../utils/date_utils.dart';
 import '../services/local_db.dart';
+import 'daily_work_orders.dart';
 import 'wo_detail.dart';
 import '../services/retry_uploader.dart';
 import '../widgets/app_drawer.dart';
@@ -37,6 +38,7 @@ class _InboxScreenState extends State<InboxScreen> {
   List<String> currentUserIdentifiers = [];
   String leaderGroupId = '';
   Map<String, String> assigneeNames = {};
+  int dailyChecklistCount = 0;
   StreamSubscription? _logoutSub;
 
   Future<void> loadAssignments() async {
@@ -620,6 +622,7 @@ class _InboxScreenState extends State<InboxScreen> {
     });
 
     _loadPrefs();
+    _loadDailyChecklistCount();
     // start background uploader to retry queued realisasi
     RetryUploader.instance.start(base: API_BASE);
   }
@@ -632,6 +635,39 @@ class _InboxScreenState extends State<InboxScreen> {
     _logoutSub?.cancel();
     RetryUploader.instance.stop();
     super.dispose();
+  }
+
+  Future<void> _loadDailyChecklistCount() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final token = p.getString('api_token') ?? '';
+      final api = ApiClient(baseUrl: API_BASE, token: token);
+      final today = DateTime.now();
+      final dateStr =
+          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      final techId = p.getString('tech_id') ?? '';
+      final res = await api.get(
+          '/daily-checklist-schedules?date=${Uri.encodeComponent(dateStr)}');
+      final list = res is List
+          ? res
+          : (res is Map ? (res['data'] ?? []) : []);
+      int count = 0;
+      for (final schedule in (list is List ? list : [])) {
+        final assignments = schedule is Map
+            ? (schedule['assignments'] ?? [])
+            : [];
+        for (final a in (assignments is List ? assignments : [])) {
+          if (a is Map) {
+            final uid = (a['user'] is Map
+                ? (a['user']['id'] ?? '')
+                : (a['user_id'] ?? ''))
+                .toString();
+            if (uid == techId || techId.isEmpty) count++;
+          }
+        }
+      }
+      if (mounted) setState(() => dailyChecklistCount = count);
+    } catch (_) {}
   }
 
   Future<void> _loadPrefs() async {
@@ -2182,6 +2218,48 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Inbox Assignments'), actions: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.checklist_rtl),
+              tooltip: 'Daily Checklist WO',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const DailyWorkOrdersScreen()),
+                ).then((_) => _loadDailyChecklistCount());
+              },
+            ),
+            if (dailyChecklistCount > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints:
+                        const BoxConstraints(minWidth: 18, minHeight: 18),
+                    child: Text(
+                      dailyChecklistCount > 99
+                          ? '99+'
+                          : '$dailyChecklistCount',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
         IconButton(
           icon: const Icon(Icons.refresh),
           tooltip: 'Refresh lists',
@@ -2193,6 +2271,7 @@ class _InboxScreenState extends State<InboxScreen> {
               await _loadPendingRealisasi();
               await _loadMonitoringWorkOrders();
             }
+            await _loadDailyChecklistCount();
             ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Lists refreshed')));
           },

@@ -420,6 +420,22 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               }).toList()
             : [];
 
+        // Deduplicate by id first, then by question_text to avoid double entries
+        final seenIds = <dynamic>{};
+        final seenTexts = <String>{};
+        normalized = normalized.where((q) {
+          if (q is! Map) return true;
+          final qid = q['id'] ?? q['question_id'];
+          final qtext = (q['question_text'] ?? '').toString().trim().toLowerCase();
+          if (qid != null) {
+            if (!seenIds.add(qid)) return false;
+          }
+          if (qtext.isNotEmpty) {
+            if (!seenTexts.add(qtext)) return false;
+          }
+          return true;
+        }).toList();
+
         setState(() {
           questions = normalized;
         });
