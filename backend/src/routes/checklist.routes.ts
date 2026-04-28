@@ -15,6 +15,7 @@ router.get('/mobile/checklists/:id', authMiddleware, requireRole(['technician','
 
 // Admin/listing: GET /api/checklists (only planner/admin)
 router.get('/checklists', authMiddleware, requireRole(['planner','admin']), ctrl.listChecklists);
-router.get('/checklists/:id', authMiddleware, requireRole(['planner','admin']), ctrl.getChecklistById);
+// Allow terminal role to view checklist detail (read-only, for monitoring page)
+router.get('/checklists/:id', authMiddleware, requireRole(['planner','admin','terminal']), ctrl.getChecklistById);
 
 export default router;
