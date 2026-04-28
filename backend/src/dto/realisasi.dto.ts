@@ -301,10 +301,36 @@ export async function listPendingRealisasi(req: Request, res: Response) {
     try { console.debug('listPendingRealisasi: leaderCandidates=', Array.from(candidates)); } catch (_) {}
     // only consider groups where the current user is recorded as leader
     const groups = (allGroups || []).filter(g => Boolean(g.leader && candidates.has(String(g.leader))));
-    // If user is leader of any group, return all pending items (leaders can approve any team's submissions)
+    // If user is leader of any group, return pending items scoped to their groups' work orders only
     if (groups && groups.length > 0) {
+      // collect all member IDs across the leader's groups
+      const memberIds = Array.from(new Set(
+        groups.flatMap(g => Array.isArray(g.members) ? g.members.map(String) : [])
+      )).filter(Boolean);
+
+      const allowedWoIds = new Set<string>();
+      if (memberIds.length > 0) {
+        try {
+          const assigns = await assignmentRepo().createQueryBuilder('a')
+            .select('a.wo_id', 'wo_id')
+            .where('a."assignee_id"::text IN (:...memberIds)', { memberIds })
+            .getRawMany();
+          for (const asg of assigns) {
+            const wid = asg.wo_id;
+            if (wid) allowedWoIds.add(String(wid));
+          }
+        } catch (e) {
+          console.error('listPendingRealisasi: failed to get allowed WO ids for group', e);
+        }
+      }
+
       rows = await pendingRepo().find({ where: { status: 'PENDING' }, relations: ['task', 'task.workOrder'] as any });
-      return res.json(rows.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
+      // filter to only items whose WO was assigned to one of the group members
+      const scoped = rows.filter(r => {
+        const woId = r.task?.workOrder?.id;
+        return woId && allowedWoIds.has(String(woId));
+      });
+      return res.json(scoped.map(r => ({ id: r.id, taskId: r.task?.id, woId: r.task?.workOrder?.id, woDoc: r.task?.workOrder?.doc_no, notes: r.notes, photoUrl: r.photoUrl, photoUrls: (r as any).photoUrls ?? null, submittedAt: r.submittedAt, status: r.status })));
     }
 
     // If not leader in any group, return empty list

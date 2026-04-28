@@ -4,6 +4,7 @@ import { MasterAlat } from '../entities/MasterAlat';
 import { DailyChecklist } from '../entities/DailyChecklist';
 import { DailyChecklistItem } from '../entities/DailyChecklistItem';
 import { DailyEquipmentHourMeter } from '../entities/DailyEquipmentHourMeter';
+import { DailyChecklistAssignment } from '../entities/DailyChecklistAssignment';
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -161,6 +162,42 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       }
       return row;
     });
+
+    // ── Enrich OPEN slots with assigned technician names ──────────────────────
+    try {
+      if (alatIds.length > 0) {
+        // Use raw SQL to avoid TypeORM relation alias confusion
+        const assigns = await AppDataSource.query(
+          `SELECT
+             a.asset_id,
+             s.date::text AS schedule_date,
+             u.name      AS user_name,
+             u.nipp      AS user_nipp
+           FROM daily_checklist_assignment a
+           JOIN daily_checklist_schedule s ON s.id = a.schedule_id
+           JOIN "user" u ON u.id = a.user_id
+           WHERE s.date BETWEEN $1 AND $2
+             AND a.asset_id = ANY($3)`,
+          [days[0], days[6], alatIds]
+        );
+
+        for (const assign of assigns) {
+          const aId = assign.asset_id;
+          const day = String(assign.schedule_date).slice(0, 10);
+          const techName = assign.user_name || assign.user_nipp || 'Teknisi';
+          const alat = resultAlats.find((r: any) => String(r.id) === String(aId));
+          if (!alat) continue;
+          const slot = alat.statuses[day];
+          if (slot && !slot.done) {
+            slot.assigned_teknisi = slot.assigned_teknisi
+              ? slot.assigned_teknisi + ', ' + techName
+              : techName;
+          }
+        }
+      }
+    } catch (assignErr) {
+      console.warn('weeklyChecklistStatus: failed to load assignments', assignErr);
+    }
 
     return res.json({ site_id: siteId ?? null, week_start: days[0], days, alats: resultAlats });
   } catch (err) {

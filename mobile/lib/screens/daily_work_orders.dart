@@ -1,9 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../config.dart';
-import 'wo_detail.dart';
 import 'checklist.dart';
 
 class DailyWorkOrdersScreen extends StatefulWidget {
@@ -16,9 +15,12 @@ class DailyWorkOrdersScreen extends StatefulWidget {
 class _DailyWorkOrdersScreenState extends State<DailyWorkOrdersScreen>
     with WidgetsBindingObserver {
   bool loading = false;
-  List<dynamic> rows = [];
+
+  /// Flattened list of daily checklist assignments for the current user today.
+  List<Map<String, dynamic>> rows = [];
+
   String _token = '';
-  String _techId = '';
+  String _userId = '';
   Timer? _autoRefreshTimer;
   static const Duration _autoRefreshInterval = Duration(seconds: 60);
 
@@ -33,471 +35,339 @@ class _DailyWorkOrdersScreenState extends State<DailyWorkOrdersScreen>
     final p = await SharedPreferences.getInstance();
     setState(() {
       _token = p.getString('api_token') ?? '';
-      _techId = p.getString('tech_id') ?? '';
+      _userId = p.getString('tech_id') ?? '';
     });
     await _loadList();
-    // Start periodic auto-refresh after initial load
     _startAutoRefresh();
   }
 
   void _startAutoRefresh() {
-    // avoid multiple timers
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (t) async {
-      try {
-        if (!mounted) return;
-        if (loading) return;
-        await _loadList();
-      } catch (_) {}
+    _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) async {
+      if (!mounted || loading) return;
+      await _loadList();
     });
   }
 
   void _stopAutoRefresh() {
-    try {
-      _autoRefreshTimer?.cancel();
-    } catch (_) {}
+    _autoRefreshTimer?.cancel();
     _autoRefreshTimer = null;
   }
 
   Future<void> _loadList() async {
-    setState(() {
-      loading = true;
-    });
+    if (!mounted) return;
+    setState(() => loading = true);
     try {
       final api = ApiClient(baseUrl: API_BASE, token: _token);
       final today = DateTime.now();
       final dateStr =
           '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      final res = await api.get(
-          '/work-orders?page=1&pageSize=100&date=${Uri.encodeComponent(dateStr)}&work_type=DAILY');
-      final data = (res is Map) ? (res['data'] ?? res) : res;
 
-      List<dynamic> loaded = [];
-      if (data is List)
-        loaded = List<dynamic>.from(data);
-      else if (data is Map && data['data'] is List)
-        loaded = List<dynamic>.from(data['data']);
-      else if (res is Map && res['rows'] is List)
-        loaded = List<dynamic>.from(res['rows']);
+      final res = await api
+          .get('/daily-checklist-schedules?date=${Uri.encodeComponent(dateStr)}');
 
-      DateTime? _parseRowDate(dynamic r) {
-        if (r == null) return null;
-        final keys = [
-          'start_date',
-          'start',
-          'raw.start_date',
-          'raw.start',
-          'raw.scheduled_start',
-          'raw.start_time',
-          'raw.scheduled_start_time',
-          'end_date',
-          'raw.end_date',
-          'created_at',
-          'raw.created_at'
-        ];
-        DateTime? out;
-        for (final k in keys) {
-          try {
-            dynamic val;
-            if (k.contains('.')) {
-              final parts = k.split('.');
-              dynamic cur = r;
-              for (final p in parts) {
-                if (cur is Map && cur.containsKey(p))
-                  cur = cur[p];
-                else {
-                  cur = null;
-                  break;
-                }
-              }
-              val = cur;
-            } else {
-              val = (r is Map) ? r[k] : null;
-            }
-            if (val == null) continue;
-            if (val is int) {
-              // assume millis
-              out = DateTime.fromMillisecondsSinceEpoch(val).toLocal();
-              return out;
-            }
-            final s = val.toString();
-            if (s.trim().isEmpty) continue;
-            // Try parsing directly
-            final dt = DateTime.tryParse(s);
-            if (dt != null) return dt.toLocal();
-            // Try appending Z (UTC) if missing timezone
-            try {
-              final dt2 = DateTime.tryParse(s + 'Z');
-              if (dt2 != null) return dt2.toLocal();
-            } catch (_) {}
-          } catch (_) {}
+      final schedules = res is List
+          ? res
+          : (res is Map ? (res['data'] ?? []) : []);
+
+      final List<Map<String, dynamic>> flat = [];
+      for (final schedule in (schedules is List ? schedules : [])) {
+        if (schedule is! Map) continue;
+        final siteName = (schedule['site'] is Map
+                ? (schedule['site']['name'] ??
+                    schedule['site']['site_name'] ??
+                    '')
+                : '')
+            .toString();
+        final assignments = schedule['assignments'];
+        if (assignments is! List) continue;
+        for (final a in assignments) {
+          if (a is! Map) continue;
+          final assigneeId = (a['user'] is Map
+                  ? (a['user']['id'] ?? '')
+                  : (a['user_id'] ?? ''))
+              .toString();
+          if (_userId.isNotEmpty && assigneeId != _userId) continue;
+
+          final assetName = (a['asset'] is Map
+                  ? (a['asset']['nama'] ??
+                      a['asset']['name'] ??
+                      a['asset']['asset_name'] ??
+                      a['asset']['kode'] ??
+                      a['asset']['serial_no'] ??
+                      '')
+                  : '')
+              .toString();
+
+          flat.add({
+            'id': a['id']?.toString() ?? '',
+            'status': (a['status'] ?? 'PENDING').toString(),
+            'notes': a['notes']?.toString() ?? '',
+            'completedAt': a['completedAt']?.toString() ??
+                a['completed_at']?.toString() ??
+                '',
+            'asset': a['asset'] is Map
+                ? Map<String, dynamic>.from(a['asset'] as Map)
+                : <String, dynamic>{},
+            'assetName': assetName,
+            'user': a['user'] is Map
+                ? Map<String, dynamic>.from(a['user'] as Map)
+                : <String, dynamic>{},
+            'siteName': siteName,
+            'scheduleId': schedule['id']?.toString() ?? '',
+            'scheduleDate': schedule['date']?.toString() ?? dateStr,
+          });
         }
-        return out;
       }
 
-      try {
-        loaded.sort((a, b) {
-          final aDt = _parseRowDate(a);
-          final bDt = _parseRowDate(b);
-          if (aDt == null && bDt == null) return 0;
-          if (aDt == null) return 1;
-          if (bDt == null) return -1;
-          return aDt.compareTo(bDt);
-        });
-      } catch (_) {}
-
-      // Only show work orders with status 'DEPLOYED' and assigned to current user
-      try {
-        final techId = _techId ?? '';
-        loaded = loaded.where((r) {
-          try {
-            final s = ((r is Map)
-                        ? (r['status'] ??
-                            r['raw']?['status'] ??
-                            r['raw']?['work_status'])
-                        : '')
-                    ?.toString() ??
-                '';
-            if (!s.toString().toUpperCase().contains('DEPLOYED')) return false;
-
-            // If no tech id available, keep deployed items
-            if (techId.isEmpty) return true;
-
-            bool assigned = false;
-            if (r is Map) {
-              // check assigned users list
-              final au = r['assigned_users'] ??
-                  r['assigned'] ??
-                  r['assignees'] ??
-                  r['assigned_to'];
-              if (au is List) {
-                for (final u in au) {
-                  try {
-                    if (u == null) continue;
-                    if (u is Map) {
-                      final id =
-                          (u['id'] ?? u['user_id'] ?? u['nipp'] ?? u['nipp_id'])
-                                  ?.toString() ??
-                              '';
-                      if (id.isNotEmpty && id == techId) {
-                        assigned = true;
-                        break;
-                      }
-                      final uname =
-                          (u['name'] ?? u['username'] ?? '')?.toString() ?? '';
-                      if (uname.isNotEmpty && uname == techId) {
-                        assigned = true;
-                        break;
-                      }
-                    } else {
-                      if (u.toString() == techId) {
-                        assigned = true;
-                        break;
-                      }
-                    }
-                  } catch (_) {}
-                }
-              }
-
-              if (!assigned) {
-                final at = r['assigned_to'] ?? r['assignee'] ?? r['assigned'];
-                if (at != null) {
-                  if (at is Map) {
-                    final id =
-                        (at['id'] ?? at['user_id'] ?? at['nipp'])?.toString() ??
-                            '';
-                    if (id.isNotEmpty && id == techId) assigned = true;
-                    final name = (at['name'] ?? '')?.toString() ?? '';
-                    if (!assigned && name.isNotEmpty && name == techId)
-                      assigned = true;
-                  } else {
-                    if (at.toString() == techId) assigned = true;
-                  }
-                }
-              }
-
-              if (!assigned) {
-                try {
-                  final raw = r['raw'] ?? {};
-                  final rau = raw['assigned_users'] ??
-                      raw['assigned_to'] ??
-                      raw['assignees'];
-                  if (rau is List) {
-                    for (final u in rau) {
-                      try {
-                        if (u is Map) {
-                          final id = (u['id'] ?? u['user_id'] ?? u['nipp'])
-                                  ?.toString() ??
-                              '';
-                          if (id == techId) {
-                            assigned = true;
-                            break;
-                          }
-                        } else if (u.toString() == techId) {
-                          assigned = true;
-                          break;
-                        }
-                      } catch (_) {}
-                    }
-                  }
-                  final rat = raw['assigned_to'] ?? raw['assignee'];
-                  if (!assigned && rat != null) {
-                    if (rat is Map) {
-                      final id = (rat['id'] ?? rat['user_id'] ?? rat['nipp'])
-                              ?.toString() ??
-                          '';
-                      if (id == techId) assigned = true;
-                    } else if (rat.toString() == techId) assigned = true;
-                  }
-                } catch (_) {}
-              }
-            }
-
-            return assigned;
-          } catch (_) {
-            return false;
-          }
-        }).toList();
-      } catch (_) {}
-
-      setState(() {
-        rows = loaded;
-      });
+      if (mounted) setState(() => rows = flat);
     } catch (e) {
-      debugPrint('load daily work orders failed: $e');
+      debugPrint('[DailyChecklistScreen] load failed: $e');
     } finally {
-      setState(() {
-        loading = false;
-      });
+      if (mounted) setState(() => loading = false);
     }
   }
 
-  Widget _buildRow(dynamic r) {
-    final id = (r['id'] ?? r['wo_id'] ?? '').toString();
-    final doc = (r['doc_no'] ?? r['docNo'] ?? '').toString();
-    final asset = (r['asset_name'] ?? r['asset'] ?? '').toString();
-    final start = ((r['start_date'] ?? r['start']) ?? '').toString();
-    final status =
-        (r['status'] ?? r['raw']?['status'] ?? r['raw']?['work_status'] ?? '')
-                ?.toString() ??
-            '';
-    String assigned = '';
+  Future<void> _updateAssignmentStatus(
+      String assignmentId, String newStatus) async {
     try {
-      if (r['assigned_users'] is List &&
-          (r['assigned_users'] as List).isNotEmpty) {
-        assigned = (r['assigned_users'] as List)
-            .map((u) => ((u is Map)
-                ? ((u['name'] ?? u['user_name']) ?? '')
-                : u?.toString() ?? ''))
-            .where((s) => s != null && s.toString().isNotEmpty)
-            .join(', ');
+      final api = ApiClient(baseUrl: API_BASE, token: _token);
+      await api.patch('/daily-checklist-assignments/$assignmentId/status',
+          {'status': newStatus});
+      await _loadList();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to update: $e')));
       }
-    } catch (_) {
-      assigned = '';
     }
+  }
 
-    final site = (r['vendor_cabang'] ??
-                r['raw']?['vendor_cabang'] ??
-                r['raw']?['site'] ??
-                '')
-            ?.toString() ??
-        '';
-    double progressValue = 0.0;
+  void _showDetail(Map<String, dynamic> item) {
+    final id = item['id'] as String;
+    final assetName = item['assetName'] as String;
+    final status = item['status'] as String;
+    final siteName = item['siteName'] as String;
+    final completedAt = item['completedAt'] as String;
+    final notes = item['notes'] as String;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Row(children: [
+                const Icon(Icons.checklist_rtl, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(assetName,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold))),
+              ]),
+              const SizedBox(height: 8),
+              if (siteName.isNotEmpty)
+                Text(siteName,
+                    style:
+                        const TextStyle(color: Colors.grey, fontSize: 13)),
+              const SizedBox(height: 12),
+              Row(children: [
+                _statusChip(status),
+                if (completedAt.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(_fmtDate(completedAt),
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.grey)),
+                ]
+              ]),
+              if (notes.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Notes: $notes',
+                    style: const TextStyle(
+                        fontSize: 13, color: Colors.black87)),
+              ],
+              const SizedBox(height: 20),
+              if (status == 'PENDING') ...[
+                Row(children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: const Text('Mark Done'),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green.shade600),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _updateAssignmentStatus(id, 'DONE');
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Skip'),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade700),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _updateAssignmentStatus(id, 'SKIPPED');
+                      },
+                    ),
+                  ),
+                ]),
+              ] else
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Reset to Pending'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _updateAssignmentStatus(id, 'PENDING');
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _fmtDate(String raw) {
     try {
-      final prog = (r['progress'] ?? r['raw']?['progress']);
-      if (prog is num)
-        progressValue = (prog as num).toDouble().clamp(0.0, 1.0);
-      else
-        progressValue =
-            double.tryParse(prog?.toString() ?? '0')?.clamp(0.0, 1.0) ?? 0.0;
+      final dt = DateTime.tryParse(raw)?.toLocal();
+      if (dt == null) return raw;
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
-      progressValue = 0.0;
+      return raw;
     }
+  }
 
-    // Format start time
-    String startDisplay = start;
-    DateTime? startDt;
+  Widget _statusChip(String status) {
+    Color bg;
+    IconData icon;
+    switch (status.toUpperCase()) {
+      case 'DONE':
+        bg = Colors.green.shade600;
+        icon = Icons.check_circle;
+        break;
+      case 'SKIPPED':
+        bg = Colors.orange.shade700;
+        icon = Icons.cancel;
+        break;
+      default:
+        bg = Colors.blueGrey.shade400;
+        icon = Icons.hourglass_empty;
+    }
+    return Chip(
+      avatar: Icon(icon, color: Colors.white, size: 16),
+      label: Text(status,
+          style: const TextStyle(color: Colors.white, fontSize: 12)),
+      backgroundColor: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  Widget _buildRow(Map<String, dynamic> item) {
+    final assetName = item['assetName'] as String;
+    final status = item['status'] as String;
+    final siteName = item['siteName'] as String;
+
+    String initials = 'A';
     try {
-      startDt = DateTime.tryParse(start)?.toLocal();
-    } catch (_) {
-      startDt = null;
-    }
-    if (startDt != null) {
-      final hh = startDt.hour.toString().padLeft(2, '0');
-      final mm = startDt.minute.toString().padLeft(2, '0');
-      startDisplay = '$hh:$mm';
-    }
-
-    // Build status chip color (match web-like mapping)
-    Color statusColor = Colors.grey.shade400;
-    final st = status.toUpperCase();
-    if (st.contains('DEPLOYED'))
-      statusColor = const Color(0xFFE91E63); // magenta for deployed
-    else if (st.contains('IN_PROGRESS') || st.contains('ONGOING'))
-      statusColor = const Color(0xFF43A047); // green
-    else if (st.contains('COMPLETED') ||
-        st.contains('DONE') ||
-        st.contains('FINISHED'))
-      statusColor = const Color(0xFF1976D2); // blue
-    else if (st.contains('PENDING') ||
-        st.contains('OPEN') ||
-        st.contains('SCHEDULED'))
-      statusColor = const Color(0xFFF57C00); // orange
-    else if (st.contains('CANCEL') ||
-        st.contains('REJECT') ||
-        st.contains('FAILED'))
-      statusColor = const Color(0xFFD32F2F); // red
-    else
-      statusColor = Colors.grey.shade500;
-
-    // initials for leading avatar
-    String initials = '';
-    final label = asset.isNotEmpty ? asset : (doc.isNotEmpty ? doc : 'WO');
-    try {
-      final parts = label.trim().split(RegExp(r'\s+'));
+      final parts = assetName.trim().split(RegExp(r'\s+'));
       if (parts.length == 1)
         initials = parts.first.substring(0, 1).toUpperCase();
       else
         initials = (parts[0][0] + parts[1][0]).toUpperCase();
-    } catch (_) {
-      initials = 'W';
+    } catch (_) {}
+
+    Color avatarColor;
+    switch (status.toUpperCase()) {
+      case 'DONE':
+        avatarColor = Colors.green.shade600;
+        break;
+      case 'SKIPPED':
+        avatarColor = Colors.orange.shade700;
+        break;
+      default:
+        avatarColor = Theme.of(context).colorScheme.primary;
     }
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.grey.shade200)),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
-        dense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            child: Text(initials, style: const TextStyle(color: Colors.white))),
-        title: Text(asset.isNotEmpty ? asset : doc,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle:
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Expanded(
-                child: Text(startDisplay,
-                    style:
-                        const TextStyle(fontSize: 13, color: Colors.black87))),
-            if (status.isNotEmpty)
-              Chip(
-                label: Text(status,
-                    style: const TextStyle(color: Colors.white, fontSize: 12)),
-                backgroundColor: statusColor,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-          ]),
-          const SizedBox(height: 6),
-          Text('Assigned: ${assigned.isNotEmpty ? assigned : '-'}',
-              style: const TextStyle(fontSize: 13, color: Colors.black54)),
-          if (site.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Text(site,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey))),
-          if (progressValue > 0)
-            Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: LinearProgressIndicator(value: progressValue)),
-        ]),
-        isThreeLine: assigned.isNotEmpty || progressValue > 0,
-        onTap: () async {
-          await _showChecklistForWorkOrder(r);
-        },
+          backgroundColor: avatarColor,
+          child: Text(initials,
+              style:
+                  const TextStyle(color: Colors.white, fontSize: 14)),
+        ),
+        title: Text(
+          assetName.isNotEmpty ? assetName : 'Unknown Asset',
+          style:
+              const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            if (siteName.isNotEmpty)
+              Text(siteName,
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 4),
+            _statusChip(status),
+          ],
+        ),
+        isThreeLine: siteName.isNotEmpty,
+        trailing: status == 'DONE'
+            ? const Icon(Icons.check_circle, color: Colors.green)
+            : status == 'SKIPPED'
+                ? const Icon(Icons.cancel, color: Colors.orange)
+                : const Icon(Icons.chevron_right),
+        onTap: status != 'PENDING'
+            ? null
+            : () async {
+                final asset = item['asset'] as Map<String, dynamic>;
+                final assignmentId = item['id'] as String;
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChecklistScreen(
+                      initialAlat: asset,
+                      initialWorkOrderId: assignmentId,
+                    ),
+                  ),
+                );
+                if (result == true) {
+                  await _updateAssignmentStatus(assignmentId, 'DONE');
+                }
+              },
       ),
     );
-  }
-
-  Future<void> _showChecklistForWorkOrder(dynamic r) async {
-    List<dynamic> questions = [];
-    final woId = (r is Map) ? (r['id'] ?? r['wo_id'] ?? '') : '';
-    try {
-      // Try to read checklist from the work order raw payload
-      if (r is Map) {
-        final raw = r['raw'] ?? {};
-        questions = (raw['checklist_template'] is List)
-            ? List<dynamic>.from(raw['checklist_template'])
-            : (raw['checklist'] is List
-                ? List<dynamic>.from(raw['checklist'])
-                : []);
-      }
-    } catch (_) {
-      questions = [];
-    }
-
-    // If not found in payload, try fetching the work order detail
-    if (questions.isEmpty) {
-      try {
-        final p = await SharedPreferences.getInstance();
-        final token = p.getString('api_token') ?? '';
-        if (token.isNotEmpty) {
-          final api = ApiClient(baseUrl: API_BASE, token: token);
-          if (woId != null && woId.toString().isNotEmpty) {
-            final res = await api
-                .get('/work-orders/${Uri.encodeComponent(woId.toString())}');
-            final w = res is Map ? (res['data'] ?? res) : res;
-            if (w is Map) {
-              final raw = w['raw'] ?? {};
-              questions = (raw['checklist_template'] is List)
-                  ? List<dynamic>.from(raw['checklist_template'])
-                  : (raw['checklist'] is List
-                      ? List<dynamic>.from(raw['checklist'])
-                      : []);
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('failed fetching work order detail for checklist: $e');
-      }
-    }
-
-    if (questions.isEmpty) {
-      // no checklist found
-      if (!mounted) return;
-      showModalBottomSheet(
-          context: context,
-          builder: (c) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text('No checklist available for this work order'),
-                const SizedBox(height: 12),
-                TextButton(
-                    onPressed: () => Navigator.pop(c),
-                    child: const Text('Close'))
-              ])));
-      return;
-    }
-
-    // Navigate to ChecklistScreen with the loaded questions
-    if (!mounted) return;
-    final initialAlat = (r is Map)
-        ? (r['asset'] ??
-            r['alat'] ??
-            r['raw']?['asset'] ??
-            r['raw']?['alat'] ??
-            {
-              'id': r['asset_id'] ?? r['alat_id'],
-              'name': (r['asset_name'] ?? r['asset'] ?? r['doc_no'])
-            })
-        : null;
-    final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => ChecklistScreen(
-                initialChecklist: questions,
-                initialAlat: initialAlat is Map
-                    ? Map<String, dynamic>.from(initialAlat)
-                    : null,
-                initialWorkOrderId: (woId != null && woId.toString().isNotEmpty)
-                    ? woId.toString()
-                    : null)));
-    try {
-      if (result == true) await _loadList();
-    } catch (_) {}
   }
 
   @override
@@ -512,53 +382,121 @@ class _DailyWorkOrdersScreenState extends State<DailyWorkOrdersScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      // refresh when app comes back to foreground
-      try {
-        if (mounted) _loadList();
-      } catch (_) {}
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadList();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final todayLabel =
+        '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
+
+    final total = rows.length;
+    final done = rows.where((r) => r['status'] == 'DONE').length;
+    final skipped = rows.where((r) => r['status'] == 'SKIPPED').length;
+    final pending = total - done - skipped;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daily Work Orders'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Daily Checklist',
+                style:
+                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(todayLabel,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.normal)),
+          ],
+        ),
         actions: [
           IconButton(
-            onPressed: loading
-                ? null
-                : () async {
-                    await _loadList();
-                  },
+            onPressed: loading ? null : _loadList,
             icon: loading
-                ? Padding(
+                ? const Padding(
                     padding: EdgeInsets.all(12),
                     child: SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2)))
+                        child:
+                            CircularProgressIndicator(strokeWidth: 2)))
                 : const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
         ],
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadList,
-              child: rows.isEmpty
-                  ? ListView(children: const [
-                      Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('No daily work orders found'))
-                    ])
-                  : ListView.builder(
-                      itemCount: rows.length,
-                      itemBuilder: (c, i) => _buildRow(rows[i]),
-                    ),
+      body: Column(
+        children: [
+          if (!loading && total > 0)
+            Container(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _summaryItem('Total', total, Colors.blueGrey),
+                  _summaryItem('Pending', pending,
+                      Colors.blueGrey.shade400),
+                  _summaryItem(
+                      'Done', done, Colors.green.shade600),
+                  _summaryItem(
+                      'Skipped', skipped, Colors.orange.shade700),
+                ],
+              ),
             ),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadList,
+                    child: rows.isEmpty
+                        ? ListView(children: const [
+                            Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Column(children: [
+                                Icon(Icons.checklist_rtl,
+                                    size: 48, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text(
+                                    'No daily checklist assignments today',
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        TextStyle(color: Colors.grey)),
+                              ]),
+                            )
+                          ])
+                        : ListView.builder(
+                            padding: const EdgeInsets.only(
+                                top: 8, bottom: 16),
+                            itemCount: rows.length,
+                            itemBuilder: (_, i) =>
+                                _buildRow(rows[i]),
+                          ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryItem(String label, int count, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$count',
+          style: TextStyle(
+              fontSize: 18, fontWeight: FontWeight.bold, color: color),
+        ),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11, color: Colors.black54)),
+      ],
     );
   }
 }
