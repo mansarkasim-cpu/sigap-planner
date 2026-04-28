@@ -52,6 +52,8 @@ export async function createSite(req: Request, res: Response) {
       location: payload.location,
       timezone: payload.timezone ?? null,
       hub: payload.hub_id ? ({ id: payload.hub_id } as MasterHub) : undefined,
+      pm_mode: payload.pm_mode ?? 'absolute',
+      pm_base_interval: payload.pm_base_interval != null ? Number(payload.pm_base_interval) : null,
     });
     const saved = await repo.save(ent);
     return res.status(201).json(saved);
@@ -75,6 +77,12 @@ export async function updateSite(req: Request, res: Response) {
       }
       if (payload.timezone !== undefined) {
         update.timezone = payload.timezone ?? null;
+      }
+      if (payload.pm_mode !== undefined) {
+        update.pm_mode = payload.pm_mode || 'absolute';
+      }
+      if (payload.pm_base_interval !== undefined) {
+        update.pm_base_interval = payload.pm_base_interval != null ? Number(payload.pm_base_interval) : null;
       }
       await repo.update({ id }, update);
     const row = await repo.findOne({ where: { id }, relations: ['hub'] });

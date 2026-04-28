@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import '../config.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 // Minimal fallback for location functionality to avoid requiring the
 // external 'location' package; replace with the real package in production.
@@ -888,6 +889,24 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       loading = true;
     });
     try {
+      Future<List<int>> _compressFileBytes(String path) async {
+        try {
+          final compressed = await FlutterImageCompress.compressWithFile(
+            path,
+            minWidth: 1024,
+            quality: 70,
+            // ensure format preserved as JPEG when possible
+          );
+          if (compressed != null && compressed.isNotEmpty) return compressed;
+        } catch (e) {
+          debugPrint('image compress failed: $e');
+        }
+        try {
+          return await File(path).readAsBytes();
+        } catch (_) {
+          return <int>[];
+        }
+      }
       // ensure location
       if (latitude == null || longitude == null) await captureLocation();
       final api = ApiClient(baseUrl: API_BASE, token: _token);
@@ -908,8 +927,14 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           try {
             final f = File(photoPath.toString());
             if (await f.exists()) {
-              final bytes = await f.readAsBytes();
-              item['evidence_photo_base64'] = base64Encode(bytes);
+              final bytes = await _compressFileBytes(f.path);
+              if (bytes.isNotEmpty) {
+                item['evidence_photo_base64'] = base64Encode(bytes);
+              } else {
+                // fallback to original file bytes
+                final raw = await f.readAsBytes();
+                item['evidence_photo_base64'] = base64Encode(raw);
+              }
             } else {
               // if file doesn't exist (could be a URL), send as photo path for server to accept if public
               item['evidence_photo_path'] = photoPath.toString();

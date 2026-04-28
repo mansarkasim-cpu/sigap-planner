@@ -14,6 +14,9 @@ export class MasterJenisAlat {
   @Column({ type: 'numeric', name: 'avg_hours_per_day', nullable: true, default: 24 })
   avg_hours_per_day?: number;
 
+  @Column({ type: 'integer', name: 'pm_base_interval', nullable: false, default: 250 })
+  pm_base_interval!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   created_at!: Date;
 

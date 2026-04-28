@@ -22,6 +22,12 @@ export class MasterSite {
   @Column({ length: 64, nullable: true })
   timezone?: string;
 
+  @Column({ length: 20, nullable: false, default: 'absolute' })
+  pm_mode!: string;
+
+  @Column({ type: 'integer', nullable: true })
+  pm_base_interval?: number | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   created_at!: Date;
 
