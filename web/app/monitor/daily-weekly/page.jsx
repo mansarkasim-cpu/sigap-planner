@@ -603,14 +603,28 @@ export default function WeeklyMonitoring(){
                                     sx={chipSx}
                                     onClick={async () => {
                                       if (statusLabel !== 'DONE') return;
-                                      if (!s || !s.checklist_id) return;
-                                      const id = s.checklist_id;
                                       try{
                                         setDetailLoading(true);
                                         setDetailOpen(true);
-                                        const res = await apiClient(`/checklists/${id}`);
-                                        const payload = res?.data || res;
-                                        setDetailData(payload);
+                                        if (s && s.checklist_id) {
+                                          const id = s.checklist_id;
+                                          const res = await apiClient(`/checklists/${id}`);
+                                          const payload = res?.data || res;
+                                          setDetailData(payload);
+                                        } else {
+                                          // Fallback: build minimal detailData from status `s` and alat `a` so user can view/print
+                                          const fallback = {
+                                            checklist: {
+                                              id: null,
+                                              teknisi_name: s?.teknisi_name || s?.teknisi || '-',
+                                              performed_at: s?.performed_at || null,
+                                              notes: s?.notes || s?.catatan || '',
+                                              alat: { nama: a?.nama || a?.name || '-', kode: a?.kode }
+                                            },
+                                            items: s?.items || s?.answers || a?.checklist_items || []
+                                          };
+                                          setDetailData(fallback);
+                                        }
                                       }catch(e){ console.error('load detail', e); setDetailData({ error: e?.message || String(e) }) }
                                       finally{ setDetailLoading(false); }
                                     }}
@@ -629,7 +643,7 @@ export default function WeeklyMonitoring(){
           </Box>
         )}
         </Paper>
-        <Dialog open={detailOpen} onClose={()=>{ setDetailOpen(false); setDetailData(null) }} fullWidth maxWidth="md">
+        <Dialog open={detailOpen} onClose={()=>{ setDetailOpen(false); setDetailData(null) }} fullWidth maxWidth="md" container={() => containerRef.current}>
           <DialogTitle sx={{ m: 0, p: 2 }}>
             Checklist Detail
             <IconButton
