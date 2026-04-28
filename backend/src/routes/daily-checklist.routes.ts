@@ -100,7 +100,7 @@ router.post('/daily-checklist-schedules', authMiddleware, async (req: Request, r
       .getOne();
 
     if (!schedule) {
-      schedule = sRepo.create({ date, status: 'PUBLISHED' } as any);
+      schedule = sRepo.create({ date, status: 'PUBLISHED' } as any) as unknown as DailyChecklistSchedule;
     }
     if (site) (schedule as any).site = site;
     if (callerUserId) {
