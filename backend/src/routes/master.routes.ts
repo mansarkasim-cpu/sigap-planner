@@ -3,6 +3,7 @@ import * as hubCtrl from '../controllers/masterHubController';
 import * as siteCtrl from '../controllers/masterSiteController';
 import * as jenisCtrl from '../controllers/masterJenisAlatController';
 import * as alatCtrl from '../controllers/masterAlatController';
+import * as seqCtrl from '../controllers/pmRuleSequenceController';
 import multer from 'multer';
 
 const upload = multer({ dest: 'uploads/' });
@@ -40,6 +41,12 @@ router.post('/master/alats', authMiddleware, requireRole(['admin']), alatCtrl.cr
 router.post('/master/alats/import', authMiddleware, requireRole(['admin']), upload.single('file'), alatCtrl.importAlats);
 router.patch('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', authMiddleware, requireRole(['admin']), alatCtrl.deleteAlat);
+
+// PM rule sequences (per-jenis and per-alat)
+router.get('/master/pm-sequence/jenis/:jenis_id', authMiddleware, requireRole(['admin']), seqCtrl.getSequenceByJenis);
+router.post('/master/pm-sequence/jenis/:jenis_id', authMiddleware, requireRole(['admin']), seqCtrl.saveSequenceByJenis);
+router.get('/master/pm-sequence/alat/:alat_id', authMiddleware, requireRole(['admin']), seqCtrl.getSequenceByAlat);
+router.post('/master/pm-sequence/alat/:alat_id', authMiddleware, requireRole(['admin']), seqCtrl.saveSequenceByAlat);
 
 // Questions & Options (protected)
 router.get('/master/questions', authMiddleware, requireRole(['admin','technician']), qCtrl.listQuestions);

@@ -79,7 +79,16 @@ export default function SitesPage(){
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow><TableCell>ID</TableCell><TableCell>Code</TableCell><TableCell>Name</TableCell><TableCell>Hub</TableCell><TableCell>Timezone</TableCell><TableCell align="right">Action</TableCell></TableRow>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Code</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Hub</TableCell>
+                <TableCell>Timezone</TableCell>
+                <TableCell>PM Mode</TableCell>
+                <TableCell>PM Base (h)</TableCell>
+                <TableCell align="right">Action</TableCell>
+              </TableRow>
             </TableHead>
             <TableBody>
               {rows.map(r=> (
@@ -89,6 +98,8 @@ export default function SitesPage(){
                   <TableCell>{r.name}</TableCell>
                   <TableCell>{r.hub ? r.hub.name : '-'}</TableCell>
                   <TableCell>{(function(t){ if(!t) return '-'; if(t==='Asia/Jakarta') return 'WIB (Asia/Jakarta)'; if(t==='Asia/Makassar') return 'WITA (Asia/Makassar)'; if(t==='Asia/Jayapura') return 'WIT (Asia/Jayapura)'; return t; })(r.timezone)}</TableCell>
+                  <TableCell>{r.pm_mode || '-'}</TableCell>
+                  <TableCell>{r.pm_base_interval != null ? String(r.pm_base_interval) : '-'}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="Edit"><IconButton size="small" onClick={()=>openEdit(r)}><EditIcon fontSize="small"/></IconButton></Tooltip>
                     <Tooltip title="Delete"><IconButton size="small" color="error" onClick={()=>remove(r.id)}><DeleteIcon fontSize="small"/></IconButton></Tooltip>
@@ -133,6 +144,11 @@ export default function SitesPage(){
               <MenuItem value="Asia/Makassar">WITA (Asia/Makassar)</MenuItem>
               <MenuItem value="Asia/Jayapura">WIT (Asia/Jayapura)</MenuItem>
             </Select>
+            <Select size="small" value={editing?.pm_mode || 'absolute'} onChange={e=>setEditing({...editing, pm_mode: e.target.value || 'absolute'})}>
+              <MenuItem value="absolute">Absolute (align to grid)</MenuItem>
+              <MenuItem value="relative">Relative (based on last PM)</MenuItem>
+            </Select>
+            <TextField label="PM Base Interval (hours)" size="small" type="number" value={editing?.pm_base_interval ?? ''} onChange={e=>setEditing({...editing, pm_base_interval: e.target.value? Number(e.target.value) : null})} helperText="Leave empty to use jenis_alat default" />
           </Box>
         </DialogContent>
         <DialogActions>

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +7,44 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import '../config.dart';
+
+// Top-level background message handler. Must be a top-level function to work
+// with `FirebaseMessaging.onBackgroundMessage` on Android/iOS.
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+  try {
+    debugPrint('FCM background message received: ${message.data}');
+    if (_isRealisasiApproval(message)) {
+      debugPrint('Dropping realisasi approval notification (background)');
+      return;
+    }
+    // no-op: we don't show local notifications in this app (foreground handled separately)
+  } catch (e) {
+    debugPrint('background handler error: $e');
+  }
+}
+
+bool _isRealisasiApproval(RemoteMessage message) {
+  try {
+    final data = message.data ?? {};
+    // common keys to check: 'type', 'event', 'category'
+    final keys = ['type', 'event', 'category', 'action'];
+    for (final k in keys) {
+      if (data.containsKey(k)) {
+        final v = data[k]?.toString()?.toLowerCase() ?? '';
+        if (v.contains('realisasi') && (v.contains('approve') || v.contains('setuju') || v.contains('disetujui') || v.contains('approved'))) return true;
+      }
+    }
+    // also check title/body for keywords as a fallback
+    final title = (message.notification?.title ?? '').toString().toLowerCase();
+    final body = (message.notification?.body ?? '').toString().toLowerCase();
+    final combined = '$title $body';
+    if (combined.contains('realisasi') && (combined.contains('approve') || combined.contains('setuju') || combined.contains('disetujui') || combined.contains('approved'))) return true;
+  } catch (_) {}
+  return false;
+}
 
 class PushNotifications {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -20,9 +57,18 @@ class PushNotifications {
       debugPrint('PushNotifications.init called');
       if (kIsWeb) return; // Web setup not covered here
       await _requestPermission();
+      // Register background handler to allow client-side filtering of messages
+      // (only data messages are delivered to this handler; notification-payload
+      // messages are displayed by the system and cannot be intercepted client-side).
+      FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
       // Foreground messages are logged. To show system notifications while
       // app is foreground, re-add `flutter_local_notifications` and initialize it.
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        // Drop messages that represent a 'realisasi approved by leader' event.
+        if (_isRealisasiApproval(message)) {
+          debugPrint('Dropping realisasi approval notification (foreground)');
+          return;
+        }
         debugPrint('FCM foreground message (no local notification): ${message.notification}');
       });
       // Listen for token refresh and register automatically

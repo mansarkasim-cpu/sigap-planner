@@ -101,6 +101,12 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
   function resolveEndDate(w: WorkOrder) {
     return (w.end_date as any) ?? (w as any).date_end ?? w.raw?.date_end ?? w.raw?.end_date ?? null;
   }
+  
+  function resolveDescription(w?: WorkOrder | null) {
+    if (!w) return '-';
+    const d = (w.description as any) ?? w.raw?.description ?? w.raw?.work_order?.description ?? w.raw?.workOrder?.description ?? (w as any).work_order?.description ?? '';
+    return d ? String(d) : '-';
+  }
   function normalizeStatusRaw(s?: any) {
     if (s == null) return '';
     const str = String(s).toString();
@@ -946,14 +952,14 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                   <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', justifyContent: 'space-between' }}>
                     <Box sx={{ flex: 1 }}>
                       <div style={{ fontWeight: 700 }}>{w.doc_no ?? w.id} — {w.asset_name ?? '-'}</div>
-                      <div style={{ color: '#666', marginTop: 6 }}>{w.description ?? '-'}</div>
+                      <div style={{ color: '#666', marginTop: 6 }}>{resolveDescription(w)}</div>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
                         <div style={{ fontSize: 12, color: '#666' }}>Start: {formatUtcDisplay(resolveStartDate(w))}</div>
                         <div style={{ fontSize: 12, color: '#666' }}>End: {formatUtcDisplay(resolveEndDate(w))}</div>
                         <div>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</div>
                       </Box>
                       <div style={{ marginTop: 8 }}>
-                        <div style={expandedRows[w.id] ? {} : { maxHeight: '3em', overflow: 'hidden' }}>{w.description ?? '-'}</div>
+                        <div style={expandedRows[w.id] ? {} : { maxHeight: '3em', overflow: 'hidden' }}>{resolveDescription(w)}</div>
                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-start', mt: 1 }}>
                           <Button size="small" onClick={() => toggleRow(w.id)}>{expandedRows[w.id] ? 'Collapse' : 'Expand'}</Button>
                         </Box>
@@ -1037,7 +1043,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.asset_name ?? '-'}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{renderStatusBadge((w as any).status ?? w.raw?.status ?? 'PREPARATION')}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.vendor_cabang ?? w.raw?.vendor_cabang ?? '-'}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{w.description ?? '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{resolveDescription(w)}</TableCell>
                         <TableCell sx={{ whiteSpace: 'normal' }}>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                               <Tooltip title="Details">
@@ -1091,7 +1097,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Task - {taskModal.wo.doc_no ?? taskModal.wo.id}</h2>
-                <div style={{ color: '#666', fontSize: 13 }}>{taskModal.wo.description}</div>
+                <div style={{ color: '#666', fontSize: 13 }}>{resolveDescription(taskModal.wo)}</div>
               </div>
               <div style={{ textAlign: 'right', minWidth: 180 }}>
                 <div style={{ fontSize: 13, marginBottom: 8 }}>
@@ -1385,7 +1391,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           {modalRow ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <div style={{ fontWeight: 700 }}>{modalRow.asset_name ?? '-'}</div>
-              <div style={{ color: '#666' }}>{modalRow.description ?? '-'}</div>
+              <div style={{ color: '#666' }}>{resolveDescription(modalRow)}</div>
               <div style={{ color: '#666', fontSize: 13 }}>Location: {modalRow.vendor_cabang ?? modalRow.raw?.vendor_cabang ?? '-'}</div>
               <div style={{ color: '#666', fontSize: 13 }}>Start: {formatUtcDisplay(modalRow ? resolveStartDate(modalRow) : undefined)}</div>
               <div style={{ color: '#666', fontSize: 13 }}>End: {formatUtcDisplay(modalRow ? resolveEndDate(modalRow) : undefined)}</div>

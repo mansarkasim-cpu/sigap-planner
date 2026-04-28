@@ -101,6 +101,7 @@ export default function Nav(){
               <li><Link href="/master/jenis-alat" className="nav-link">Jenis Alat</Link></li>
               <li><Link href="/master/questions" className="nav-link">Questions</Link></li>
               <li><Link href="/master/pm-rules" className="nav-link">PM Rules</Link></li>
+              <li><Link href="/master/pm-rule-sequence" className="nav-link">PM Rule Sequence</Link></li>
               <li><Link href="/master/alats" className="nav-link">Alat</Link></li>
             </ul>
           </li>

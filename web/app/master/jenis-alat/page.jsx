@@ -73,7 +73,14 @@ export default function JenisAlatPage(){
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow><TableCell>ID</TableCell><TableCell>Nama</TableCell><TableCell>Description</TableCell><TableCell>Avg Hrs/Day</TableCell><TableCell align="right">Action</TableCell></TableRow>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Nama</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Avg Hrs/Day</TableCell>
+                <TableCell>PM Base (h)</TableCell>
+                <TableCell align="right">Action</TableCell>
+              </TableRow>
             </TableHead>
             <TableBody>
               {rows.map(r=> (
@@ -82,6 +89,7 @@ export default function JenisAlatPage(){
                   <TableCell>{r.nama}</TableCell>
                   <TableCell sx={{ maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.description}</TableCell>
                   <TableCell>{typeof r.avg_hours_per_day !== 'undefined' && r.avg_hours_per_day !== null ? String(r.avg_hours_per_day) : '24'}</TableCell>
+                  <TableCell>{typeof r.pm_base_interval !== 'undefined' && r.pm_base_interval !== null ? String(r.pm_base_interval) : '250'}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="Edit"><IconButton size="small" onClick={()=>openEdit(r)}><EditIcon fontSize="small"/></IconButton></Tooltip>
                     <Tooltip title="Delete"><IconButton size="small" color="error" onClick={()=>remove(r.id)}><DeleteIcon fontSize="small"/></IconButton></Tooltip>
@@ -116,6 +124,7 @@ export default function JenisAlatPage(){
             <TextField label="Nama" size="small" value={editing?.nama||''} onChange={e=>setEditing({...editing, nama: e.target.value})} />
             <TextField label="Description" size="small" multiline minRows={3} value={editing?.description||''} onChange={e=>setEditing({...editing, description: e.target.value})} />
             <TextField label="Avg Hours/Day" size="small" type="number" inputProps={{ min:0, step:0.1 }} value={typeof editing?.avg_hours_per_day !== 'undefined' && editing?.avg_hours_per_day !== null ? editing.avg_hours_per_day : 24} onChange={e=>setEditing({...editing, avg_hours_per_day: e.target.value === '' ? null : Number(e.target.value) })} />
+            <TextField label="PM Base Interval (hours)" size="small" type="number" inputProps={{ min:1 }} value={typeof editing?.pm_base_interval !== 'undefined' && editing?.pm_base_interval !== null ? editing.pm_base_interval : 250} onChange={e=>setEditing({...editing, pm_base_interval: e.target.value === '' ? null : Number(e.target.value) })} />
           </Box>
         </DialogContent>
         <DialogActions>
