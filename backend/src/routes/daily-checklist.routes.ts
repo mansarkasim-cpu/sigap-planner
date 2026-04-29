@@ -141,30 +141,57 @@ router.post('/daily-checklist-schedules', authMiddleware, async (req: Request, r
     }
     schedule = await sRepo.save(schedule as any);
 
-    // Replace assignments: delete existing, insert new
-    await aRepo.createQueryBuilder()
-      .delete()
-      .from(DailyChecklistAssignment)
-      .where('schedule_id = :sid', { sid: (schedule as any).id })
-      .execute();
+    // Replace assignments: preserve status of existing (asset+user) pairs,
+    // only delete removed ones and insert truly new ones.
+    const existingAssignments = await aRepo
+      .createQueryBuilder('a')
+      .leftJoinAndSelect('a.asset', 'asset')
+      .leftJoinAndSelect('a.user', 'user')
+      .where('a.schedule_id = :sid', { sid: (schedule as any).id })
+      .getMany();
 
+    // Map existing assignments by "asset_id|user_id" key to preserve their status
+    const existingMap = new Map<string, DailyChecklistAssignment>();
+    for (const ea of existingAssignments) {
+      const key = `${(ea as any).asset?.id}_${(ea as any).user?.id}`;
+      existingMap.set(key, ea);
+    }
+
+    // Determine which (asset+user) pairs are in the new request
+    const incomingKeys = new Set<string>();
     const toInsert: DailyChecklistAssignment[] = [];
+
     for (const entry of assignments) {
       const { asset_id, user_id } = entry;
       if (!asset_id || !user_id) continue;
 
-      const asset = await manager.getRepository(MasterAlat).findOneBy({ id: Number(asset_id) } as any);
-      const user  = await manager.getRepository(User).findOneBy({ id: String(user_id) } as any);
-      if (!asset || !user) continue;
+      const key = `${Number(asset_id)}_${String(user_id)}`;
+      incomingKeys.add(key);
 
-      const a = aRepo.create({
-        schedule: schedule as any,
-        asset,
-        user,
-        status: 'PENDING',
-      } as any);
-      toInsert.push(a as any);
+      if (!existingMap.has(key)) {
+        // Truly new assignment — insert as PENDING
+        const asset = await manager.getRepository(MasterAlat).findOneBy({ id: Number(asset_id) } as any);
+        const user  = await manager.getRepository(User).findOneBy({ id: String(user_id) } as any);
+        if (!asset || !user) continue;
+
+        const a = aRepo.create({
+          schedule: schedule as any,
+          asset,
+          user,
+          status: 'PENDING',
+        } as any);
+        toInsert.push(a as any);
+      }
+      // Existing assignment with same asset+user → keep as-is (preserve DONE/SKIPPED status)
     }
+
+    // Delete only assignments that are no longer in the new list
+    const toDelete = existingAssignments.filter((ea: any) => {
+      const key = `${ea.asset?.id}_${ea.user?.id}`;
+      return !incomingKeys.has(key);
+    });
+    if (toDelete.length > 0) await aRepo.remove(toDelete as any);
+
     if (toInsert.length > 0) await aRepo.save(toInsert);
     return schedule;
   }).then(async (schedule: any) => {
