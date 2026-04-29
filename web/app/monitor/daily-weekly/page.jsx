@@ -129,6 +129,23 @@ export default function WeeklyMonitoring(){
     }catch(e){}
     return res
   }, [data, today])
+
+  const daySummaries = useMemo(()=>{
+    const days = Array.isArray(data?.days) ? data.days : []
+    const alats = Array.isArray(data?.alats) ? data.alats : []
+    return days.map(d => {
+      let done = 0, total = 0, doneWithNotes = 0
+      for (const a of alats) {
+        total++
+        const s = a?.statuses?.[d]
+        if (s && s.done) {
+          done++
+          if (s.notes || s.catatan || s.has_false) doneWithNotes++
+        }
+      }
+      return { date: d, done, total, doneWithNotes }
+    })
+  }, [data])
   const siteName = useMemo(()=>{
     try{
       if (!siteId) return 'All Sites'
@@ -429,19 +446,44 @@ export default function WeeklyMonitoring(){
         {!loading && !data && <Typography>No data</Typography>}
         {!loading && data && (
           <Box>
-            {/* Summary cards for today's status */}
-            <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:2, mb:2}}>
-              <Box sx={{display:'flex', gap:2}}>
-                <Paper sx={{p:2, minWidth:220}} elevation={1}>
-                  <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Done</Typography>
-                  <Typography variant="h6" sx={{color:(theme)=>theme.palette.success.main}}>{`${todaySummary.done} / ${todaySummary.total}`}</Typography>
-                </Paper>
-                <Paper sx={{p:2, minWidth:220}} elevation={1}>
-                  <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Done (with notes)</Typography>
-                  <Typography variant="h6" sx={{color:(theme)=>theme.palette.warning.main}}>{todaySummary.doneWithNotes}</Typography>
-                </Paper>
+            {/* Summary cards per day for the week */}
+            <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:2, mb:2, flexWrap:'wrap'}}>
+              <Box sx={{display:'flex', gap:1, flexWrap:'wrap'}}>
+                {daySummaries.map(ds => (
+                  <Paper
+                    key={ds.date}
+                    sx={{
+                      p:1.5,
+                      minWidth:110,
+                      borderWidth: ds.date === today ? 2 : 1,
+                      borderStyle:'solid',
+                      borderColor: ds.date === today ? 'primary.main' : 'divider'
+                    }}
+                    elevation={ds.date === today ? 3 : 1}
+                  >
+                    <Typography variant="caption" sx={{color:'text.secondary', display:'block', fontWeight: ds.date === today ? 700 : 400}}>
+                      {weekdayName(ds.date)} · {ds.date}
+                    </Typography>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        color: (theme) =>
+                          ds.done === ds.total && ds.total > 0
+                            ? theme.palette.success.main
+                            : ds.date < today
+                              ? theme.palette.error.main
+                              : theme.palette.text.primary
+                      }}
+                    >
+                      {ds.done} / {ds.total}
+                    </Typography>
+                    {ds.doneWithNotes > 0 && (
+                      <Typography variant="caption" sx={{color:'warning.main'}}>{ds.doneWithNotes} w/ catatan</Typography>
+                    )}
+                  </Paper>
+                ))}
               </Box>
-              <Box sx={{ml:2, textAlign:'right'}}>
+              <Box sx={{ml:2, textAlign:'right', alignSelf:'center'}}>
                 <Typography variant="caption" sx={{color:(theme)=>theme.palette.text.secondary}}>Site</Typography>
                 <Typography variant="subtitle1" sx={{fontWeight:600}}>{siteName}</Typography>
               </Box>
