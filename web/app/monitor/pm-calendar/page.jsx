@@ -508,7 +508,7 @@ export default function PMCalendarPage() {
                       {items.length > 0 && <div style={{ fontSize: 12, color: '#0070f3' }}>{items.length} PM</div>}
                     </div>
                     <div style={{ fontSize: 13 }}>
-                      {items.slice(0,4).map((it, idx) => {
+                      {items.slice(0,3).map((it, idx) => {
                           const isForecast = !!it.__forecast;
                           const st = itemStatus(it);
                           const color = isForecast ? FORECAST_COLOR : (STATUS_COLORS[st] || '#888');
@@ -523,7 +523,7 @@ export default function PMCalendarPage() {
                           </div>
                         );
                       })}
-                      {items.length > 4 && <div style={{ fontSize: 12, color: '#666', cursor: 'pointer' }} onClick={() => openDayModal(items)}>+{items.length-4} more</div>}
+                      {items.length > 3 && <div style={{ fontSize: 12, color: '#666', cursor: 'pointer' }} onClick={() => openDayModal(items)}>+{items.length-3} more</div>}
                     </div>
                   </div>
                 );
