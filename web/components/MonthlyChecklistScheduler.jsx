@@ -41,6 +41,7 @@ export default function MonthlyChecklistScheduler(){
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(200);
   const [existingSchedule, setExistingSchedule] = useState(null); // data dari DB jika sudah ada
+  const [printLoading, setPrintLoading] = useState(false);
 
   async function loadAlats(){
     try{
@@ -258,6 +259,152 @@ export default function MonthlyChecklistScheduler(){
     Promise.all([loadShiftAssignments(), loadExistingSchedule()]);
   }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function handlePrintWeek(){
+    if (!site) return alert('Pilih site terlebih dahulu');
+
+    // Hitung rentang Senin–Minggu dari tanggal yang dipilih
+    const date = new Date(selectedDate);
+    const dow = date.getDay(); // 0=Sun
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - (dow === 0 ? 6 : dow - 1));
+
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      weekDates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+    }
+
+    setPrintLoading(true);
+    try {
+      const siteObj = sites.find(s => String(s.id) === String(site));
+      const siteIdParam = siteObj ? `&site_id=${encodeURIComponent(siteObj.id)}` : '';
+      const siteName = siteObj ? (siteObj.name || String(siteObj.id)) : String(site);
+
+      // Ambil jadwal untuk setiap hari dalam seminggu
+      const weekSchedules = await Promise.all(
+        weekDates.map(async d => {
+          try {
+            const res = await apiClient(`/daily-checklist-schedules?date=${encodeURIComponent(d)}${siteIdParam}`);
+            const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+            return { date: d, schedule: list && list.length > 0 ? list[0] : null };
+          } catch(e) {
+            return { date: d, schedule: null };
+          }
+        })
+      );
+
+      // Bangun map techId -> { name, groupName, dateAssets: { date: [assetName] } }
+      const techMap = {};
+      for (const it of previewItems) {
+        techMap[String(it.techId)] = {
+          name: it.techName,
+          groupName: userGroupMap[String(it.techId)] || '',
+          dateAssets: {},
+        };
+      }
+      for (const u of users) {
+        if (!techMap[String(u.id)]) {
+          techMap[String(u.id)] = {
+            name: u.name || u.nama || String(u.id),
+            groupName: userGroupMap[String(u.id)] || '',
+            dateAssets: {},
+          };
+        }
+      }
+
+      for (const { date: d, schedule } of weekSchedules) {
+        if (!schedule || !Array.isArray(schedule.assignments)) continue;
+        for (const a of schedule.assignments) {
+          const assetId = a.asset?.id ?? a.asset_id;
+          const userId  = a.user?.id  ?? a.user_id;
+          const assetName =
+            a.asset?.nama || a.asset?.name ||
+            alats.find(al => String(al.id) === String(assetId))?.nama ||
+            alats.find(al => String(al.id) === String(assetId))?.name ||
+            String(assetId);
+          if (userId == null) continue;
+          const key = String(userId);
+          if (!techMap[key]) techMap[key] = { name: String(userId), groupName: '', dateAssets: {} };
+          if (!techMap[key].dateAssets[d]) techMap[key].dateAssets[d] = [];
+          techMap[key].dateAssets[d].push(assetName);
+        }
+      }
+
+      // Hanya tampilkan teknisi yang punya minimal 1 assignment dalam seminggu
+      const techList = Object.values(techMap).filter(t => weekDates.some(d => (t.dateAssets[d] || []).length > 0));
+      techList.sort((a, b) => {
+        if (a.groupName !== b.groupName) return (a.groupName || '').localeCompare(b.groupName || '');
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+      const dayNames = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+
+      let bodyRows = '';
+      let lastGroup = null;
+      for (const t of techList) {
+        if (t.groupName && t.groupName !== lastGroup) {
+          bodyRows += `<tr><td colspan="${1 + weekDates.length}" class="group-header">${t.groupName}</td></tr>`;
+          lastGroup = t.groupName;
+        }
+        bodyRows += `<tr><td class="tech-name">${t.name}</td>${weekDates.map(d => {
+          const assets = t.dateAssets[d] || [];
+          if (assets.length === 0) return '<td><span class="empty">-</span></td>';
+          return `<td><ul class="asset-list">${assets.map(a => `<li>${a}</li>`).join('')}</ul></td>`;
+        }).join('')}</tr>`;
+      }
+      if (techList.length === 0) {
+        bodyRows = `<tr><td colspan="${1 + weekDates.length}" style="text-align:center;color:#999;padding:12px">Tidak ada jadwal tersimpan untuk minggu ini.</td></tr>`;
+      }
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Jadwal Mingguan - ${siteName}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 11px; margin: 16px; }
+    h2 { text-align: center; margin-bottom: 4px; font-size: 14px; }
+    .subtitle { text-align: center; margin-bottom: 12px; font-size: 11px; color: #555; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
+    th { background: #1565c0; color: #fff; text-align: center; font-size: 10px; }
+    .tech-name { font-weight: bold; white-space: nowrap; }
+    .group-header { background: #e3f2fd; font-weight: bold; font-size: 11px; }
+    .asset-list { list-style: none; padding: 0; margin: 0; }
+    .asset-list li { padding: 1px 0; }
+    .empty { color: #bbb; }
+    .footer { margin-top: 12px; font-size: 9px; color: #999; }
+    @media print { @page { size: landscape; margin: 8mm; } }
+  </style>
+</head>
+<body>
+  <h2>Jadwal Daily Checklist Mingguan</h2>
+  <div class="subtitle">Site: <strong>${siteName}</strong> &nbsp;|&nbsp; Periode: ${weekDates[0]} &ndash; ${weekDates[6]}</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:110px">Teknisi</th>
+        ${weekDates.map((d, i) => `<th>${dayNames[i]}<br>${d}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <div class="footer">Dicetak: ${new Date().toLocaleString('id-ID')}</div>
+  <script>window.onload = function(){ window.print(); }<\/script>
+</body>
+</html>`;
+
+      const win = window.open('', '_blank');
+      if (win) { win.document.write(html); win.document.close(); }
+      else alert('Popup diblokir. Harap izinkan popup di browser Anda.');
+    } catch(e) {
+      alert('Gagal memuat data mingguan: ' + (e?.message || e));
+    } finally {
+      setPrintLoading(false);
+    }
+  }
+
   async function handleSubmit(){
     if (!confirm('Simpan jadwal daily checklist ini ke server?')) return;
     // Flatten: collect all (asset_id, user_id) pairs that have assignments
@@ -368,6 +515,9 @@ export default function MonthlyChecklistScheduler(){
           <MenuItem value={200}>200</MenuItem>
           <MenuItem value={500}>500</MenuItem>
         </TextField>
+        <Button variant="outlined" onClick={handlePrintWeek} disabled={!site || printLoading}>
+          {printLoading ? 'Memuat...' : 'Print Jadwal Minggu'}
+        </Button>
         <Button color="success" variant="contained" onClick={handleSubmit}>
           {existingSchedule ? 'Update Jadwal' : 'Simpan Jadwal'}
         </Button>
