@@ -519,9 +519,9 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   pending.approvedAt = new Date();
   await pendingRepo().save(pending);
 
-  // notify submitter/planner
-  console.log('INSTRUMENT pushNotify approvePendingRealisasi', { target: '', woId: wo?.id, woDoc: wo?.doc_no });
-  pushNotify('', `Realisasi approved for WO ${wo?.doc_no}`);
+  // notify submitter/planner — disabled per request (task approved by leader)
+  // console.log('INSTRUMENT pushNotify approvePendingRealisasi', { target: '', woId: wo?.id, woDoc: wo?.doc_no });
+  // pushNotify('', `Realisasi approved for WO ${wo?.doc_no}`);
 
   return res.json({ id: realisasi.id });
 }

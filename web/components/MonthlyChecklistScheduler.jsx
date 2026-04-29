@@ -99,12 +99,11 @@ export default function MonthlyChecklistScheduler(){
       techName: u.name || u.nama || u.label || String(u.id),
       // assignedAssetIdsByDay: object keyed by date -> array of asset ids
       assignedAssetIdsByDay: days.reduce((acc, dd) => { acc[dd] = []; return acc; }, {}),
-      // scheduledByDay: whether this tech is scheduled on given date (default true while assignments not loaded)
-      // If assignments are loaded but no data exists for the date, default to true (allow all to be assigned)
+      // scheduledByDay: whether this tech is scheduled on given date
+      // If assignments not yet loaded → default true (optimistic). If loaded but no data for date → false (no shift = no access)
       scheduledByDay: days.reduce((acc, dd) => {
-        const hasAnyDataForDay = scheduledMap[dd] && scheduledMap[dd].size > 0;
-        if (!assignmentsLoaded || !hasAnyDataForDay) acc[dd] = true;
-        else acc[dd] = scheduledMap[dd].has(String(u.id));
+        if (!assignmentsLoaded) { acc[dd] = true; return acc; }
+        acc[dd] = Boolean(scheduledMap[dd] && scheduledMap[dd].has(String(u.id)));
         return acc;
       }, {}),
       startTime: '08:00:00Z',
@@ -203,7 +202,7 @@ export default function MonthlyChecklistScheduler(){
     if (assets.length === 0) return;
     const scheduled = previewItems
       .map((it, idx) => ({ idx, it }))
-      .filter(({ it }) => assignmentsLoaded ? Boolean(it.scheduledByDay?.[selectedDate] !== false !== false) : true);
+      .filter(({ it }) => assignmentsLoaded ? Boolean(it.scheduledByDay?.[selectedDate]) : true);
     if (scheduled.length === 0) return;
     setPreviewItems(prev => {
       const copy = prev.map(it => ({
@@ -251,6 +250,13 @@ export default function MonthlyChecklistScheduler(){
   }, []);
 
   useEffect(()=>{ buildPreview(); }, [alats, assignmentsByDate, selectedDate, users, shiftGroups, existingSchedule]);
+
+  // Re-fetch shift assignments & existing schedule whenever date changes (only after initial load)
+  useEffect(()=>{
+    if (!assignmentsLoaded) return; // belum pernah load, skip
+    setAssignmentsLoaded(false);
+    Promise.all([loadShiftAssignments(), loadExistingSchedule()]);
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(){
     if (!confirm('Simpan jadwal daily checklist ini ke server?')) return;

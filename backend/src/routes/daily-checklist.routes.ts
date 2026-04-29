@@ -36,6 +36,38 @@ router.get('/daily-checklist-schedules', authMiddleware, async (req: Request, re
 
     qb.orderBy('s.date', 'DESC').addOrderBy('s.createdAt', 'DESC');
     const rows = await qb.getMany();
+
+    // Enrich assignment status: if still PENDING but daily_checklist exists for that asset+user+date → mark as DONE
+    if (rows.length > 0) {
+      const dateStr = req.query.date ? String(req.query.date) : null;
+      const pendingAssignments = rows.flatMap((s: any) =>
+        (s.assignments || []).filter((a: any) => a.status === 'PENDING' && a.asset?.id && a.user?.id)
+      );
+      if (pendingAssignments.length > 0) {
+        const alatIds = [...new Set(pendingAssignments.map((a: any) => Number(a.asset.id)))];
+        const schedDates = dateStr ? [dateStr] : [...new Set(rows.map((s: any) => String(s.date).slice(0, 10)))];
+        const done = await AppDataSource.query(
+          `SELECT dc.alat_id, dc.teknisi_id, DATE(dc.performed_at) AS perf_date, MIN(dc.performed_at) AS performed_at
+           FROM daily_checklist dc
+           WHERE dc.alat_id = ANY($1) AND DATE(dc.performed_at) = ANY($2)
+           GROUP BY dc.alat_id, dc.teknisi_id, DATE(dc.performed_at)`,
+          [alatIds, schedDates]
+        );
+        const doneSet = new Set(done.map((r: any) => `${r.alat_id}_${String(r.perf_date).slice(0, 10)}`));
+        // Update status in-memory for response
+        for (const s of rows as any[]) {
+          for (const a of (s.assignments || [])) {
+            if (a.status === 'PENDING' && a.asset?.id) {
+              const key = `${a.asset.id}_${String(s.date).slice(0, 10)}`;
+              if (doneSet.has(key)) {
+                a.status = 'DONE';
+              }
+            }
+          }
+        }
+      }
+    }
+
     return res.json(rows);
   } catch (err) {
     console.error('[daily-checklist-schedules GET]', err);

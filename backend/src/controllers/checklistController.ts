@@ -4,6 +4,7 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { AppDataSource } from '../ormconfig';
 import { DailyChecklist } from '../entities/DailyChecklist';
+import { DailyChecklistAssignment } from '../entities/DailyChecklistAssignment';
 import { MasterChecklistQuestion } from '../entities/MasterChecklistQuestion';
 import { DailyChecklistItem } from '../entities/DailyChecklistItem';
 import { User } from '../entities/User';
@@ -237,6 +238,32 @@ export async function submitChecklist(req: Request, res: Response) {
         });
         const savedItem = await itemRepo.save(item);
         createdItems.push(savedItem);
+      }
+
+      // After saving checklist, auto-mark the daily_checklist_assignment as DONE
+      try {
+        const performedDate = (savedDc as any).performed_at ? new Date((savedDc as any).performed_at) : new Date();
+        const dateStr = performedDate.toISOString().slice(0, 10); // YYYY-MM-DD
+        const userId = user?.id;
+        if (userId && alat_id) {
+          const assignRepo = tx.getRepository(DailyChecklistAssignment);
+          const assignment = await assignRepo
+            .createQueryBuilder('a')
+            .innerJoin('a.schedule', 's')
+            .where('a.asset_id = :alatId', { alatId: Number(alat_id) })
+            .andWhere('a.user_id = :userId', { userId: String(userId) })
+            .andWhere("DATE(s.date) = :date", { date: dateStr })
+            .andWhere("a.status = 'PENDING'")
+            .getOne();
+          if (assignment) {
+            assignment.status = 'DONE';
+            (assignment as any).completedAt = performedDate;
+            await assignRepo.save(assignment);
+            console.info(`submitChecklist: auto-marked assignment ${(assignment as any).id} as DONE`);
+          }
+        }
+      } catch (e) {
+        console.warn('submitChecklist: failed to auto-mark assignment DONE', e);
       }
 
       // After saving checklist, try to associate with a DAILY WorkOrder and set its start_date to performed_at - 15 minutes
