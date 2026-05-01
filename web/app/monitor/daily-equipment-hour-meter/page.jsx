@@ -336,6 +336,12 @@ function formatDateWithTZ(s){
   try{
     const dt = new Date(s)
     if (isNaN(dt.getTime())) return String(s)
-    return dt.toLocaleString()
+    const yr = dt.getUTCFullYear()
+    const mo = dt.getUTCMonth() + 1
+    const da = dt.getUTCDate()
+    const hh = String(dt.getUTCHours()).padStart(2,'0')
+    const mm = String(dt.getUTCMinutes()).padStart(2,'0')
+    const ss = String(dt.getUTCSeconds()).padStart(2,'0')
+    return `${mo}/${da}/${yr}, ${hh}:${mm}:${ss}`
   }catch(e){ return String(s) }
 }
