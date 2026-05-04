@@ -255,7 +255,7 @@ router.post('/tasks/:id/assign', authMiddleware, async (req: Request, res: Respo
         if (wo) {
           // preserve current IN_PROGRESS or PREPARATION status
           const currentStatus = (wo.status || '').toString();
-          if (currentStatus !== 'IN_PROGRESS' && currentStatus !== 'PREPARATION') {
+          if (currentStatus !== 'IN_PROGRESS') {
             if (total === 0) {
               wo.status = 'NEW';
             } else if (assignedCount === 0) {
@@ -267,7 +267,7 @@ router.post('/tasks/:id/assign', authMiddleware, async (req: Request, res: Respo
             }
             if (wo.status) await woRepo.save(wo);
           } else {
-            // keep existing status (IN_PROGRESS or PREPARATION)
+            // keep existing status (IN_PROGRESS)
           }
         }
       }
@@ -324,7 +324,7 @@ router.delete('/tasks/:id/assign/:assignId', authMiddleware, async (req: Request
           if (wo) {
             // preserve current IN_PROGRESS or PREPARATION status
             const currentStatus = (wo.status || '').toString();
-            if (currentStatus !== 'IN_PROGRESS' && currentStatus !== 'PREPARATION') {
+            if (currentStatus !== 'IN_PROGRESS') {
               if (total === 0) {
                 wo.status = 'NEW';
               } else if (assignedCount === 0) {
@@ -336,7 +336,7 @@ router.delete('/tasks/:id/assign/:assignId', authMiddleware, async (req: Request
               }
               if (wo.status) await woRepo.save(wo);
             } else {
-              // keep existing status (IN_PROGRESS or PREPARATION)
+              // keep existing status (IN_PROGRESS)
             }
           }
         }
