@@ -126,6 +126,7 @@ export default function PMCalendarPage() {
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
   const [isTerminal, setIsTerminal] = useState(false);
+  const [todayDate, setTodayDate] = useState(null);
 
   async function load(explicitSiteId) {
     setLoading(true);
@@ -186,6 +187,10 @@ export default function PMCalendarPage() {
       }
     }
     fetchSites();
+  }, []);
+
+  useEffect(() => {
+    setTodayDate(new Date());
   }, []);
 
   useEffect(() => {
@@ -498,7 +503,10 @@ export default function PMCalendarPage() {
               week.map((day, di) => {
                 const ymd = toYMD(day, 8);
                 const isCurrentMonth = day.getMonth() === viewDate.getMonth();
-                const isToday = toYMD(day, 8) === toYMD(new Date(), 8);
+                const isToday = todayDate !== null &&
+                  day.getFullYear() === todayDate.getFullYear() &&
+                  day.getMonth() === todayDate.getMonth() &&
+                  day.getDate() === todayDate.getDate();
                 const items = eventsByDate[ymd] || [];
                 const todayBoxStyle = isToday ? { border: '2px solid #1976d2', background: isCurrentMonth ? '#e8f0ff' : '#e6eefc', boxShadow: '0 2px 6px rgba(25,118,210,0.12)' } : {};
                 return (
