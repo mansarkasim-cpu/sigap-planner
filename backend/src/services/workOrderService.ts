@@ -181,12 +181,14 @@ export async function createOrUpdateFromSigap(payload: {
       raw: payload.raw ?? existing.raw,
     });
     // If the existing record was soft-deleted, clear deleted_at to restore it
+    const wasDeleted = !!(existing as any).deleted_at || (existing as any).status === 'DELETED';
     try {
       if ((existing as any).deleted_at) {
         (existing as any).deleted_at = null;
       }
       if ((existing as any).status === 'DELETED') {
-        (existing as any).status = 'PREPARATION';
+        // Set to NEW first; will be recalculated from task assignments below
+        (existing as any).status = 'NEW';
       }
     } catch (e) {
       // ignore if fields not present
@@ -197,6 +199,30 @@ export async function createOrUpdateFromSigap(payload: {
       await upsertTasksForWorkOrder(saved, payload.raw);
     } catch (e) {
       console.warn('upsertTasksForWorkOrder failed', e);
+    }
+    // If WO was restored from deletion, recalculate status based on existing task assignments
+    // so a previously-fully-assigned WO correctly shows as READY_TO_DEPLOY instead of NEW
+    if (wasDeleted) {
+      try {
+        const taskRepo = AppDataSource.getRepository(Task);
+        const tasks = await taskRepo.createQueryBuilder('t')
+          .leftJoinAndSelect('t.assignments', 'a')
+          .where('t.work_order_id = :wo', { wo: saved.id })
+          .getMany();
+        const total = tasks.length;
+        const assignedCount = tasks.filter((x: any) => x.assignments && x.assignments.length > 0).length;
+        if (total > 0 && assignedCount === total) {
+          saved.status = 'READY_TO_DEPLOY';
+        } else if (total > 0 && assignedCount > 0) {
+          saved.status = 'ASSIGNED';
+        } else {
+          saved.status = 'NEW';
+        }
+        await repo.save(saved);
+        console.log('[SIGAP] restored WO status recalculated from task assignments', { id: saved.id, total, assignedCount, newStatus: saved.status });
+      } catch (e) {
+        console.warn('[SIGAP] status recalculation after restore failed', e);
+      }
     }
     return saved;
   }
@@ -250,15 +276,38 @@ export async function createOrUpdateFromSigap(payload: {
           raw: payload.raw ?? recovered.raw,
         });
         // clear soft-delete marker if present so re-imported WO becomes visible
+        const wasDeletedR = !!(recovered as any).deleted_at || (recovered as any).status === 'DELETED';
         try {
           if ((recovered as any).deleted_at) (recovered as any).deleted_at = null;
-          if ((recovered as any).status === 'DELETED') (recovered as any).status = 'PREPARATION';
+          if ((recovered as any).status === 'DELETED') (recovered as any).status = 'NEW';
         } catch (e) { /* ignore */ }
         const saved = await repo.save(recovered);
         try {
           await upsertTasksForWorkOrder(saved, payload.raw);
         } catch (e) {
           console.warn('upsertTasksForWorkOrder failed', e);
+        }
+        // Recalculate status from task assignments after restoring a deleted WO
+        if (wasDeletedR) {
+          try {
+            const taskRepo = AppDataSource.getRepository(Task);
+            const tasks = await taskRepo.createQueryBuilder('t')
+              .leftJoinAndSelect('t.assignments', 'a')
+              .where('t.work_order_id = :wo', { wo: saved.id })
+              .getMany();
+            const total = tasks.length;
+            const assignedCount = tasks.filter((x: any) => x.assignments && x.assignments.length > 0).length;
+            if (total > 0 && assignedCount === total) {
+              saved.status = 'READY_TO_DEPLOY';
+            } else if (total > 0 && assignedCount > 0) {
+              saved.status = 'ASSIGNED';
+            } else {
+              saved.status = 'NEW';
+            }
+            await repo.save(saved);
+          } catch (e) {
+            console.warn('[SIGAP] status recalculation after restore (race-recovered) failed', e);
+          }
         }
         return saved;
       }
