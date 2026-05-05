@@ -258,7 +258,7 @@ export default function DailyEquipmentHourMeter(){
                     <TableCell>{it.jenis_alat?.nama || it.jenis_alat?.name || it.jenis || '-'}</TableCell>
                     <TableCell>{it.engine_hour ?? it.hour_meter ?? it.value ?? '-'}</TableCell>
                     <TableCell>{it.teknisi?.name || it.teknisi?.nipp || '-'}</TableCell>
-                    <TableCell>{formatDateWithTZ(it.recorded_at || it.created_at || it.time)}</TableCell>
+                    <TableCell>{formatDateWithTZ(it.recorded_at || it.created_at || it.time, it.site?.timezone)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -331,17 +331,29 @@ export default function DailyEquipmentHourMeter(){
   )
 }
 
-function formatDateWithTZ(s){
+function tzLabel(timezone){
+  if (!timezone) return 'WIB'
+  if (timezone === 'Asia/Jayapura') return 'WIT'
+  if (timezone === 'Asia/Makassar' || timezone === 'Asia/Ujung_Pandang') return 'WITA'
+  // Asia/Jakarta, Asia/Pontianak, etc.
+  return 'WIB'
+}
+
+function formatDateWithTZ(s, timezone){
   if (!s) return '-'
   try{
     const dt = new Date(s)
     if (isNaN(dt.getTime())) return String(s)
-    const yr = dt.getUTCFullYear()
-    const mo = dt.getUTCMonth() + 1
-    const da = dt.getUTCDate()
-    const hh = String(dt.getUTCHours()).padStart(2,'0')
-    const mm = String(dt.getUTCMinutes()).padStart(2,'0')
-    const ss = String(dt.getUTCSeconds()).padStart(2,'0')
-    return `${mo}/${da}/${yr}, ${hh}:${mm}:${ss}`
+    const tz = timezone || 'Asia/Jakarta'
+    const fmt = new Intl.DateTimeFormat('id-ID', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+    const parts = fmt.formatToParts(dt)
+    const get = (type) => parts.find(p => p.type === type)?.value ?? ''
+    const formatted = `${get('day')}/${get('month')}/${get('year')}, ${get('hour')}:${get('minute')}:${get('second')}`
+    return `${formatted} ${tzLabel(tz)}`
   }catch(e){ return String(s) }
 }
