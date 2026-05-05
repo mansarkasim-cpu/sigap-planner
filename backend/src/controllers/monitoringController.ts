@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../ormconfig';
 import { MasterAlat } from '../entities/MasterAlat';
+import { MasterSite } from '../entities/MasterSite';
 import { DailyChecklist } from '../entities/DailyChecklist';
 import { DailyChecklistItem } from '../entities/DailyChecklistItem';
 import { DailyEquipmentHourMeter } from '../entities/DailyEquipmentHourMeter';
@@ -10,6 +11,26 @@ function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0,0,0,0);
   return x;
+}
+
+/**
+ * Given a UTC Date and an IANA timezone string, return the UTC timestamps
+ * that correspond to [00:00:00, 23:59:59.999] of that date in the local timezone.
+ */
+function getLocalDayBoundsInUTC(date: Date, timezone: string): { dayStart: Date; dayEnd: Date } {
+  const dtFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = dtFmt.formatToParts(date);
+  const h = parseInt(parts.find(p => p.type === 'hour')!.value, 10) % 24;
+  const m = parseInt(parts.find(p => p.type === 'minute')!.value, 10);
+  const s = parseInt(parts.find(p => p.type === 'second')!.value, 10);
+  const msIntoLocalDay = (h * 3600 + m * 60 + s) * 1000;
+  const dayStart = new Date(date.getTime() - msIntoLocalDay);
+  const dayEnd = new Date(dayStart.getTime() + 86400000 - 1);
+  return { dayStart, dayEnd };
 }
 
 function fmtYMD(d: Date){
@@ -228,12 +249,21 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       if (alatId) qb.andWhere('e.alat_id = :aid', { aid: alatId });
       if (jenisAlatId) qb.andWhere('jenis.id = :jid', { jid: jenisAlatId });
       if (dateQ) {
-        // Expect YYYY-MM-DD
+        // Expect YYYY-MM-DD. Use the site's local timezone so that dates align with
+        // what users see (e.g. WIB entries before 07:00 UTC aren't shifted to the previous day).
         const parsed = new Date(dateQ);
         if (isNaN(parsed.getTime())) return res.status(400).json({ message: 'Invalid date' });
-        const s = `${dateQ}T00:00:00Z`;
-        const e = `${dateQ}T23:59:59Z`;
-        qb.andWhere('e.recorded_at BETWEEN :s AND :e', { s, e });
+        let listTimezone = 'Asia/Jakarta';
+        if (siteId) {
+          try {
+            const siteRepo = AppDataSource.getRepository(MasterSite);
+            const site = await siteRepo.findOne({ where: { id: siteId } as any });
+            if (site?.timezone) listTimezone = site.timezone;
+          } catch (_) {}
+        }
+        // Compute UTC boundaries for [00:00:00, 23:59:59] of dateQ in the site's local timezone
+        const { dayStart, dayEnd } = getLocalDayBoundsInUTC(parsed, listTimezone);
+        qb.andWhere('e.recorded_at BETWEEN :s AND :e', { s: dayStart.toISOString(), e: dayEnd.toISOString() });
       }
 
       const total = await qb.getCount();
@@ -257,21 +287,8 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
     // capture authenticated user (if any) so we can attribute teknisi automatically
     const authUser: any = (req as any).user || null;
 
-      // determine date window (local date of recorded_at) to prevent duplicate per day
-      const recordedAt = body.recorded_at ? new Date(body.recorded_at) : new Date();
-      const dayStart = new Date(recordedAt);
-      dayStart.setHours(0,0,0,0);
-      const dayEnd = new Date(recordedAt);
-      dayEnd.setHours(23,59,59,999);
-
-      // check existing entries for same alat within the same day
-      const existingCount = await repo.createQueryBuilder('e')
-        .where('e.alat_id = :aid', { aid: Number(body.alat_id) })
-        .andWhere('e.recorded_at BETWEEN :s AND :e', { s: dayStart.toISOString(), e: dayEnd.toISOString() })
-        .getCount();
-      if (existingCount > 0) return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
-
       // determine site: prefer body.site_id, otherwise use authenticated user's site when available
+      // (resolved early so we can look up the site timezone for the duplicate check)
       let siteIdValue: number | undefined = undefined;
       if (body.site_id) {
         siteIdValue = Number(body.site_id);
@@ -287,6 +304,28 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
           // ignore
         }
       }
+
+      // Look up the site's IANA timezone so the duplicate check uses local calendar date,
+      // not the UTC date (which differs for WIB users recording before 07:00 local).
+      let siteTimezone = 'Asia/Jakarta';
+      if (siteIdValue) {
+        try {
+          const siteRepo = AppDataSource.getRepository(MasterSite);
+          const site = await siteRepo.findOne({ where: { id: siteIdValue } as any });
+          if (site?.timezone) siteTimezone = site.timezone;
+        } catch (_) {}
+      }
+
+      // determine date window using the site's LOCAL day (not UTC day)
+      const recordedAt = body.recorded_at ? new Date(body.recorded_at) : new Date();
+      const { dayStart, dayEnd } = getLocalDayBoundsInUTC(recordedAt, siteTimezone);
+
+      // check existing entries for same alat within the same local day
+      const existingCount = await repo.createQueryBuilder('e')
+        .where('e.alat_id = :aid', { aid: Number(body.alat_id) })
+        .andWhere('e.recorded_at BETWEEN :s AND :e', { s: dayStart.toISOString(), e: dayEnd.toISOString() })
+        .getCount();
+      if (existingCount > 0) return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
 
       const ent = repo.create({
         alat: body.alat_id ? { id: Number(body.alat_id) } : undefined,

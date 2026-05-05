@@ -99,7 +99,8 @@ class _EquipmentHourMeterScreenState extends State<EquipmentHourMeterScreen> {
       final api = ApiClient(baseUrl: API_BASE, token: _token);
       final today = DateTime.now();
       final dateStr = '${today.year.toString().padLeft(4,'0')}-${today.month.toString().padLeft(2,'0')}-${today.day.toString().padLeft(2,'0')}';
-      final res = await api.get('/monitor/equipment-hour-meter?date=${Uri.encodeComponent(dateStr)}&page=1&per_page=1000');
+      final siteQs = (siteId != null && siteId!.isNotEmpty) ? '&site_id=${Uri.encodeComponent(siteId!)}' : '';
+      final res = await api.get('/monitor/equipment-hour-meter?date=${Uri.encodeComponent(dateStr)}$siteQs&page=1&per_page=1000');
       final rows = res is Map ? (res['items'] ?? res['data'] ?? res) : res;
       final seen = <int>{};
       if (rows is List) {
