@@ -97,6 +97,10 @@ export default function WeeklyMonitoring(){
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailData, setDetailData] = useState(null)
+  const [jenisAlatId, setJenisAlatId] = useState('')
+  const [alatId, setAlatId] = useState('')
+  const [jenisAlats, setJenisAlats] = useState([])
+  const [masterAlats, setMasterAlats] = useState([])
   const detailItemsSorted = useMemo(()=>{
     const items = detailData?.items ? [...detailData.items] : []
     const getIndex = (x)=>{
@@ -112,12 +116,25 @@ export default function WeeklyMonitoring(){
     items.sort((a,b)=> getIndex(a) - getIndex(b))
     return items
   }, [detailData?.items])
+
+  const filteredAlats = useMemo(()=>{
+    const all = Array.isArray(data?.alats) ? data.alats : []
+    let result = all
+    if (jenisAlatId) result = result.filter(a => String(a.jenis_alat_id) === String(jenisAlatId))
+    if (alatId) result = result.filter(a => String(a.id) === String(alatId))
+    return result
+  }, [data, jenisAlatId, alatId])
+
+  const alatOptions = useMemo(()=>{
+    if (!jenisAlatId) return masterAlats
+    return masterAlats.filter(a => String(a.jenis_alat_id ?? a.jenis_alat?.id) === String(jenisAlatId))
+  }, [masterAlats, jenisAlatId])
+
   const todaySummary = useMemo(()=>{
     const res = { done: 0, doneWithNotes: 0, total: 0 }
     try{
-      const alats = Array.isArray(data?.alats) ? data.alats : []
-      res.total = alats.length
-      for (const a of alats) {
+      res.total = filteredAlats.length
+      for (const a of filteredAlats) {
         try{
           const s = a?.statuses?.[today]
           if (s && s.done) {
@@ -128,14 +145,13 @@ export default function WeeklyMonitoring(){
       }
     }catch(e){}
     return res
-  }, [data, today])
+  }, [filteredAlats, today])
 
   const daySummaries = useMemo(()=>{
     const days = Array.isArray(data?.days) ? data.days : []
-    const alats = Array.isArray(data?.alats) ? data.alats : []
     return days.map(d => {
       let done = 0, total = 0, doneWithNotes = 0
-      for (const a of alats) {
+      for (const a of filteredAlats) {
         total++
         const s = a?.statuses?.[d]
         if (s && s.done) {
@@ -145,7 +161,7 @@ export default function WeeklyMonitoring(){
       }
       return { date: d, done, total, doneWithNotes }
     })
-  }, [data])
+  }, [data, filteredAlats])
   const siteName = useMemo(()=>{
     try{
       if (!siteId) return 'All Sites'
@@ -196,20 +212,26 @@ export default function WeeklyMonitoring(){
     }
   }, [containerRef])
 
-  useEffect(()=>{ loadSites(); }, [])
+  useEffect(()=>{ loadSites(); loadJenisAlats() }, [])
+
+  // load alats whenever site or jenis alat filter changes
+  useEffect(()=>{ loadMasterAlats() }, [siteId, jenisAlatId])
+
+  // reset alat selection when site or jenis alat filter changes
+  useEffect(()=>{ setAlatId('') }, [siteId, jenisAlatId])
 
   // reload immediately when site or weekStart changes (e.g., user selects site or date)
   useEffect(()=>{
     try{ load() }catch(e){}
   }, [siteId, weekStart])
 
-  // clamp currentPage when data or rowsPerPage change
+  // clamp currentPage when filtered alats or rowsPerPage change
   useEffect(()=>{
     if (!usePagedView) return;
-    const total = Array.isArray(data?.alats) ? data.alats.length : 0
+    const total = filteredAlats.length
     const pages = Math.max(1, Math.ceil(total / rowsPerPage))
     setCurrentPage(p => Math.min(Math.max(1, p), pages))
-  }, [data, rowsPerPage, usePagedView])
+  }, [filteredAlats, rowsPerPage, usePagedView])
 
   // auto-advance page effect
   useEffect(()=>{
@@ -219,7 +241,7 @@ export default function WeeklyMonitoring(){
       if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null }
       autoPageRef.current = setInterval(()=>{
         try{
-          const total = Array.isArray(data?.alats) ? data.alats.length : 0
+          const total = filteredAlats.length
           const pages = Math.max(1, Math.ceil(total / rowsPerPage))
           setCurrentPage(p => (p >= pages ? 1 : p + 1))
         }catch(e){}
@@ -228,7 +250,7 @@ export default function WeeklyMonitoring(){
       if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null }
     }
     return ()=>{ if (autoPageRef.current) { clearInterval(autoPageRef.current); autoPageRef.current = null } }
-  }, [autoPage, usePagedView, data, rowsPerPage])
+  }, [autoPage, usePagedView, filteredAlats, rowsPerPage])
 
   async function loadSites(){
     try{
@@ -245,6 +267,21 @@ export default function WeeklyMonitoring(){
       setSites(res?.data || res || [])
       await load()
     }catch(e){ console.error('load sites', e) }
+  }
+
+  async function loadJenisAlats(){
+    try{ const res = await apiClient('/master/jenis-alat'); setJenisAlats(res?.data || res || []) }catch(e){ console.error('load jenis alats', e) }
+  }
+
+  async function loadMasterAlats(){
+    try{
+      const qs = []
+      if (siteId) qs.push(`site_id=${encodeURIComponent(siteId)}`)
+      if (jenisAlatId) qs.push(`jenis_alat_id=${encodeURIComponent(jenisAlatId)}`)
+      const url = `/master/alats${qs.length ? ('?' + qs.join('&')) : ''}`
+      const res = await apiClient(url)
+      setMasterAlats(Array.isArray(res) ? res : (res?.data || []))
+    }catch(e){ console.error('load master alats', e) }
   }
 
   async function load(explicitSiteId){
@@ -377,19 +414,14 @@ export default function WeeklyMonitoring(){
 
   return (
     <Box sx={{p:2}}>
-      <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:2, position:'sticky', top:0, backgroundColor:'background.paper', zIndex:9, py:1}}>
-        <Box sx={{display:'flex',flexDirection:'column'}}>
-          <Typography variant="h5">Daily Checklist &gt; Weekly Monitoring</Typography>
-          <Typography variant="caption" sx={{color:'text.secondary'}}>Week: {data?.week_start || weekStart}</Typography>
-        </Box>
-        <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
-          <TextField select size="small" label="Site" value={siteId} onChange={e=>setSiteId(e.target.value)} sx={{minWidth:220}}>
-            <MenuItem value="">All Sites</MenuItem>
-            {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.id}</MenuItem>)}
-          </TextField>
-          <TextField size="small" label="Week Start" type="date" value={weekStart} onChange={e=>setWeekStart(e.target.value)} InputLabelProps={{shrink:true}} />
-          <Button variant="contained" onClick={() => load()}>Refresh</Button>
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ml:1}}>
+      <Box sx={{mb:2, position:'sticky', top:0, backgroundColor:'background.paper', zIndex:9, py:1}}>
+        {/* Row 1: title + action buttons */}
+        <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', mb:1}}>
+          <Box sx={{display:'flex',flexDirection:'column'}}>
+            <Typography variant="h5">Daily Checklist &gt; Weekly Monitoring</Typography>
+            <Typography variant="caption" sx={{color:'text.secondary'}}>Week: {data?.week_start || weekStart}</Typography>
+          </Box>
+          <Stack direction="row" spacing={0.5} alignItems="center">
             <Tooltip title={isFullscreen? 'Exit fullscreen' : 'Enter fullscreen'}>
               <IconButton size="small" onClick={async ()=>{
                 try{
@@ -418,7 +450,7 @@ export default function WeeklyMonitoring(){
             <Tooltip title={autoRefresh ? 'Auto-refresh: ON (1m)' : 'Auto-refresh: OFF'}>
               <span>
                 <IconButton size="small" onClick={()=>{ setAutoRefresh(v=>!v) }} sx={{color: autoRefresh ? 'inherit' : 'action.active'}}>
-                  <RefreshIcon fontSize="small" sx={{ transform: autoRefresh ? 'none' : 'none' }} />
+                  <RefreshIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
@@ -434,10 +466,26 @@ export default function WeeklyMonitoring(){
                 setCurrentPage(1)
               }}
               InputProps={{ inputProps: { min: 1, step: 1 } }}
-              sx={{width:100}}
+              sx={{width:90}}
             />
-            {/* List view disabled — always using paged view */}
           </Stack>
+        </Box>
+        {/* Row 2: filters */}
+        <Box sx={{display:'flex', gap:1, alignItems:'center', flexWrap:'wrap'}}>
+          <TextField select size="small" label="Site" value={siteId} onChange={e=>setSiteId(e.target.value)} sx={{minWidth:200}}>
+            <MenuItem value="">All Sites</MenuItem>
+            {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.id}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Jenis Alat" value={jenisAlatId} onChange={e=>setJenisAlatId(e.target.value)} sx={{minWidth:160}}>
+            <MenuItem value="">Semua Jenis</MenuItem>
+            {jenisAlats.map(j=> <MenuItem key={j.id} value={j.id}>{j.name || j.nama || j.id}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Alat" value={alatId} onChange={e=>setAlatId(e.target.value)} sx={{minWidth:180}}>
+            <MenuItem value="">Semua Alat</MenuItem>
+            {alatOptions.map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.name || a.id}{a.kode ? ` (${a.kode})` : ''}</MenuItem>)}
+          </TextField>
+          <TextField size="small" label="Week Start" type="date" value={weekStart} onChange={e=>setWeekStart(e.target.value)} InputLabelProps={{shrink:true}} />
+          <Button variant="contained" onClick={() => load()}>Refresh</Button>
         </Box>
       </Box>
 
@@ -492,7 +540,7 @@ export default function WeeklyMonitoring(){
             {
               (()=>{
                 if (!usePagedView) return null
-                const total = Array.isArray(data.alats) ? data.alats.length : 0
+                const total = filteredAlats.length
                 const pages = Math.max(1, Math.ceil(total / rowsPerPage))
                 return (
                   <Box sx={{display:'flex', alignItems:'center', gap:1, mb:1}}>
@@ -566,7 +614,7 @@ export default function WeeklyMonitoring(){
               </TableHead>
               <TableBody>
                 {(() => {
-                  const all = Array.isArray(data.alats) ? data.alats : [];
+                  const all = filteredAlats;
                   // apply sorting
                   let sorted = [...all];
                   if (sortBy === 'alat') {
