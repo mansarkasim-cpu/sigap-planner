@@ -69,7 +69,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
 
     // load alats for the site (or all alats if no site filter)
     const aRepo = AppDataSource.getRepository(MasterAlat);
-    const qb = aRepo.createQueryBuilder('a').leftJoinAndSelect('a.site','site');
+    const qb = aRepo.createQueryBuilder('a').leftJoinAndSelect('a.site','site').leftJoinAndSelect('a.jenis_alat','jenis_alat');
     if (siteId) qb.where('site.id = :sid', { sid: siteId });
     const alats = await qb.orderBy('a.nama','ASC').getMany();
     const alatIds = alats.map(a => a.id);
@@ -177,7 +177,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
     try{ console.debug('weeklyChecklistStatus map sample keys=', Object.keys(map).slice(0,5)) }catch(e){}
 
     const resultAlats = alats.map(a => {
-      const row: any = { id: a.id, nama: a.nama, kode: a.kode ?? null, statuses: {} };
+      const row: any = { id: a.id, nama: a.nama, kode: a.kode ?? null, jenis_alat_id: (a as any).jenis_alat?.id ?? null, statuses: {} };
       for (const day of days) {
         row.statuses[day] = map[a.id] && map[a.id][day] ? map[a.id][day] : { done: false };
       }
