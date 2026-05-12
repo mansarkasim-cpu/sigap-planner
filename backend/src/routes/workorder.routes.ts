@@ -10,6 +10,8 @@ router.get('/', ctrl.listWorkOrdersPaginated);
 
 // Gantt optimized endpoint: GET /api/work-orders/gantt?start=&end=&site=&work_type=&type_work=
 router.get('/gantt', ctrl.listWorkOrdersForGantt);
+// dashboard stats: single-request aggregation for the dashboard page
+router.get('/dashboard-stats', authMiddleware, ctrl.getDashboardStats);
 // optimized list for UI grids
 router.get('/list-optimized', ctrl.listWorkOrdersOptimized);
 
