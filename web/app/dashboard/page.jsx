@@ -16,9 +16,6 @@ import LinearProgress from '@mui/material/LinearProgress'
 import Chip from '@mui/material/Chip'
 import Avatar from '@mui/material/Avatar'
 import AssignmentIcon from '@mui/icons-material/Assignment'
-import BuildIcon from '@mui/icons-material/Build'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import DoneAllIcon from '@mui/icons-material/DoneAll'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 
 import apiClient from '../../lib/api-client'
@@ -31,12 +28,7 @@ export default function Dashboard(){
   const [stats, setStats] = useState({ total:0, new:0, assigned:0, ready_to_deploy:0, deployed:0, in_progress:0, completed:0, overdue:0 })
   const [upcoming, setUpcoming] = useState([])
   const [overdueList, setOverdueList] = useState([])
-  const [assets, setAssets] = useState([])
-  const [readyAssets, setReadyAssets] = useState([])
-  const [notReadyAssets, setNotReadyAssets] = useState([])
   const [lastUpdated, setLastUpdated] = useState(null)
-  // toggle to show/hide readiness table on main dashboard
-  const SHOW_READINESS_ON_DASHBOARD = false
 
   useEffect(()=>{
     if (typeof window === 'undefined') return
@@ -58,15 +50,10 @@ export default function Dashboard(){
     router.push('/login')
   }
 
-  function normalizeStatus(s){
-    if (!s) return ''
-    return s.toString().toUpperCase().replace(/[-\s]/g,'_')
-  }
-
   async function loadDashboard(){
     setLoading(true)
     try{
-      // try to determine current user's site from /auth/me or localStorage
+      // Determine current user's site
       let siteFilter = null
       try{
         const me = await apiClient('/auth/me')
@@ -79,99 +66,14 @@ export default function Dashboard(){
       }catch(e){
         try{ siteFilter = localStorage.getItem('sigap_site') } catch(err) { /* ignore */ }
       }
-      async function fetchAllWorkOrders(){
-        // Use optimized backend endpoint to reduce payload and improve query performance
-        const out = []
-        let effectivePageSize = 1000
-        const MAX_PAGES = 20
-        let page = 1
-        while (page <= MAX_PAGES){
-          const url = `/work-orders/list-optimized?page=${page}&pageSize=${effectivePageSize}&exclude_work_type=DAILY${siteFilter ? ('&site=' + encodeURIComponent(siteFilter)) : ''}`
-          const res = await apiClient(url)
-          const rows = res?.data ?? res ?? []
-          const meta = res?.meta ?? null
-          if (!Array.isArray(rows) || rows.length === 0) break
-          out.push(...rows)
 
-          if (meta){
-            const metaPage = Number(meta.page ?? meta.currentPage ?? page)
-            const metaTotalPages = Number(meta.totalPages ?? meta.total_pages ?? meta.pages ?? 0)
-            const metaPageSize = Number(meta.pageSize ?? meta.page_size ?? meta.limit ?? 0)
-            if (metaPageSize > 0) effectivePageSize = metaPageSize
-            if (metaTotalPages > 0){
-              if (metaPage >= metaTotalPages) break
-              page = metaPage + 1
-              continue
-            }
-          }
+      // Single request for all dashboard data (replaces full pagination)
+      const url = `/work-orders/dashboard-stats${siteFilter ? '?site=' + encodeURIComponent(siteFilter) : ''}`
+      const result = await apiClient(url)
 
-          if (page === 1 && rows.length < effectivePageSize) {
-            effectivePageSize = rows.length
-          }
-          if (rows.length < effectivePageSize) break
-          page += 1
-        }
-        return out
-      }
-
-      const rows = await fetchAllWorkOrders()
-      const now = Date.now()
-      let cnt = { total:0, new:0, assigned:0, ready_to_deploy:0, deployed:0, in_progress:0, completed:0, overdue:0 }
-      const up = []
-      const od = []
-      for (const r of (rows || [])){
-        const status = normalizeStatus(r.status || r.raw?.status || r.raw?.doc_status || '')
-        cnt.total++
-        if (status === 'PREPARATION' || status === 'OPEN') cnt.new++
-        if (status === 'ASSIGNED') cnt.assigned++
-        if (status === 'READY_TO_DEPLOY') cnt.ready_to_deploy++
-        if (status === 'DEPLOYED') cnt.deployed++
-        if (status === 'IN_PROGRESS' || status === 'IN-PROGRESS') cnt.in_progress++
-        if (status === 'COMPLETED') cnt.completed++
-
-        const sMs = r.start_date ? Date.parse(r.start_date) : null
-        const eMs = r.end_date ? Date.parse(r.end_date) : null
-        if (eMs && eMs < now && status !== 'COMPLETED') { cnt.overdue++; od.push(r) }
-        if (sMs && sMs >= now && sMs <= (now + 7*24*60*60*1000)) up.push(r)
-      }
-
-      // sort upcoming by start_date
-      up.sort((a,b)=> (Date.parse(a.start_date||'')||0) - (Date.parse(b.start_date||'')||0))
-      od.sort((a,b)=> (Date.parse(a.end_date||'')||0) - (Date.parse(b.end_date||'')||0))
-
-      setStats(cnt)
-      setUpcoming(up.slice(0,10))
-      setOverdueList(od.slice(0,10))
-      // fetch master alats and compute readiness based on IN_PROGRESS work orders
-      try{
-        const alatRes = await apiClient('/master/alats')
-        const alats = Array.isArray(alatRes) ? alatRes : (alatRes?.data || [])
-        setAssets(alats)
-
-        // collect assets that have at least one IN_PROGRESS work order
-        const inProgressSet = new Set()
-        for (const r of (rows || [])){
-          const status = normalizeStatus(r.status || r.raw?.status || r.raw?.doc_status || '')
-          if (status === 'IN_PROGRESS' || status === 'IN-PROGRESS'){
-            if (r.asset_id) inProgressSet.add(String(r.asset_id))
-            if (r.asset_name) inProgressSet.add(String((r.asset_name||'').toLowerCase()))
-          }
-        }
-
-        const notReady = []
-        const ready = []
-        for (const a of (alats || [])){
-          const idKey = String(a.id)
-          const nameKey = String((a.nama||'').toLowerCase())
-          if (inProgressSet.has(idKey) || inProgressSet.has(nameKey)) notReady.push(a)
-          else ready.push(a)
-        }
-
-        setNotReadyAssets(notReady)
-        setReadyAssets(ready)
-      }catch(err){
-        console.error('failed to fetch master alats', err)
-      }
+      setStats(result.stats ?? { total:0, new:0, assigned:0, ready_to_deploy:0, deployed:0, in_progress:0, completed:0, overdue:0 })
+      setUpcoming(result.upcoming ?? [])
+      setOverdueList(result.overdue ?? [])
 
       setLastUpdated(new Date().toLocaleString())
     }catch(err){
@@ -278,40 +180,6 @@ export default function Dashboard(){
 
         {/* Gantt preview removed */}
       </Grid>
-
-        {SHOW_READINESS_ON_DASHBOARD && (
-          <Box sx={{mt:2}}>
-            <Typography variant="h6" sx={{mb:1}}>Kesiapan Alat</Typography>
-            <Paper sx={{p:2}}>
-              <Box sx={{display:'flex',gap:2}}>
-                <Box sx={{flex:1}}>
-                  <Typography variant="subtitle1">Not Ready ({notReadyAssets.length})</Typography>
-                  <Divider sx={{my:1}} />
-                  {notReadyAssets.length === 0 && <Typography sx={{color:'#666'}}>Semua alat siap</Typography>}
-                  <List dense>
-                    {notReadyAssets.map((a)=> (
-                      <ListItem key={a.id} button>
-                        <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-
-                <Box sx={{flex:1}}>
-                  <Typography variant="subtitle1">Ready ({readyAssets.length})</Typography>
-                  <Divider sx={{my:1}} />
-                  <List dense>
-                    {readyAssets.map((a)=> (
-                      <ListItem key={a.id} button>
-                        <ListItemText primary={a.nama} secondary={a.kode ? `Kode: ${a.kode}` : (a.serial_no? `SN: ${a.serial_no}` : '')} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              </Box>
-            </Paper>
-          </Box>
-        )}
 
       <Box sx={{mt:2, fontSize:12, color:'#666'}}>Last updated: {lastUpdated || '-'}</Box>
     </Box>

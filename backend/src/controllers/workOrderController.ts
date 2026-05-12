@@ -186,6 +186,92 @@ export async function listWorkOrders(req: Request, res: Response) {
 }
 
 /**
+ * GET /api/work-orders/dashboard-stats
+ * Single-request dashboard aggregation: status counts + upcoming + overdue lists.
+ * Replaces the old pattern of paginating all work orders client-side.
+ */
+export async function getDashboardStats(req: Request, res: Response) {
+  try {
+    const site = (req.query.site as string) || '';
+    const siteParam = site && site.trim().length ? `%${site.toLowerCase().trim()}%` : null;
+
+    const siteCondition = siteParam
+      ? `AND (LOWER(COALESCE(raw->>'vendor_cabang','')) LIKE $1 OR LOWER(COALESCE(raw->>'site','')) LIKE $1)`
+      : '';
+    const baseArgs: any[] = siteParam ? [siteParam] : [];
+
+    // 1. Status counts in a single aggregation query
+    const countSql = `
+      SELECT
+        COUNT(*)                                                                            AS total,
+        COUNT(*) FILTER (WHERE status IN ('PREPARATION','OPEN'))                            AS "new",
+        COUNT(*) FILTER (WHERE status = 'ASSIGNED')                                         AS assigned,
+        COUNT(*) FILTER (WHERE status = 'READY_TO_DEPLOY')                                  AS ready_to_deploy,
+        COUNT(*) FILTER (WHERE status = 'DEPLOYED')                                         AS deployed,
+        COUNT(*) FILTER (WHERE status IN ('IN_PROGRESS','IN-PROGRESS'))                     AS in_progress,
+        COUNT(*) FILTER (WHERE status = 'COMPLETED')                                        AS completed,
+        COUNT(*) FILTER (WHERE end_date < NOW() AND status != 'COMPLETED')                  AS overdue
+      FROM work_order
+      WHERE deleted_at IS NULL
+        AND (work_type IS NULL OR work_type != 'DAILY')
+        ${siteCondition}
+    `;
+    const [countRow] = await AppDataSource.query(countSql, baseArgs);
+
+    const now7d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // 2. Upcoming work orders (start_date within next 7 days, not completed)
+    const upcomingArgs: any[] = siteParam ? [siteParam, now7d] : [now7d];
+    const nowPlaceholder = siteParam ? '$2' : '$1';
+    const upcomingSql = `
+      SELECT id, doc_no, asset_name, start_date, end_date, status
+      FROM work_order
+      WHERE deleted_at IS NULL
+        AND (work_type IS NULL OR work_type != 'DAILY')
+        AND status != 'COMPLETED'
+        AND start_date >= NOW()
+        AND start_date <= ${nowPlaceholder}
+        ${siteCondition}
+      ORDER BY start_date ASC
+      LIMIT 10
+    `;
+    const upcoming = await AppDataSource.query(upcomingSql, upcomingArgs);
+
+    // 3. Overdue work orders (end_date in the past, not completed)
+    const overdueSql = `
+      SELECT id, doc_no, asset_name, start_date, end_date, status
+      FROM work_order
+      WHERE deleted_at IS NULL
+        AND (work_type IS NULL OR work_type != 'DAILY')
+        AND status != 'COMPLETED'
+        AND end_date < NOW()
+        ${siteCondition}
+      ORDER BY end_date ASC
+      LIMIT 10
+    `;
+    const overdue = await AppDataSource.query(overdueSql, baseArgs);
+
+    return res.json({
+      stats: {
+        total:           Number(countRow.total)          || 0,
+        new:             Number(countRow.new)            || 0,
+        assigned:        Number(countRow.assigned)       || 0,
+        ready_to_deploy: Number(countRow.ready_to_deploy)|| 0,
+        deployed:        Number(countRow.deployed)       || 0,
+        in_progress:     Number(countRow.in_progress)    || 0,
+        completed:       Number(countRow.completed)      || 0,
+        overdue:         Number(countRow.overdue)        || 0,
+      },
+      upcoming,
+      overdue,
+    });
+  } catch (err) {
+    console.error('getDashboardStats error', err);
+    return res.status(500).json({ message: 'Failed to load dashboard stats' });
+  }
+}
+
+/**
  * GET /api/work-orders/list-optimized
  * Optimized list for UI grid; accepts start/end, site, status, q, page, pageSize
  */
