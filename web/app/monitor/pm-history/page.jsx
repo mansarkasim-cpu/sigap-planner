@@ -31,8 +31,9 @@ export default function PMHistoryPage(){
   const [sites, setSites] = useState([])
   const [filterSiteId, setFilterSiteId] = useState('')
   const [filterAlatId, setFilterAlatId] = useState('')
-  const [filterStartDate, setFilterStartDate] = useState('')
-  const [filterEndDate, setFilterEndDate] = useState('')
+  const today = new Date().toISOString().split('T')[0]
+  const [filterStartDate, setFilterStartDate] = useState(today)
+  const [filterEndDate, setFilterEndDate] = useState(today)
   const [form, setForm] = useState({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' })
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -216,6 +217,7 @@ export default function PMHistoryPage(){
                 <TableCell>PM Rule</TableCell>
                                 <TableCell>Workorder</TableCell>
                 <TableCell>Engine Hour</TableCell>
+                <TableCell>Status</TableCell>
                 <TableCell>Performed By</TableCell>
                 <TableCell>Performed At</TableCell>
                 <TableCell>Notes</TableCell>
@@ -230,6 +232,15 @@ export default function PMHistoryPage(){
                   <TableCell>{it.kode_rule || it.pm_rule?.kode_rule || it.pm_rule?.kode || it.pm_rule?.name || it.pm_rule_id}</TableCell>
                                     <TableCell>{it.workorder_no || it.workorder || '-'}</TableCell>
                   <TableCell>{it.engine_hour}</TableCell>
+                  <TableCell>
+                    {it.pm_tepat_waktu === 'tepat_waktu' && (
+                      <span style={{background:'#e8f5e9',color:'#2e7d32',borderRadius:4,padding:'2px 8px',fontSize:12,fontWeight:600}}>Done (On Time)</span>
+                    )}
+                    {it.pm_tepat_waktu === 'terlambat' && (
+                      <span style={{background:'#ffebee',color:'#c62828',borderRadius:4,padding:'2px 8px',fontSize:12,fontWeight:600}}>Done (Late)</span>
+                    )}
+                    {!it.pm_tepat_waktu && <span style={{color:'#999'}}>-</span>}
+                  </TableCell>
                   <TableCell>{it.performed_by_name || it.performed_by || '-'}</TableCell>
                   <TableCell>{it.performed_at ? new Date(it.performed_at).toLocaleString() : '-'}</TableCell>
                   <TableCell>{it.notes || '-'}</TableCell>
