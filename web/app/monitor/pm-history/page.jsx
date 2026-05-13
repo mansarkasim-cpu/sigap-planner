@@ -31,21 +31,19 @@ export default function PMHistoryPage(){
   const [sites, setSites] = useState([])
   const [filterSiteId, setFilterSiteId] = useState('')
   const [filterAlatId, setFilterAlatId] = useState('')
-  const today = new Date().toISOString().split('T')[0]
-  const [filterStartDate, setFilterStartDate] = useState(today)
-  const [filterEndDate, setFilterEndDate] = useState(today)
   const [form, setForm] = useState({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' })
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
 
   useEffect(()=>{ loadSites(); loadRules(); }, [])
 
-  // Auto-refresh list when filters change (skip initial mount duplicate)
+  // Auto-refresh list when filters change — only load when alat is selected
   const firstFilterRun = React.useRef(true)
   useEffect(()=>{
     if (firstFilterRun.current) { firstFilterRun.current = false; return }
-    load()
-  }, [filterSiteId, filterAlatId, filterStartDate, filterEndDate])
+    if (filterAlatId) load()
+    else setItems([])
+  }, [filterSiteId, filterAlatId])
   async function loadSites(){
     try{
       const me = await apiClient('/auth/me').catch(()=>null)
@@ -57,7 +55,6 @@ export default function PMHistoryPage(){
         setForm(f=>({...f, site_id: siteObj.id}))
         await loadAlats(siteObj.id)
         await loadUsers(siteObj.id)
-        await load(undefined, siteObj.id)
         return
       }
       const r = await apiClient('/master/sites?limit=1000')
@@ -65,7 +62,6 @@ export default function PMHistoryPage(){
       setSites(list)
       await loadAlats()
       await loadUsers()
-      await load()
     }catch(e){ console.error(e) }
   }
 
@@ -77,8 +73,7 @@ export default function PMHistoryPage(){
       const siteToUse = explicitSiteId ?? filterSiteId
       if (siteToUse) qs.push(`site_id=${encodeURIComponent(siteToUse)}`)
       if (filterAlatId) qs.push(`alat_id=${encodeURIComponent(filterAlatId)}`)
-      if (filterStartDate) qs.push(`start_date=${encodeURIComponent(filterStartDate)}`)
-      if (filterEndDate) qs.push(`end_date=${encodeURIComponent(filterEndDate)}`)
+
       if (typeof p === 'number') qs.push(`page=${p}`)
       const url = `/pm/history${qs.length?('?'+qs.join('&')):''}`
       const res = await apiClient(url)
@@ -199,15 +194,13 @@ export default function PMHistoryPage(){
               return (a.site && String(a.site.id) === String(filterSiteId)) || String(a.site_id) === String(filterSiteId)
             }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.name} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
           </TextField>
-          <TextField size="small" label="From" type="date" value={filterStartDate} onChange={e=>setFilterStartDate(e.target.value)} InputLabelProps={{shrink:true}} />
-          <TextField size="small" label="To" type="date" value={filterEndDate} onChange={e=>setFilterEndDate(e.target.value)} InputLabelProps={{shrink:true}} />
           <Button variant="contained" onClick={()=>{ setEditingId(null); setForm({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' }); setOpen(true); }}>New PM History</Button>
         </div>
       </Box>
 
       <Paper sx={{p:2}}>
         {loading && <Box sx={{display:'flex',justifyContent:'center',p:4}}><CircularProgress/></Box>}
-        {!loading && items.length === 0 && <div>No PM history</div>}
+        {!loading && items.length === 0 && <div style={{color:'#999'}}>{filterAlatId ? 'No PM history for selected equipment' : 'Pilih alat untuk melihat history PM'}</div>}
         {!loading && items.length > 0 && (
           <Table size="small">
             <TableHead>
@@ -238,6 +231,9 @@ export default function PMHistoryPage(){
                     )}
                     {it.pm_tepat_waktu === 'terlambat' && (
                       <span style={{background:'#ffebee',color:'#c62828',borderRadius:4,padding:'2px 8px',fontSize:12,fontWeight:600}}>Done (Late)</span>
+                    )}
+                    {it.pm_tepat_waktu === 'tidak_dikerjakan' && (
+                      <span style={{background:'#212121',color:'#fff',borderRadius:4,padding:'2px 8px',fontSize:12,fontWeight:600}}>PM Missed</span>
                     )}
                     {!it.pm_tepat_waktu && <span style={{color:'#999'}}>-</span>}
                   </TableCell>
