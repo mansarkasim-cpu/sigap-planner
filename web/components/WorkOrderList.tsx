@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import apiClient from '../lib/api-client';
 import { parseToUtcDate, formatUtcToZone, toInputDatetime } from '../lib/date-utils';
 import Box from '@mui/material/Box';
@@ -861,6 +862,24 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     }
   }
 
+  function handleExportExcel() {
+    const rows = list.map(w => ({
+      'Doc No': w.doc_no ?? w.id ?? '',
+      'Jenis Work Order': w.work_type ?? w.type_work ?? w.raw?.work_type ?? w.raw?.type_work ?? '',
+      'Start Date': formatUtcDisplay(resolveStartDate(w)),
+      'End Date': formatUtcDisplay(resolveEndDate(w)),
+      'Equipment': w.asset_name ?? '',
+      'Status': normalizeStatusRaw((w as any).status ?? w.raw?.status ?? 'PREPARATION').replace(/_/g, ' '),
+      'Location': w.vendor_cabang ?? w.raw?.vendor_cabang ?? '',
+      'Description': resolveDescription(w),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Work Orders');
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `work-orders-${date}.xlsx`);
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
@@ -932,6 +951,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
             <Button variant="contained" color="primary" size="small" onClick={() => load(1, q, locationFilter, dateFilter)} disabled={loading}>Search</Button>
             <Button variant="outlined" size="small" onClick={() => load(1, q, locationFilter, dateFilter)} disabled={loading}>Refresh</Button>
+            <Button variant="outlined" color="success" size="small" onClick={handleExportExcel} disabled={loading || list.length === 0}>Export Excel</Button>
 
             <Box sx={{ alignSelf: 'center', ml: 'auto', color: 'text.secondary' }}>{total} item</Box>
           </Box>
