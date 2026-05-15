@@ -19,16 +19,21 @@ const realisasi_dto_1 = require("../dto/realisasi.dto");
 const class_validator_1 = require("class-validator");
 const router = (0, express_1.Router)();
 // GET /api/work-orders/:id/tasks
+// Optional query param: ?taskId=<uuid>  → returns only that one task (for mobile WODetail)
 router.get('/work-orders/:id/tasks', auth_1.authMiddleware, async (req, res) => {
     try {
         const workOrderId = req.params.id;
+        const filterTaskId = req.query.taskId ? String(req.query.taskId).trim() : null;
         const repo = ormconfig_1.AppDataSource.getRepository(Task_1.Task);
-        const rows = await repo.createQueryBuilder('t')
+        const qb = repo.createQueryBuilder('t')
             .leftJoinAndSelect('t.assignments', 'a')
             .leftJoinAndSelect('a.user', 'u')
-            .where('t.workOrder = :wo', { wo: workOrderId })
-            .orderBy('t.task_number', 'ASC')
-            .getMany();
+            .where('t.workOrder = :wo', { wo: workOrderId });
+        if (filterTaskId) {
+            // cast t.id to text to avoid PostgreSQL UUID type mismatch with string param
+            qb.andWhere('(CAST(t.id AS TEXT) = :tid OR t.external_id = :tid)', { tid: filterTaskId });
+        }
+        const rows = await qb.orderBy('t.task_number', 'ASC').getMany();
         // compute per-task realisasi counts by joining task->realisasi for this workorder
         try {
             const counts = await ormconfig_1.AppDataSource.query(`SELECT t.id AS task_id, t.name AS task_name, COUNT(r.id) AS realisasi_count

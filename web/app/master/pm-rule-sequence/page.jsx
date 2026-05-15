@@ -16,8 +16,10 @@ import Paper from '@mui/material/Paper';
 
 export default function PMRuleSequencePage(){
   const [jenis,setJenis] = useState([]);
+  const [sites,setSites] = useState([]);
   const [alats,setAlats] = useState([]);
   const [pmRules,setPmRules] = useState([]);
+  const [selectedSite,setSelectedSite] = useState('');
   const [selectedJenis,setSelectedJenis] = useState('');
   const [selectedAlat,setSelectedAlat] = useState('');
   const [sequence,setSequence] = useState([]); // [{seq_no, pm_rule_id}]
@@ -27,13 +29,28 @@ export default function PMRuleSequencePage(){
 
   async function loadMeta(){
     try{
-      const j = await apiClient('/master/jenis-alat?limit=1000');
+      const [j, s, r] = await Promise.all([
+        apiClient('/master/jenis-alat?limit=1000'),
+        apiClient('/master/sites'),
+        apiClient('/pm/rules?limit=1000'),
+      ]);
       setJenis(Array.isArray(j)?j:j.data||[]);
-      const a = await apiClient('/master/alats?limit=1000');
-      setAlats(Array.isArray(a)?a:a.data||[]);
-      const r = await apiClient('/pm/rules?limit=1000');
+      setSites(Array.isArray(s)?s:s.data||[]);
       setPmRules(Array.isArray(r)?r:r.data||[]);
     }catch(e){ console.error('loadMeta',e); }
+  }
+
+  async function handleSiteChange(siteId){
+    setSelectedSite(siteId);
+    setSelectedAlat('');
+    setSelectedJenis('');
+    setSequence([]);
+    setAlats([]);
+    if(!siteId) return;
+    try{
+      const a = await apiClient(`/master/alats?site_id=${encodeURIComponent(siteId)}&limit=1000`);
+      setAlats(Array.isArray(a)?a:a.data||[]);
+    }catch(e){ console.error('loadAlats',e); }
   }
 
   async function loadSequenceForJenis(jenisId){
@@ -101,16 +118,26 @@ export default function PMRuleSequencePage(){
 
   return (
     <Box sx={{ p:2 }}>
+      {/* Step 1: Site */}
+      <Box sx={{ display:'flex', gap:2, mb:2, alignItems:'center' }}>
+        <Select size="small" value={selectedSite} onChange={e=> handleSiteChange(e.target.value)} sx={{ minWidth:220 }}>
+          <MenuItem value="">-- Pilih Site --</MenuItem>
+          {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.nama || s.name || s.kode || s.id}</MenuItem>)}
+        </Select>
+      </Box>
+
+      {/* Step 2: Jenis Alat */}
       <Box sx={{ display:'flex', gap:2, mb:2 }}>
-        <Select size="small" value={selectedJenis} onChange={e=>{ setSelectedJenis(e.target.value); setSelectedAlat(''); loadSequenceForJenis(e.target.value); }} sx={{ minWidth:240 }}>
+        <Select size="small" value={selectedJenis} onChange={e=>{ setSelectedJenis(e.target.value); setSelectedAlat(''); loadSequenceForJenis(e.target.value); }} sx={{ minWidth:240 }} disabled={!selectedSite}>
           <MenuItem value="">-- Select Jenis Alat --</MenuItem>
           {jenis.map(j=> <MenuItem key={j.id} value={j.id}>{j.nama}</MenuItem>)}
         </Select>
         <Button variant="contained" onClick={saveJenis} disabled={!selectedJenis}>Save Jenis Sequence</Button>
       </Box>
 
+      {/* Step 3: Alat (override, filtered by site) */}
       <Box sx={{ mb:4 }}>
-        <Select size="small" value={selectedAlat} onChange={e=>{ setSelectedAlat(e.target.value); setSelectedJenis(''); loadSequenceForAlat(e.target.value); }} sx={{ minWidth:320 }}>
+        <Select size="small" value={selectedAlat} onChange={e=>{ setSelectedAlat(e.target.value); setSelectedJenis(''); loadSequenceForAlat(e.target.value); }} sx={{ minWidth:320 }} disabled={!selectedSite}>
           <MenuItem value="">-- Select Alat (override) --</MenuItem>
           {alats.map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.kode || a.id}</MenuItem>)}
         </Select>

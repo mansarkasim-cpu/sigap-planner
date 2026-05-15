@@ -30,6 +30,10 @@ __decorate([
     __metadata("design:type", Number)
 ], MasterJenisAlat.prototype, "avg_hours_per_day", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'integer', name: 'pm_base_interval', nullable: false, default: 250 }),
+    __metadata("design:type", Number)
+], MasterJenisAlat.prototype, "pm_base_interval", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
 ], MasterJenisAlat.prototype, "created_at", void 0);

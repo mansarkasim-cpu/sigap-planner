@@ -13,16 +13,9 @@ async function getPMCalendar(req, res) {
          COALESCE(es.chosen_kode_rule,
            (SELECT pr.kode_rule FROM pm_history ph JOIN pm_rules pr ON pr.id = ph.pm_rule_id WHERE ph.alat_id = es.alat_id ORDER BY ph.performed_at DESC LIMIT 1)
          ) AS last_kode_rule,
-         -- Prefer any workorder explicitly assigned on equipment_status (es.work_order_id / es.workorder_doc_no),
-         -- fallback to searching recent work_order by asset_id when available.
-         COALESCE(
-           (SELECT wo.status FROM work_order wo WHERE wo.id = es.work_order_id LIMIT 1),
-           (SELECT wo.status FROM work_order wo WHERE wo.asset_id = m.id ORDER BY wo.created_at DESC LIMIT 1)
-         ) AS workorder_status,
-         COALESCE(
-           es.workorder_doc_no,
-           (SELECT wo.doc_no FROM work_order wo WHERE wo.asset_id = m.id ORDER BY wo.created_at DESC LIMIT 1)
-         ) AS workorder_doc_no
+         -- Only prefer actual assignment stored on equipment_status. Do not fallback to recent work_order rows.
+         (SELECT wo.status FROM work_order wo WHERE wo.id = es.work_order_id LIMIT 1) AS workorder_status,
+         es.workorder_doc_no AS workorder_doc_no
        FROM equipment_status es
        JOIN master_alat m ON m.id = es.alat_id
        WHERE es.next_pm_engine_hour IS NOT NULL

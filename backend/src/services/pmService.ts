@@ -1,5 +1,14 @@
 import { AppDataSource } from '../ormconfig';
 
+/** Compute next PM engine hour based on site pm_mode */
+function computeNextDueEngineHour(engineHour: number, effective: number, pmMode: string): number {
+  if (pmMode === 'absolute') {
+    const next = Math.ceil(engineHour / effective) * effective;
+    return next > engineHour ? next : engineHour + effective;
+  }
+  return engineHour + effective;
+}
+
 export async function updateEquipmentStatusAll(alatFilter?: number[]) {
   // Load active PM rules
   const rules: any[] = await AppDataSource.manager.query(`SELECT * FROM pm_rules WHERE active = true`);
@@ -51,6 +60,16 @@ export async function updateEquipmentStatusAll(alatFilter?: number[]) {
     const alatId = Number(alat.id);
     const jenisId = alat.jenis_alat_id ? Number(alat.jenis_alat_id) : null;
 
+    // fetch site pm_mode for this alat
+    let pmMode = 'absolute';
+    try {
+      const siteRows: any[] = await AppDataSource.manager.query(
+        `SELECT ms.pm_mode FROM master_alat ma JOIN master_site ms ON ms.id = ma.site_id WHERE ma.id = $1 LIMIT 1`,
+        [alatId]
+      );
+      if (siteRows && siteRows.length && siteRows[0].pm_mode) pmMode = String(siteRows[0].pm_mode);
+    } catch (e) { /* keep default */ }
+
     // collect applicable rules: alat-specific first, then jenis rules
     const applicable = (rulesByAlat.get(alatId) || []).concat(jenisId ? (rulesByJenis.get(jenisId) || []) : []);
     if (!applicable || applicable.length === 0) continue;
@@ -67,7 +86,7 @@ export async function updateEquipmentStatusAll(alatFilter?: number[]) {
 
     // Attempt: derive base engine from the hour-meter at the time of the last PM (any rule) for this alat
     const lastHistAll = await AppDataSource.manager.query(
-      `SELECT engine_hour, performed_at, pm_rule_id FROM pm_history WHERE alat_id = $1 ORDER BY performed_at DESC LIMIT 1`,
+      `SELECT engine_hour, performed_at, pm_rule_id, next_due_engine_hour FROM pm_history WHERE alat_id = $1 ORDER BY performed_at DESC LIMIT 1`,
       [alatId]
     );
     const lastHist = lastHistAll && lastHistAll.length ? lastHistAll[0] : null;
@@ -99,12 +118,18 @@ export async function updateEquipmentStatusAll(alatFilter?: number[]) {
       const lastIdx = lastHist ? sorted.findIndex(r => String(r.id) === String(lastHist.pm_rule_id)) : -1;
       const nextRule = (lastIdx >= 0 && lastIdx < sorted.length-1) ? sorted[lastIdx+1] : (sorted[0] || null);
       if (nextRule) {
-        const nextDueEngine = Number(basePerformedEngine) + Number(step);
-        // compute nextDueAt based on lastRecordedAt (fallback to now)
+        // For absolute mode: use next_due_engine_hour stored in pm_history as the milestone base
+        // (it represents which milestone this PM covered, so next PM starts from that milestone)
+        // For relative mode: use the actual performed engine hour
+        const engineBase = (pmMode === 'absolute' && lastHist.next_due_engine_hour != null)
+          ? Number(lastHist.next_due_engine_hour)
+          : Number(basePerformedEngine);
+        const nextDueEngine = computeNextDueEngineHour(engineBase, Number(step), pmMode);
+        // compute nextDueAt based on performed_at of last PM (not lastRecordedAt of meter reading)
         const avgHoursPerDay = Number((jenisId != null ? avgByJenis.get(jenisId) : undefined) ?? process.env.PM_AVG_HOURS_PER_DAY) || 24;
         let nextDueAt = null;
         try {
-          const refDate = lastRecordedAt ? new Date(lastRecordedAt) : new Date();
+          const refDate = lastHist.performed_at ? new Date(lastHist.performed_at) : (lastRecordedAt ? new Date(lastRecordedAt) : new Date());
           const hoursLeft = nextDueEngine - Number(lastEngineHour || basePerformedEngine || 0);
           if (hoursLeft <= 0) nextDueAt = new Date().toISOString();
           else if (avgHoursPerDay > 0) {
@@ -152,34 +177,60 @@ export async function updateEquipmentStatusAll(alatFilter?: number[]) {
       const effective = Math.max(1, interval * multiplier);
       const startEngine = Number(rule.start_engine_hour || 0);
 
-      // last performed engine hour for this rule+alat
+      // last performed engine hour and performed_at for this rule+alat
       const hist = await AppDataSource.manager.query(
-        `SELECT engine_hour FROM pm_history WHERE alat_id = $1 AND pm_rule_id = $2 ORDER BY performed_at DESC LIMIT 1`,
+        `SELECT engine_hour, performed_at, next_due_engine_hour FROM pm_history WHERE alat_id = $1 AND pm_rule_id = $2 ORDER BY performed_at DESC LIMIT 1`,
         [alatId, rule.id]
       );
       const lastPerformed = hist && hist.length ? Number(hist[0].engine_hour || 0) : null;
+      const lastPerformedNextDue = hist && hist.length ? hist[0].next_due_engine_hour : null;
+      const lastPerformedAt = hist && hist.length ? hist[0].performed_at : null;
 
       // Determine current engine reference and compute next due engine
       const currentEngine = Math.max(Number(lastEngineHour || 0), Number(lastPerformed || 0), Number(startEngine || 0));
 
-      // compute nextDueEngine as the smallest multiple of `effective` after the startEngine
-      let nextDueEngine = Number(startEngine || 0);
-      if (effective > 0) {
-        if (nextDueEngine <= currentEngine) {
-          const delta = currentEngine - Number(startEngine || 0);
+      // compute nextDueEngine respecting pm_mode
+      let nextDueEngine: number;
+      if (pmMode === 'relative') {
+        // relative: last performed engine + effective
+        const refEngine = lastPerformed != null ? lastPerformed : Number(startEngine || 0);
+        nextDueEngine = refEngine + effective;
+        // if still behind current engine, advance
+        if (nextDueEngine <= Number(currentEngine)) {
+          const delta = Number(currentEngine) - refEngine;
           const steps = Math.floor(delta / effective) + 1;
-          nextDueEngine = Number(startEngine || 0) + steps * effective;
+          nextDueEngine = refEngine + steps * effective;
         }
       } else {
-        nextDueEngine = currentEngine;
+        // absolute: use next_due_engine_hour from last PM as the base if available
+        if (lastPerformedNextDue != null) {
+          const baseAbsolute = Number(lastPerformedNextDue);
+          nextDueEngine = computeNextDueEngineHour(baseAbsolute, effective, 'absolute');
+          // safeguard: ensure we advance past currentEngine
+          while (nextDueEngine <= Number(currentEngine)) {
+            nextDueEngine = computeNextDueEngineHour(nextDueEngine, effective, 'absolute');
+          }
+        } else {
+          // no previous PM — align to multiples of effective from startEngine
+          nextDueEngine = Number(startEngine || 0);
+          if (effective > 0) {
+            if (nextDueEngine <= currentEngine) {
+              const delta = currentEngine - Number(startEngine || 0);
+              const steps = Math.floor(delta / effective) + 1;
+              nextDueEngine = Number(startEngine || 0) + steps * effective;
+            }
+          } else {
+            nextDueEngine = currentEngine;
+          }
+        }
       }
 
-      // Estimate next_pm_due_at based on engine-hour forecast
+      // Estimate next_pm_due_at based on engine-hour forecast from PM performed_at
       const avgHoursPerDay = Number((jenisId != null ? avgByJenis.get(jenisId) : undefined) ?? process.env.PM_AVG_HOURS_PER_DAY) || 24;
       let nextDueAt = null;
       try {
         const baseEngineForDate = (lastEngineHour != null) ? Number(lastEngineHour) : (lastPerformed != null ? Number(lastPerformed) : Number(startEngine || 0));
-        const refDate = lastRecordedAt ? new Date(lastRecordedAt) : new Date();
+        const refDate = lastPerformedAt ? new Date(lastPerformedAt) : (lastRecordedAt ? new Date(lastRecordedAt) : new Date());
         const hoursLeft = nextDueEngine - baseEngineForDate;
         if (hoursLeft <= 0) {
           nextDueAt = new Date().toISOString();
@@ -252,7 +303,7 @@ export async function updateEquipmentStatusFromMeter(alatId: number) {
   let newNextDueAt: string | null = null;
   try {
     const esRows: any[] = await AppDataSource.manager.query(
-      `SELECT next_pm_engine_hour, next_pm_due_at FROM equipment_status WHERE alat_id = $1 LIMIT 1`,
+      `SELECT next_pm_engine_hour, next_pm_due_at, chosen_rule_id FROM equipment_status WHERE alat_id = $1 LIMIT 1`,
       [alatId]
     );
     const es = esRows && esRows.length ? esRows[0] : null;
@@ -305,6 +356,51 @@ export async function updateEquipmentStatusFromMeter(alatId: number) {
        updated_at = now();`,
     [alatId, lastEngineHour, lastRecordedAt, lastTechnician, newNextDueAt]
   );
+
+  // ── Missed PM detection ────────────────────────────────────────────────────
+  // If the current engine hour has passed next_pm_engine_hour by one full cycle,
+  // the PM was never performed — auto-insert a "missed" pm_history record.
+  try {
+    const esForMissed: any[] = await AppDataSource.manager.query(
+      `SELECT es.next_pm_engine_hour, es.chosen_rule_id,
+              GREATEST(1, pr.interval_hours * GREATEST(1, COALESCE(pr.multiplier, 1))) AS effective_interval
+         FROM equipment_status es
+         LEFT JOIN pm_rules pr ON pr.id = es.chosen_rule_id
+        WHERE es.alat_id = $1 LIMIT 1`,
+      [alatId]
+    );
+    const em = esForMissed && esForMissed.length ? esForMissed[0] : null;
+    const nextPmEngine = em?.next_pm_engine_hour != null ? Number(em.next_pm_engine_hour) : null;
+    const effectiveInterval = em?.effective_interval != null ? Number(em.effective_interval) : null;
+    const chosenRuleId = em?.chosen_rule_id || null;
+
+    if (nextPmEngine != null && effectiveInterval != null && lastEngineHour != null
+        && lastEngineHour > nextPmEngine + effectiveInterval) {
+      // Check idempotency: only insert if no missed record for this scheduled engine hour
+      const existingMissed: any[] = await AppDataSource.manager.query(
+        `SELECT 1 FROM pm_history WHERE alat_id = $1 AND is_missed = true AND engine_hour = $2 LIMIT 1`,
+        [alatId, nextPmEngine]
+      );
+      if (!existingMissed || existingMissed.length === 0) {
+        await AppDataSource.manager.query(
+          `INSERT INTO pm_history
+             (alat_id, pm_rule_id, performed_by, performed_at, engine_hour, next_due_engine_hour, notes, is_missed, created_at, updated_at)
+           VALUES ($1, $2, NULL, $3, $4, $5, 'PM not performed – auto-detected as missed', true, now(), now())
+           ON CONFLICT DO NOTHING`,
+          [
+            alatId,
+            chosenRuleId,
+            lastRecordedAt || new Date().toISOString(),
+            nextPmEngine,
+            nextPmEngine + effectiveInterval,
+          ]
+        );
+        console.info(`[pmService] Missed PM auto-inserted for alat ${alatId} at engine_hour ${nextPmEngine}`);
+      }
+    }
+  } catch (e) {
+    console.warn('[pmService] missed PM detection error (suppressed):', e);
+  }
 }
 
 export default { updateEquipmentStatusAll, updateEquipmentStatusFromMeter };

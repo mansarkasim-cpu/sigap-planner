@@ -49,7 +49,12 @@ async function createJenis(req, res) {
         const payload = req.body || {};
         if (!payload.nama || String(payload.nama).trim() === '')
             return res.status(400).json({ message: 'nama is required' });
-        const ent = repo.create({ nama: String(payload.nama).trim(), description: payload.description, avg_hours_per_day: typeof payload.avg_hours_per_day !== 'undefined' ? payload.avg_hours_per_day : 24 });
+        const ent = repo.create({
+            nama: String(payload.nama).trim(),
+            description: payload.description,
+            avg_hours_per_day: typeof payload.avg_hours_per_day !== 'undefined' ? payload.avg_hours_per_day : 24,
+            pm_base_interval: typeof payload.pm_base_interval !== 'undefined' && payload.pm_base_interval != null ? Number(payload.pm_base_interval) : 250,
+        });
         const saved = await repo.save(ent);
         return res.status(201).json(saved);
     }

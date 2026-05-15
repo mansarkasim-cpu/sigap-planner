@@ -121,7 +121,12 @@ export default function PMCalendarPage() {
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignWoValue, setAssignWoValue] = useState('');
   const [assignWorkOrderId, setAssignWorkOrderId] = useState(null);
+  const [assignWoDueDate, setAssignWoDueDate] = useState(null);
   const [workOrderOptions, setWorkOrderOptions] = useState([]);
+  const [completeWoModalOpen, setCompleteWoModalOpen] = useState(false);
+  const [completeWoEngineHour, setCompleteWoEngineHour] = useState('');
+  const [completeWoNotes, setCompleteWoNotes] = useState('');
+  const [completeWoLoading, setCompleteWoLoading] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
@@ -320,50 +325,61 @@ export default function PMCalendarPage() {
   }
 
   function itemStatus(it) {
-    if (it && it.__history) return 'done';
-    const now = new Date();
-    const lastEngine = it.last_engine_hour != null ? Number(it.last_engine_hour) : null;
-    const nextEngine = it.next_pm_engine_hour != null ? Number(it.next_pm_engine_hour) : null;
-    const dueAt = it.next_pm_due_at ? new Date(it.next_pm_due_at) : null;
-    // compute avg hours per day for this item (prefer jenis setting)
-    const perJenisAvg = it.jenis_alat && (it.jenis_alat.avg_hours_per_day || it.jenis_alat.avg_hours_per_day === 0) ? Number(it.jenis_alat.avg_hours_per_day) : null;
-    const avgForItem = perJenisAvg != null ? perJenisAvg : (it.avg_hours_per_day != null ? Number(it.avg_hours_per_day) : 24);
-    const TOLERANCE_HOURS = 50; // tolerance before marking overdue
-    // If there's an associated workorder, prefer that to decide status
+    if (it && it.__history) {
+      if (it.pm_tepat_waktu === 'tidak_dikerjakan') return 'missed';
+      if (it.pm_tepat_waktu === 'tepat_waktu') return 'tepat_waktu';
+      if (it.pm_tepat_waktu === 'terlambat') return 'terlambat';
+      return 'tepat_waktu'; // no data, treat as on-time
+    }
+    // WO assignment takes priority: if a WO is assigned, reflect its status
+    // regardless of engine-hour overdue state.
     if (it.workorder_status) {
       const st = String(it.workorder_status || '').toUpperCase().trim();
-      // If WO is completed but we don't have a PM history record for this item, mark it as awaiting PM input
-      if ((st === 'COMPLETED' || st === 'DONE' || st === 'CLOSED') && !it.__history) return 'awaiting_pm';
-      if (st === 'COMPLETED' || st === 'DONE' || st === 'CLOSED') return 'done';
-      return 'in_progress';
+      if (st === 'IN_PROGRESS' || st === 'INPROGRESS') return 'in_progress';
+      if (st === 'COMPLETED' || st === 'DONE' || st === 'CLOSED') return 'overdue'; // WO done but PM not recorded
+      return 'assigned'; // WO assigned but not started
     }
-    // If last engine hour already reached or exceeded nextEngine, treat as overdue
-    // (PM was not recorded as history) — don't mark as 'done' here.
-    if (nextEngine != null && lastEngine != null && lastEngine >= nextEngine) return 'overdue';
-    // Overdue if due date passed and passed beyond tolerance (convert tolerance hours to days using avg)
-    if (dueAt) {
-      try {
-        const toleranceDays = (avgForItem > 0) ? (TOLERANCE_HOURS / avgForItem) : 0;
-        const thresholdMs = dueAt.getTime() + Math.ceil(toleranceDays * 24) * 3600000; // add tolerance (in hours)
-        if (now.getTime() > thresholdMs) return 'overdue';
-      } catch (e) {
-        if (dueAt.getTime() < now.getTime()) return 'overdue';
+    // WO assigned but status not populated
+    if (it.work_order_id || it.workorder_doc_no || it.workorder_no) return 'assigned';
+    const lastEngine = it.last_engine_hour != null ? Number(it.last_engine_hour) : null;
+    const nextEngine = it.next_pm_engine_hour != null ? Number(it.next_pm_engine_hour) : null;
+    // Only check engine-hour overdue when no WO is assigned
+    if (nextEngine != null && lastEngine != null && lastEngine > nextEngine) {
+      // If the engine has passed one full PM cycle beyond the due point, it's "missed"
+      const pmInterval = it.pm_interval_hours != null ? Number(it.pm_interval_hours) : null;
+      if (pmInterval != null && lastEngine > nextEngine + pmInterval) {
+        return 'missed';
       }
+      return 'overdue';
     }
-    return 'scheduled';
+    return 'forecast';
   }
 
-  const STATUS_COLORS = { done: '#28a745', overdue: '#dc3545', scheduled: '#6f42c1', in_progress: '#f0ad4e', awaiting_pm: '#17a2b8' };
+  const STATUS_COLORS = {
+    forecast: '#6f42c1',
+    assigned: '#f0ad4e',
+    in_progress: '#1976d2',
+    tepat_waktu: '#28a745',
+    terlambat: '#dc3545',
+    overdue: '#fd7e14',
+    missed: '#212121',
+    done: '#28a745',
+    scheduled: '#6f42c1',
+  };
   const FORECAST_COLOR = '#6f42c1';
 
   function statusLabel(code) {
     if (!code) return '';
     switch (code) {
-      case 'done': return 'Done';
-      case 'overdue': return 'Overdue';
-      case 'scheduled': return 'Scheduled';
+      case 'forecast': return 'Forecast';
+      case 'assigned': return 'WO Assigned';
       case 'in_progress': return 'In Progress';
-      case 'awaiting_pm': return 'Awaiting PM';
+      case 'tepat_waktu': return 'Done (On Time)';
+      case 'terlambat': return 'Done (Late)';
+      case 'overdue': return 'Overdue';
+      case 'missed': return 'PM Missed';
+      case 'done': return 'Done';
+      case 'scheduled': return 'Forecast';
       default: return String(code);
     }
   }
@@ -386,6 +402,7 @@ export default function PMCalendarPage() {
     setDetailItem(it);
     setAssignWoValue(it.workorder_doc_no || it.workorder_no || '');
     setAssignWorkOrderId(it.work_order_id || null);
+    setAssignWoDueDate(null);
     // fetch available PM workorders for this alat
     (async () => {
       try {
@@ -393,9 +410,12 @@ export default function PMCalendarPage() {
         const j = await apiFetch(`/pm/equipment-status/${encodeURIComponent(alatId)}/workorders`);
         const opts = j.data || [];
         setWorkOrderOptions(opts);
-        // if there's a matching doc_no, select its id
+        // if there's a matching doc_no, select its id and date
         const matched = opts.find(o => o.doc_no === (it.workorder_doc_no || it.workorder_no));
-        if (matched) setAssignWorkOrderId(matched.id);
+        if (matched) {
+          setAssignWorkOrderId(matched.id);
+          setAssignWoDueDate(matched.start_date || null);
+        }
       } catch (e) {
         console.error('load workorders for alat', e);
         setWorkOrderOptions([]);
@@ -408,7 +428,7 @@ export default function PMCalendarPage() {
     if (!detailItem) return;
     try {
       const alatId = detailItem.alat_id || detailItem.id;
-      await apiFetch(`/pm/equipment-status/${encodeURIComponent(alatId)}/assign-workorder`, { method: 'POST', body: { workorder_doc_no: assignWoValue, work_order_id: assignWorkOrderId } });
+      await apiFetch(`/pm/equipment-status/${encodeURIComponent(alatId)}/assign-workorder`, { method: 'POST', body: { workorder_doc_no: assignWoValue, work_order_id: assignWorkOrderId, wo_due_date: assignWoDueDate || undefined } });
       setAssignModalOpen(false);
       setDetailOpen(false);
       await load();
@@ -429,6 +449,32 @@ export default function PMCalendarPage() {
     } catch (e) {
       console.error('unassign wo', e);
       alert('Unassign failed');
+    }
+  }
+
+  function openCompleteWoModal(it) {
+    setDetailItem(it);
+    setCompleteWoEngineHour(it.last_engine_hour != null ? String(it.last_engine_hour) : '');
+    setCompleteWoNotes('');
+    setCompleteWoModalOpen(true);
+  }
+
+  async function submitCompleteWo() {
+    if (!detailItem) return;
+    setCompleteWoLoading(true);
+    try {
+      const alatId = detailItem.alat_id || detailItem.id;
+      const body = { notes: completeWoNotes || undefined };
+      if (completeWoEngineHour !== '') body.engine_hour = Number(completeWoEngineHour);
+      await apiFetch(`/pm/equipment-status/${encodeURIComponent(alatId)}/complete-wo`, { method: 'POST', body });
+      setCompleteWoModalOpen(false);
+      setDetailOpen(false);
+      await load();
+    } catch (e) {
+      console.error('complete wo', e);
+      alert('Complete WO failed: ' + String(e));
+    } finally {
+      setCompleteWoLoading(false);
     }
   }
 
@@ -485,11 +531,13 @@ export default function PMCalendarPage() {
           <Button size="small" onClick={nextMonth}>&gt;</Button>
         </div>
         <div style={{ marginLeft: 'auto', display:'flex', gap:8 }}>
-          <Chip label="Scheduled" size="small" style={{ background: STATUS_COLORS.scheduled, color:'#fff' }} />
-          <Chip label="Overdue" size="small" style={{ background: STATUS_COLORS.overdue, color:'#fff' }} />
+          <Chip label="Forecast" size="small" style={{ background: STATUS_COLORS.forecast, color:'#fff' }} />
+          <Chip label="WO Assigned" size="small" style={{ background: STATUS_COLORS.assigned, color:'#fff' }} />
           <Chip label="In Progress" size="small" style={{ background: STATUS_COLORS.in_progress, color:'#fff' }} />
-          <Chip label="Awaiting PM" size="small" style={{ background: STATUS_COLORS.awaiting_pm, color:'#fff' }} />
-          <Chip label="Done" size="small" style={{ background: STATUS_COLORS.done, color:'#fff' }} />
+          <Chip label="Done (On Time)" size="small" style={{ background: STATUS_COLORS.tepat_waktu, color:'#fff' }} />
+          <Chip label="Done (Late)" size="small" style={{ background: STATUS_COLORS.terlambat, color:'#fff' }} />
+          <Chip label="Overdue" size="small" style={{ background: STATUS_COLORS.overdue, color:'#fff' }} />
+          <Chip label="PM Missed" size="small" style={{ background: STATUS_COLORS.missed, color:'#fff' }} />
         </div>
       </div>
 
@@ -517,17 +565,15 @@ export default function PMCalendarPage() {
                     </div>
                     <div style={{ fontSize: 13 }}>
                       {items.slice(0,3).map((it, idx) => {
-                          const isForecast = !!it.__forecast;
                           const st = itemStatus(it);
-                          const color = isForecast ? FORECAST_COLOR : (STATUS_COLORS[st] || '#888');
+                          const color = STATUS_COLORS[st] || '#888';
                           const itemBg = hexToRgba(color, 0.12);
                           return (
-                            <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: itemBg, borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: isForecast ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${displayLabelForItem(it)} — ${it.pm_label || it.next_pm_engine_hour}`}>
+                            <div key={idx} onClick={() => openDetail(it)} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: '6px 8px', background: itemBg, borderRadius: 6, cursor: 'pointer', boxShadow: '0 1px 0 rgba(0,0,0,0.02)', border: st === 'forecast' ? '1px dashed rgba(111,66,193,0.4)' : undefined }} title={`${displayLabelForItem(it)} — ${it.pm_label || it.next_pm_engine_hour}`}>
                             <div style={{ width: 10, height: 10, borderRadius: 10, background: color, marginTop: 6 }} />
                             <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                               <div style={{ fontWeight: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabelForItem(it)}</div>
                             </div>
-                            {isForecast ? null : null}
                           </div>
                         );
                       })}
@@ -579,6 +625,13 @@ export default function PMCalendarPage() {
                   <p><strong>Engine Hour (performed):</strong> {detailItem.engine_hour ?? '-'}</p>
                   <p><strong>Workorder:</strong> {detailItem.workorder_no ?? detailItem.workorder_doc_no ?? '-'}</p>
                   <p><strong>Notes:</strong> {detailItem.notes ?? '-'}</p>
+                  <p style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <strong>Ketepatan PM:</strong>
+                    {detailItem.pm_tepat_waktu === 'tepat_waktu' && <Chip label="Done (On Time)" size="small" style={{ background: '#388e3c', color: '#fff' }} />}
+                    {detailItem.pm_tepat_waktu === 'terlambat' && <Chip label="Done (Late)" size="small" style={{ background: '#c62828', color: '#fff' }} />}
+                    {detailItem.pm_tepat_waktu === 'tidak_dikerjakan' && <Chip label="PM Missed" size="small" style={{ background: '#212121', color: '#fff' }} />}
+                    {!detailItem.pm_tepat_waktu && <span style={{ color: '#999' }}>-</span>}
+                  </p>
                   <p style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>Status:</strong> {(() => {
                     const st = itemStatus(detailItem);
                     const color = STATUS_COLORS[st] || '#6f42c1';
@@ -594,6 +647,9 @@ export default function PMCalendarPage() {
                   <div style={{ display:'flex', gap:8, marginTop:8 }}>
                     {(!(detailItem.workorder_doc_no || detailItem.workorder_no || detailItem.work_order_id)) && (
                       <Button variant="outlined" size="small" onClick={() => openAssignModal(detailItem)} disabled={isTerminal}>Assign WO</Button>
+                    )}
+                    {(detailItem.workorder_doc_no || detailItem.workorder_no || detailItem.work_order_id) && (
+                      <Button variant="contained" size="small" color="success" onClick={() => openCompleteWoModal(detailItem)} disabled={isTerminal}>Complete WO</Button>
                     )}
                     <Button variant="outlined" size="small" color="error" onClick={() => submitUnassign(detailItem)} disabled={isTerminal}>Unassign WO</Button>
                   </div>
@@ -613,7 +669,6 @@ export default function PMCalendarPage() {
       </Dialog>
 
       <Dialog open={assignModalOpen} onClose={() => setAssignModalOpen(false)} fullWidth maxWidth="sm" container={() => document.getElementById('pm-calendar-root')}>
-        <DialogTitle>Assign Workorder</DialogTitle>
         <DialogContent>
           <Box sx={{ display:'grid', gap:2, mt:1 }}>
             <FormControl size="small" fullWidth>
@@ -627,6 +682,7 @@ export default function PMCalendarPage() {
                   setAssignWorkOrderId(val);
                   const sel = workOrderOptions.find(o => String(o.id) === String(val));
                   setAssignWoValue(sel ? (sel.doc_no || '') : '');
+                  setAssignWoDueDate(sel ? (sel.start_date || null) : null);
                 }}
               >
                 <MenuItem value="">-- Select existing PM Workorder --</MenuItem>
@@ -635,12 +691,48 @@ export default function PMCalendarPage() {
                 ))}
               </Select>
             </FormControl>
-            <TextField label="Or enter Workorder No (manual)" size="small" value={assignWoValue} onChange={e => { setAssignWoValue(e.target.value); setAssignWorkOrderId(null); }} />
+            <TextField label="Or enter Workorder No (manual)" size="small" value={assignWoValue} onChange={e => { setAssignWoValue(e.target.value); setAssignWorkOrderId(null); setAssignWoDueDate(null); }} />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAssignModalOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={submitAssign} disabled={isTerminal}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Complete WO Dialog */}
+      <Dialog open={completeWoModalOpen} onClose={() => setCompleteWoModalOpen(false)} fullWidth maxWidth="xs" container={() => document.getElementById('pm-calendar-root')}>
+        <DialogTitle>Complete PM Work Order</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display:'grid', gap:2, mt:1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Tandai WO <strong>{detailItem?.workorder_doc_no || detailItem?.workorder_no || '-'}</strong> sebagai COMPLETED.
+              PM History akan otomatis dibuat.
+            </Typography>
+            <TextField
+              label="Engine Hour saat ini"
+              size="small"
+              type="number"
+              value={completeWoEngineHour}
+              onChange={e => setCompleteWoEngineHour(e.target.value)}
+              helperText="Isi jam meter alat saat PM dilakukan (opsional)"
+            />
+            <TextField
+              label="Catatan"
+              size="small"
+              multiline
+              rows={2}
+              value={completeWoNotes}
+              onChange={e => setCompleteWoNotes(e.target.value)}
+              helperText="Opsional"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteWoModalOpen(false)} disabled={completeWoLoading}>Cancel</Button>
+          <Button variant="contained" color="success" onClick={submitCompleteWo} disabled={isTerminal || completeWoLoading}>
+            {completeWoLoading ? 'Processing...' : 'Complete WO'}
+          </Button>
         </DialogActions>
       </Dialog>
     </div>

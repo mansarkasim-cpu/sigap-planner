@@ -226,13 +226,59 @@ async function updateEquipmentStatusFromMeter(alatId) {
     const lastRecordedAt = last ? last.recorded_at : null;
     const lastTechnician = last ? last.teknisi_id : null;
     // Upsert only the last-engine fields; do NOT set or modify next_pm_engine_hour
-    await ormconfig_1.AppDataSource.manager.query(`INSERT INTO equipment_status (alat_id, last_engine_hour, last_recorded_at, last_technician, updated_at, created_at)
-     VALUES ($1, $2, $3, $4, now(), now())
+    // Determine whether we should regenerate next_pm_due_at: only when next_pm_engine_hour exists
+    // and the newly recorded lastEngineHour is <= next_pm_engine_hour
+    let newNextDueAt = null;
+    try {
+        const esRows = await ormconfig_1.AppDataSource.manager.query(`SELECT next_pm_engine_hour, next_pm_due_at FROM equipment_status WHERE alat_id = $1 LIMIT 1`, [alatId]);
+        const es = esRows && esRows.length ? esRows[0] : null;
+        const nextEngine = es && es.next_pm_engine_hour != null ? Number(es.next_pm_engine_hour) : null;
+        if (nextEngine != null && lastEngineHour != null && lastEngineHour <= nextEngine) {
+            // fetch jenis_alat.avg_hours_per_day if available
+            const alatRows = await ormconfig_1.AppDataSource.manager.query(`SELECT jenis_alat_id FROM master_alat WHERE id = $1 LIMIT 1`, [alatId]);
+            const jenisId = alatRows && alatRows.length ? (alatRows[0].jenis_alat_id || null) : null;
+            let avgHoursPerDay = Number(process.env.PM_AVG_HOURS_PER_DAY) || 24;
+            if (jenisId != null) {
+                try {
+                    const jenisRows = await ormconfig_1.AppDataSource.manager.query(`SELECT avg_hours_per_day FROM master_jenis_alat WHERE id = $1 LIMIT 1`, [jenisId]);
+                    if (jenisRows && jenisRows.length && jenisRows[0].avg_hours_per_day != null) {
+                        avgHoursPerDay = Number(jenisRows[0].avg_hours_per_day) || avgHoursPerDay;
+                    }
+                }
+                catch (e) {
+                    // ignore and use fallback
+                }
+            }
+            try {
+                const hoursLeft = Number(nextEngine) - Number(lastEngineHour);
+                if (hoursLeft <= 0) {
+                    newNextDueAt = new Date().toISOString();
+                }
+                else if (avgHoursPerDay > 0) {
+                    const days = Math.ceil(hoursLeft / avgHoursPerDay);
+                    const refDate = lastRecordedAt ? new Date(lastRecordedAt) : new Date();
+                    const d = new Date(refDate);
+                    d.setHours(0, 0, 0, 0);
+                    d.setDate(d.getDate() + days);
+                    newNextDueAt = d.toISOString();
+                }
+            }
+            catch (e) {
+                newNextDueAt = null;
+            }
+        }
+    }
+    catch (e) {
+        // ignore errors and proceed with basic upsert
+    }
+    await ormconfig_1.AppDataSource.manager.query(`INSERT INTO equipment_status (alat_id, last_engine_hour, last_recorded_at, last_technician, next_pm_due_at, updated_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, now(), now())
      ON CONFLICT (alat_id) DO UPDATE SET
        last_engine_hour = EXCLUDED.last_engine_hour,
        last_recorded_at = EXCLUDED.last_recorded_at,
        last_technician = EXCLUDED.last_technician,
-       updated_at = now();`, [alatId, lastEngineHour, lastRecordedAt, lastTechnician]);
+       next_pm_due_at = COALESCE(EXCLUDED.next_pm_due_at, equipment_status.next_pm_due_at),
+       updated_at = now();`, [alatId, lastEngineHour, lastRecordedAt, lastTechnician, newNextDueAt]);
 }
 exports.updateEquipmentStatusFromMeter = updateEquipmentStatusFromMeter;
 exports.default = { updateEquipmentStatusAll, updateEquipmentStatusFromMeter };

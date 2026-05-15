@@ -31,7 +31,7 @@ export default function PMRulesPage() {
   const [filterJenisId, setFilterJenisId] = useState('');
   const [jenisOptions, setJenisOptions] = useState([]);
   const [alatOptions, setAlatOptions] = useState([]);
-  const [form, setForm] = useState({ kode_rule:'', description:'', jenis_alat_id:'', alat_id:'', interval_hours:250, multiplier:1, start_engine_hour:0, active:true });
+  const [form, setForm] = useState({ kode_rule:'', description:'', jenis_alat_id:'', alat_id:'', interval_hours:250, multiplier:1, start_engine_hour:0, sequence:0, active:true });
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [allAlatsMap, setAllAlatsMap] = useState({});
@@ -93,9 +93,9 @@ export default function PMRulesPage() {
 
   function onChange(k, v) { setForm(prev => ({ ...prev, [k]: v })); }
 
-  function startEdit(r) { setEditingId(r.id); setForm({ kode_rule:r.kode_rule||'', description:r.description||'', jenis_alat_id:r.jenis_alat_id||'', alat_id:r.alat_id||'', interval_hours:r.interval_hours||250, multiplier:r.multiplier||1, start_engine_hour:r.start_engine_hour||0, active: r.active === true }); setModalOpen(true); }
+  function startEdit(r) { setEditingId(r.id); setForm({ kode_rule:r.kode_rule||'', description:r.description||'', jenis_alat_id:r.jenis_alat_id||'', alat_id:r.alat_id||'', interval_hours:r.interval_hours||250, multiplier:r.multiplier||1, start_engine_hour:r.start_engine_hour||0, sequence: r.sequence != null ? r.sequence : 0, active: r.active === true }); setModalOpen(true); }
 
-  function resetForm() { setEditingId(null); setForm({ kode_rule:'', description:'', jenis_alat_id:'', alat_id:'', interval_hours:250, multiplier:1, start_engine_hour:0, active:true }); setModalOpen(false); }
+  function resetForm() { setEditingId(null); setForm({ kode_rule:'', description:'', jenis_alat_id:'', alat_id:'', interval_hours:250, multiplier:1, start_engine_hour:0, sequence:0, active:true }); setModalOpen(false); }
 
   async function save() {
     if (!form.kode_rule || String(form.kode_rule).trim() === '') return alert('Kode rule is required');
@@ -107,7 +107,7 @@ export default function PMRulesPage() {
       } else {
         await apiClient('/pm/rules', { method: 'POST', body: form });
       }
-      await loadRules();
+      await loadRules(filterJenisId);
       resetForm();
       setSnack({ open:true, msg: editingId ? 'Rule updated' : 'Rule created', severity:'success' });
     } catch (e) {
@@ -120,7 +120,7 @@ export default function PMRulesPage() {
     if (!confirm('Hapus rule ini?')) return;
     try {
       await apiClient(`/pm/rules/${id}`, { method: 'DELETE' });
-      await loadRules();
+      await loadRules(filterJenisId);
       setSnack({ open:true, msg: 'Rule deleted', severity:'success' });
     } catch (e) { console.error('remove', e); alert('Delete failed'); }
   }
@@ -149,6 +149,7 @@ export default function PMRulesPage() {
               <TableHead>
                 <TableRow>
                   <TableCell>ID</TableCell>
+                  <TableCell>Seq</TableCell>
                   <TableCell>Kode</TableCell>
                   <TableCell>Desc</TableCell>
                   <TableCell>Jenis</TableCell>
@@ -163,6 +164,7 @@ export default function PMRulesPage() {
                 {rules.map(r => (
                   <TableRow key={r.id} hover>
                     <TableCell>{r.id}</TableCell>
+                    <TableCell>{r.sequence ?? 0}</TableCell>
                     <TableCell>{r.kode_rule || (r.interval_hours ? `PM${r.interval_hours}` : '')}</TableCell>
                     <TableCell sx={{ maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.description}</TableCell>
                       <TableCell>{getJenisLabel(r.jenis_alat_id)}</TableCell>
@@ -198,6 +200,7 @@ export default function PMRulesPage() {
             <TextField type="number" label="Interval (hours)" value={form.interval_hours} onChange={e=>onChange('interval_hours', Number(e.target.value))} size="small" fullWidth />
             <TextField type="number" label="Multiplier" value={form.multiplier} onChange={e=>onChange('multiplier', Number(e.target.value))} size="small" fullWidth />
             <TextField type="number" label="Start Engine Hour" value={form.start_engine_hour} onChange={e=>onChange('start_engine_hour', Number(e.target.value))} size="small" fullWidth />
+            <TextField type="number" label="Sequence" value={form.sequence} onChange={e=>onChange('sequence', Number(e.target.value))} size="small" fullWidth helperText="Urutan rule dalam kelompok (0 = tidak diurutkan)" />
             <Box sx={{ display:'flex', alignItems:'center', gap:1 }}>
               <label><input type="checkbox" checked={form.active} onChange={e=>onChange('active', e.target.checked)} /> Active</label>
             </Box>

@@ -16,6 +16,8 @@ router.post('/pm/run', authMiddleware, requireRole(['planner','admin']), ctrl.ru
 router.post('/pm/equipment-status/:alat_id/assign-workorder', authMiddleware, requireRole(['planner','admin']), ctrl.assignWorkOrder);
 router.post('/pm/equipment-status/:alat_id/unassign-workorder', authMiddleware, requireRole(['planner','admin']), ctrl.unassignWorkOrder);
 router.get('/pm/equipment-status/:alat_id/workorders', authMiddleware, requireRole(['planner','admin']), ctrl.getWorkOrdersForAlat);
+// Mark PM WO as completed → auto-inserts pm_history
+router.post('/pm/equipment-status/:alat_id/complete-wo', authMiddleware, requireRole(['planner','admin']), ctrl.completePmWorkOrder);
 
 // PM rules CRUD
 router.get('/pm/rules', authMiddleware, requireRole(['planner','admin']), rulesCtrl.listPmRules);

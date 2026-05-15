@@ -29,6 +29,7 @@ const path = __importStar(require("path"));
 const uuid_1 = require("uuid");
 const ormconfig_1 = require("../ormconfig");
 const DailyChecklist_1 = require("../entities/DailyChecklist");
+const DailyChecklistAssignment_1 = require("../entities/DailyChecklistAssignment");
 const MasterChecklistQuestion_1 = require("../entities/MasterChecklistQuestion");
 const DailyChecklistItem_1 = require("../entities/DailyChecklistItem");
 const User_1 = require("../entities/User");
@@ -287,6 +288,32 @@ async function submitChecklist(req, res) {
                 });
                 const savedItem = await itemRepo.save(item);
                 createdItems.push(savedItem);
+            }
+            // After saving checklist, auto-mark the daily_checklist_assignment as DONE
+            try {
+                const performedDate = savedDc.performed_at ? new Date(savedDc.performed_at) : new Date();
+                const dateStr = performedDate.toISOString().slice(0, 10); // YYYY-MM-DD
+                const userId = user?.id;
+                if (userId && alat_id) {
+                    const assignRepo = tx.getRepository(DailyChecklistAssignment_1.DailyChecklistAssignment);
+                    const assignment = await assignRepo
+                        .createQueryBuilder('a')
+                        .innerJoin('a.schedule', 's')
+                        .where('a.asset_id = :alatId', { alatId: Number(alat_id) })
+                        .andWhere('a.user_id = :userId', { userId: String(userId) })
+                        .andWhere("DATE(s.date) = :date", { date: dateStr })
+                        .andWhere("a.status = 'PENDING'")
+                        .getOne();
+                    if (assignment) {
+                        assignment.status = 'DONE';
+                        assignment.completedAt = performedDate;
+                        await assignRepo.save(assignment);
+                        console.info(`submitChecklist: auto-marked assignment ${assignment.id} as DONE`);
+                    }
+                }
+            }
+            catch (e) {
+                console.warn('submitChecklist: failed to auto-mark assignment DONE', e);
             }
             // After saving checklist, try to associate with a DAILY WorkOrder and set its start_date to performed_at - 15 minutes
             try {

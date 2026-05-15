@@ -27,9 +27,11 @@ const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
 const ctrl = __importStar(require("../controllers/monitoringController"));
 const router = (0, express_1.Router)();
-// Weekly monitoring (admin/planner)
-router.get('/monitoring/daily-weekly', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.weeklyChecklistStatus);
+// Weekly monitoring (admin/planner) — allow terminal read-only access
+router.get('/monitoring/daily-weekly', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'terminal']), ctrl.weeklyChecklistStatus);
 // Equipment hour meter listing and creation
-router.get('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.listEquipmentHourMeter);
-router.post('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.createEquipmentHourMeter);
+// Allow technicians to list/create their equipment hour meter entries as well
+router.get('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'technician']), ctrl.listEquipmentHourMeter);
+router.post('/monitor/equipment-hour-meter', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'technician']), ctrl.createEquipmentHourMeter);
+router.patch('/monitor/equipment-hour-meter/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'technician']), ctrl.updateEquipmentHourMeter);
 exports.default = router;
