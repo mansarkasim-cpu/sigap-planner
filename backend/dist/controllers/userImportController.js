@@ -30,6 +30,7 @@ exports.importUsersFromFile = void 0;
 const fs_1 = __importDefault(require("fs"));
 const XLSX = __importStar(require("xlsx"));
 const ormconfig_1 = require("../ormconfig");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const User_1 = require("../entities/User");
 const repo = () => ormconfig_1.AppDataSource.getRepository(User_1.User);
 function parseWorkbook(filePath) {
@@ -54,7 +55,9 @@ async function importUsersFromFile(req, res) {
         }
         const rows = parseWorkbook(tmpPath);
         console.log('[IMPORT] parsed rows count:', rows?.length ?? 0);
+        const isPreview = String(req.query.preview || '').toLowerCase() === '1' || String(req.query.preview || '').toLowerCase() === 'true';
         const results = [];
+        const previewRows = [];
         for (let i = 0; i < rows.length; i++) {
             const r = rows[i];
             const rowNum = i + 2; // assume header on row 1
@@ -64,12 +67,38 @@ async function importUsersFromFile(req, res) {
             const role = r.role ?? r.Role ?? 'technician';
             const site = r.site ?? r.Site ?? null;
             const password = r.password ?? r.Password ?? null;
+            const rowInfo = { row: rowNum, name, nipp, email, role, site };
             if (!name || !nipp) {
+                if (isPreview) {
+                    rowInfo.status = 'skipped';
+                    rowInfo.message = 'name or nipp missing';
+                    previewRows.push(rowInfo);
+                    continue;
+                }
                 results.push({ row: rowNum, status: 'skipped', message: 'name or nipp missing' });
                 continue;
             }
             if (!/^[0-9]{1,15}$/.test(String(nipp))) {
+                if (isPreview) {
+                    rowInfo.status = 'error';
+                    rowInfo.message = 'nipp must be numeric and <=15';
+                    previewRows.push(rowInfo);
+                    continue;
+                }
                 results.push({ row: rowNum, status: 'error', message: 'nipp must be numeric and <=15' });
+                continue;
+            }
+            if (isPreview) {
+                // in preview mode, don't save; just show what would happen (created/updated)
+                try {
+                    const existing = await repo().findOneBy({ nipp });
+                    rowInfo.status = existing ? 'updated' : 'created';
+                }
+                catch (e) {
+                    rowInfo.status = 'error';
+                    rowInfo.message = String(e?.message || e);
+                }
+                previewRows.push(rowInfo);
                 continue;
             }
             try {
@@ -81,14 +110,17 @@ async function importUsersFromFile(req, res) {
                     existing.email = email ?? existing.email;
                     existing.role = role ?? existing.role;
                     existing.site = site ?? existing.site;
-                    if (password)
-                        existing.password = password;
+                    if (password) {
+                        const hashed = await bcryptjs_1.default.hash(String(password), 10);
+                        existing.password = hashed;
+                    }
                     const saved = await repo().save(existing);
                     console.log('[IMPORT] updated user id=', saved.id);
                     results.push({ row: rowNum, status: 'updated', id: saved.id });
                 }
                 else {
-                    const u = repo().create({ name, nipp, email: email ?? undefined, role, site, password });
+                    const hashed = password ? await bcryptjs_1.default.hash(String(password), 10) : undefined;
+                    const u = repo().create({ name, nipp, email: email ?? undefined, role, site, password: hashed });
                     const saved = await repo().save(u);
                     console.log('[IMPORT] created user id=', saved.id);
                     results.push({ row: rowNum, status: 'created', id: saved.id });

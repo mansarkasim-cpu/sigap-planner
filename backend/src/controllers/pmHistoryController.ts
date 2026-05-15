@@ -1,6 +1,33 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../ormconfig';
 import pmService from '../services/pmService';
+import { PM_LATE_TOLERANCE_HOURS } from '../config/pmConfig';
+
+/**
+ * Compute the next PM engine hour based on site pm_mode.
+ * - absolute: align to the nearest multiple of `effective` strictly above `engineHour`
+ * - relative (default): engineHour + effective
+ */
+function computeNextDueEngineHour(engineHour: number, effective: number, pmMode: string): number {
+  if (pmMode === 'absolute') {
+    const next = Math.ceil(engineHour / effective) * effective;
+    return next > engineHour ? next : engineHour + effective;
+  }
+  return engineHour + effective;
+}
+
+/** Fetch pm_mode for the site that owns the given alat */
+async function getSitePmMode(alatId: any): Promise<string> {
+  try {
+    const rows: any[] = await AppDataSource.manager.query(
+      `SELECT ms.pm_mode FROM master_alat ma JOIN master_site ms ON ms.id = ma.site_id WHERE ma.id = $1 LIMIT 1`,
+      [alatId]
+    );
+    return (rows && rows.length && rows[0].pm_mode) ? String(rows[0].pm_mode) : 'absolute';
+  } catch (e) {
+    return 'absolute';
+  }
+}
 
 export async function listPmHistory(req: Request, res: Response) {
   try {
@@ -14,29 +41,45 @@ export async function listPmHistory(req: Request, res: Response) {
       params.push(req.query.site_id);
     }
     if (req.query.alat_id) {
-      where.push(`ph.alat_id = $${idx++}`);
+      where.push(`pw.alat_id = $${idx++}`);
       params.push(req.query.alat_id);
     }
     if (req.query.start_date) {
-      where.push(`ph.performed_at >= $${idx++}`);
+      where.push(`pw.performed_at >= $${idx++}`);
       params.push(req.query.start_date);
     }
     if (req.query.end_date) {
-      where.push(`ph.performed_at <= $${idx++}`);
+      where.push(`pw.performed_at < ($${idx++}::date + INTERVAL '1 day')`);
       params.push(req.query.end_date);
     }
 
     const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
 
-    const sql = `SELECT ph.*, a.nama AS nama_alat, a.kode AS kode_alat, a.kode_alias AS kode_alias, a.site_id AS site_id, r.description AS pm_rule_label, r.kode_rule, u.name AS performed_by_name
-      FROM pm_history ph
-      LEFT JOIN master_alat a ON a.id = ph.alat_id
-      LEFT JOIN pm_rules r ON r.id = ph.pm_rule_id
-      LEFT JOIN "user" u ON u.id = ph.performed_by
-      ${whereSql}
-      ORDER BY ph.performed_at DESC
-      LIMIT $${idx}`;
+    // tolerance param index comes before limit
+    const toleranceParamIdx = idx++;
+    const limitParamIdx = idx;
 
+    const sql = `WITH pm_with_prev AS (
+      SELECT ph.*,
+        LAG(ph.next_due_engine_hour) OVER (PARTITION BY ph.alat_id ORDER BY ph.performed_at ASC) AS scheduled_engine_hour
+      FROM pm_history ph
+    )
+    SELECT pw.*, a.nama AS nama_alat, a.kode AS kode_alat, a.kode_alias AS kode_alias, a.site_id AS site_id, r.description AS pm_rule_label, r.kode_rule, u.name AS performed_by_name,
+      CASE
+        WHEN pw.is_missed = true THEN 'tidak_dikerjakan'
+        WHEN pw.scheduled_engine_hour IS NULL THEN NULL
+        WHEN pw.engine_hour <= pw.scheduled_engine_hour + $${toleranceParamIdx} THEN 'tepat_waktu'
+        ELSE 'terlambat'
+      END AS pm_tepat_waktu
+    FROM pm_with_prev pw
+    LEFT JOIN master_alat a ON a.id = pw.alat_id
+    LEFT JOIN pm_rules r ON r.id = pw.pm_rule_id
+    LEFT JOIN "user" u ON u.id = pw.performed_by
+    ${whereSql}
+    ORDER BY pw.performed_at DESC
+    LIMIT $${limitParamIdx}`;
+
+    params.push(PM_LATE_TOLERANCE_HOURS);
     params.push(limit);
 
     console.debug('[pmHistory] SQL:', sql);
@@ -65,7 +108,7 @@ export async function createPmHistory(req: Request, res: Response) {
       return res.status(400).json({ message: 'alat_id, pm_rule_id and engine_hour are required' });
     }
 
-    // compute next_due_engine_hour based on rule: next = last engine_hour + interval * multiplier
+    // compute next_due_engine_hour based on rule and site pm_mode
     const ruleRows: any[] = await AppDataSource.manager.query(`SELECT interval_hours, multiplier FROM pm_rules WHERE id = $1`, [pm_rule_id]);
     const rule = ruleRows && ruleRows.length ? ruleRows[0] : null;
     let next_due_engine_hour: number | null = null;
@@ -73,7 +116,8 @@ export async function createPmHistory(req: Request, res: Response) {
       const interval = Number(rule.interval_hours) || 0;
       const multiplier = Number(rule.multiplier) || 1;
       const effective = Math.max(1, interval * multiplier);
-      next_due_engine_hour = Number(engine_hour) + effective;
+      const pmMode = await getSitePmMode(alat_id);
+      next_due_engine_hour = computeNextDueEngineHour(Number(engine_hour), effective, pmMode);
     }
 
     const insertSql = `INSERT INTO pm_history (alat_id, pm_rule_id, performed_by, performed_at, engine_hour, next_due_engine_hour, notes, workorder_no, created_at, updated_at)
@@ -156,7 +200,7 @@ export async function updatePmHistory(req: Request, res: Response) {
       return res.status(400).json({ message: 'alat_id, pm_rule_id and engine_hour are required' });
     }
 
-    // recompute next_due_engine_hour based on rule
+    // recompute next_due_engine_hour based on rule and site pm_mode
     const ruleRows: any[] = await AppDataSource.manager.query(`SELECT interval_hours, multiplier FROM pm_rules WHERE id = $1`, [pm_rule_id]);
     const rule = ruleRows && ruleRows.length ? ruleRows[0] : null;
     let next_due_engine_hour: number | null = null;
@@ -164,7 +208,8 @@ export async function updatePmHistory(req: Request, res: Response) {
       const interval = Number(rule.interval_hours) || 0;
       const multiplier = Number(rule.multiplier) || 1;
       const effective = Math.max(1, interval * multiplier);
-      next_due_engine_hour = Number(engine_hour) + effective;
+      const pmMode = await getSitePmMode(alat_id);
+      next_due_engine_hour = computeNextDueEngineHour(Number(engine_hour), effective, pmMode);
     }
 
     const updateSql = `UPDATE pm_history SET alat_id=$1, pm_rule_id=$2, performed_by=$3, performed_at=$4, engine_hour=$5, next_due_engine_hour=$6, notes=$7, workorder_no=$8, updated_at=now() WHERE id=$9 RETURNING *`;

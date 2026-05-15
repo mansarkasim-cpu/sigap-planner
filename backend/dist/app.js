@@ -42,6 +42,7 @@ const master_routes_1 = __importDefault(require("./routes/master.routes"));
 const monitoring_routes_1 = __importDefault(require("./routes/monitoring.routes"));
 const pm_routes_1 = __importDefault(require("./routes/pm.routes"));
 const device_routes_1 = __importDefault(require("./routes/device.routes"));
+const daily_checklist_routes_1 = __importDefault(require("./routes/daily-checklist.routes"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const app = (0, express_1.default)();
@@ -104,6 +105,7 @@ app.use('/api', master_routes_1.default);
 app.use('/api', monitoring_routes_1.default);
 app.use('/api', device_routes_1.default);
 app.use('/api', pm_routes_1.default);
+app.use('/api', daily_checklist_routes_1.default);
 // Mount swagger UI at /api/docs
 app.use("/api/docs", swagger_routes_1.default);
 // static uploads (dev)

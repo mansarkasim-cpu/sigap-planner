@@ -17,12 +17,36 @@ const auth_1 = require("../middleware/auth");
 const MasterSite_1 = require("../entities/MasterSite");
 const class_validator_1 = require("class-validator");
 const router = (0, express_1.Router)();
-// Shift definitions (must match frontend ShiftManager)
-const SHIFT_DEFS = [
+// Default shift definitions (frontend has matching per-site schemas)
+const GLOBAL_SHIFT_DEFS = [
     { id: 1, start: '07:00', end: '15:00' },
     { id: 2, start: '15:00', end: '23:00' },
     { id: 3, start: '23:00', end: '07:00' },
 ];
+const SITE_SHIFT_SCHEMAS = {
+    MAKASSAR_NEW_PORT: [
+        { id: 1, start: '07:00', end: '15:00' },
+        { id: 2, start: '15:00', end: '23:00' },
+        { id: 3, start: '23:00', end: '07:00' },
+    ],
+    TPK_BELAWAN_DOMESTIK: [
+        { id: 1, start: '00:00', end: '08:00' },
+        { id: 2, start: '08:00', end: '16:00' },
+        { id: 3, start: '16:00', end: '24:00' },
+    ],
+};
+function normalizeSiteKey(site) {
+    if (!site)
+        return 'MAKASSAR_NEW_PORT';
+    let k = String(site).toUpperCase().trim();
+    k = k.replace(/^SITE\b\s*/i, '');
+    k = k.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return k || 'MAKASSAR_NEW_PORT';
+}
+function getShiftDefsForSite(site) {
+    const key = normalizeSiteKey(site);
+    return SITE_SHIFT_SCHEMAS[key] || GLOBAL_SHIFT_DEFS;
+}
 function timeToMinutes(t) {
     const m = String(t || '').trim();
     const parts = m.split(':');
@@ -30,18 +54,20 @@ function timeToMinutes(t) {
     const mm = Number(parts[1] || 0);
     return hh * 60 + mm;
 }
-function findShiftIdForTime(timeStr) {
+function findShiftIdForTime(timeStr, site) {
     if (!timeStr)
         return null;
     const mins = timeToMinutes(timeStr);
-    for (const s of SHIFT_DEFS) {
+    const defs = getShiftDefsForSite(site);
+    for (const s of defs) {
         const startM = timeToMinutes(s.start);
         const endM = timeToMinutes(s.end === '24:00' ? '24:00' : s.end);
-        if (startM <= mins && mins < endM)
-            return s.id;
-        // handle midnight ranges (not needed for current defs but safe)
-        if (startM > endM) {
-            // e.g., 23:00 - 06:00
+        if (startM <= endM) {
+            if (startM <= mins && mins < endM)
+                return s.id;
+        }
+        else {
+            // crosses midnight e.g., 23:00 - 06:00
             if (mins >= startM || mins < endM)
                 return s.id;
         }
@@ -230,12 +256,62 @@ router.post('/shift-assignments', auth_1.authMiddleware, async (req, res) => {
         return res.status(500).json({ message: 'Failed to create assignment' });
     }
 });
+router.post('/shift-assignments/bulk', auth_1.authMiddleware, async (req, res) => {
+    try {
+        const { site, yearMonth, entries } = req.body || {};
+        if (!yearMonth || !/^\d{4}-\d{2}$/.test(String(yearMonth))) {
+            return res.status(400).json({ message: 'yearMonth harus dalam format YYYY-MM' });
+        }
+        const repo = ormconfig_1.AppDataSource.getRepository(ShiftAssignment_1.ShiftAssignment);
+        const groupRepo = ormconfig_1.AppDataSource.getRepository(ShiftGroup_1.ShiftGroup);
+        // Delete all existing assignments for this site+month
+        const monthStart = `${yearMonth}-01`;
+        const monthEnd = `${yearMonth}-31`;
+        const deleteQb = ormconfig_1.AppDataSource.createQueryBuilder()
+            .delete()
+            .from(ShiftAssignment_1.ShiftAssignment)
+            .where('date >= :start AND date <= :end', { start: monthStart, end: monthEnd });
+        if (site) {
+            deleteQb.andWhere('site = :site', { site });
+        }
+        else {
+            deleteQb.andWhere('site IS NULL');
+        }
+        await deleteQb.execute();
+        // Recreate from entries
+        const toSave = [];
+        for (const entry of (entries || [])) {
+            if (!entry.groupId || !entry.date || entry.shift == null)
+                continue;
+            const group = await groupRepo.findOneBy({ id: entry.groupId });
+            if (!group)
+                continue;
+            toSave.push(repo.create({
+                date: String(entry.date),
+                shift: Number(entry.shift),
+                group: group,
+                site: site || null,
+            }));
+        }
+        const saved = toSave.length > 0 ? await repo.save(toSave) : [];
+        return res.json({ message: 'bulk saved', count: Array.isArray(saved) ? saved.length : 1 });
+    }
+    catch (err) {
+        console.error('bulk shift assignments', err);
+        return res.status(500).json({ message: 'Gagal menyimpan jadwal shift' });
+    }
+});
 router.get('/shift-assignments', auth_1.authMiddleware, async (req, res) => {
     try {
         const repo = ormconfig_1.AppDataSource.getRepository(ShiftAssignment_1.ShiftAssignment);
         const qb = repo.createQueryBuilder('a').leftJoinAndSelect('a.group', 'g');
-        if (req.query.date)
+        if (req.query.yearMonth) {
+            const ym = String(req.query.yearMonth);
+            qb.andWhere('a.date >= :start AND a.date <= :end', { start: `${ym}-01`, end: `${ym}-31` });
+        }
+        else if (req.query.date) {
             qb.andWhere('a.date = :date', { date: String(req.query.date) });
+        }
         if (req.query.site)
             qb.andWhere('a.site = :site', { site: String(req.query.site) });
         const rows = await qb.getMany();
@@ -384,8 +460,9 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
             siteCond = ` AND LOWER(COALESCE(a.site,'')) = LOWER($${params.length})`;
         }
         // determine shift(s) from local start/end times if provided
-        const shiftIdStart = findShiftIdForTime(localTimeStr || time);
-        const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime);
+        const shiftIdStart = findShiftIdForTime(localTimeStr || time, site);
+        const shiftIdEnd = findShiftIdForTime(localEndTimeStr || endTime, site);
+        const defs = getShiftDefsForSite(site);
         let shiftCond = '';
         // If only start time provided, filter by that shift
         if (shiftIdStart !== null && !shiftIdEnd) {
@@ -397,7 +474,7 @@ router.get('/scheduled-technicians', auth_1.authMiddleware, async (req, res) => 
             // If start and end fall on the same local date, include the range of shifts between them (inclusive)
             if (localDateStr === localEndDateStr) {
                 const shifts = [];
-                const maxShift = SHIFT_DEFS.length;
+                const maxShift = defs.length;
                 let cur = shiftIdStart;
                 while (true) {
                     shifts.push(cur);

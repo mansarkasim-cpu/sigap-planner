@@ -22,12 +22,18 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const hubCtrl = __importStar(require("../controllers/masterHubController"));
 const siteCtrl = __importStar(require("../controllers/masterSiteController"));
 const jenisCtrl = __importStar(require("../controllers/masterJenisAlatController"));
 const alatCtrl = __importStar(require("../controllers/masterAlatController"));
+const seqCtrl = __importStar(require("../controllers/pmRuleSequenceController"));
+const multer_1 = __importDefault(require("multer"));
+const upload = (0, multer_1.default)({ dest: 'uploads/' });
 const qCtrl = __importStar(require("../controllers/masterQuestionController"));
 const rolesCtrl = __importStar(require("../controllers/masterRolesController"));
 const auth_1 = require("../middleware/auth");
@@ -54,8 +60,14 @@ router.delete('/master/jenis-alat/:id', auth_1.authMiddleware, (0, auth_1.requir
 router.get('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), alatCtrl.listAlats);
 router.get('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician', 'planner', 'terminal']), alatCtrl.getAlat);
 router.post('/master/alats', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.createAlat);
+router.post('/master/alats/import', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), upload.single('file'), alatCtrl.importAlats);
 router.patch('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.updateAlat);
 router.delete('/master/alats/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), alatCtrl.deleteAlat);
+// PM rule sequences (per-jenis and per-alat)
+router.get('/master/pm-sequence/jenis/:jenis_id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), seqCtrl.getSequenceByJenis);
+router.post('/master/pm-sequence/jenis/:jenis_id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), seqCtrl.saveSequenceByJenis);
+router.get('/master/pm-sequence/alat/:alat_id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), seqCtrl.getSequenceByAlat);
+router.post('/master/pm-sequence/alat/:alat_id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin']), seqCtrl.saveSequenceByAlat);
 // Questions & Options (protected)
 router.get('/master/questions', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.listQuestions);
 router.get('/master/questions/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['admin', 'technician']), qCtrl.getQuestion);

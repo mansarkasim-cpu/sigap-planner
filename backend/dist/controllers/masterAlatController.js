@@ -1,8 +1,35 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteAlat = exports.updateAlat = exports.createAlat = exports.getAlat = exports.listAlats = void 0;
+exports.importAlats = exports.deleteAlat = exports.updateAlat = exports.createAlat = exports.getAlat = exports.listAlats = void 0;
 const ormconfig_1 = require("../ormconfig");
 const MasterAlat_1 = require("../entities/MasterAlat");
+const MasterJenisAlat_1 = require("../entities/MasterJenisAlat");
+const MasterSite_1 = require("../entities/MasterSite");
+const XLSX = __importStar(require("xlsx"));
+const fs = __importStar(require("fs"));
 async function listAlats(req, res) {
     try {
         const repo = ormconfig_1.AppDataSource.getRepository(MasterAlat_1.MasterAlat);
@@ -135,3 +162,130 @@ async function deleteAlat(req, res) {
     }
 }
 exports.deleteAlat = deleteAlat;
+async function importAlats(req, res) {
+    try {
+        // multer should have placed file in req.file
+        const fileAny = req.file;
+        if (!fileAny)
+            return res.status(400).json({ message: 'file is required' });
+        const path = fileAny.path;
+        const wb = XLSX.readFile(path);
+        const sheetNames = wb.SheetNames || [];
+        if (sheetNames.length === 0)
+            return res.status(400).json({ message: 'empty workbook' });
+        const first = wb.Sheets[sheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(first, { defval: '' });
+        const repo = ormconfig_1.AppDataSource.getRepository(MasterAlat_1.MasterAlat);
+        const jenisRepo = ormconfig_1.AppDataSource.getRepository(MasterJenisAlat_1.MasterJenisAlat);
+        const siteRepo = ormconfig_1.AppDataSource.getRepository(MasterSite_1.MasterSite);
+        const isPreview = String(req.query.preview || '').toLowerCase() === '1' || String(req.query.preview || '').toLowerCase() === 'true';
+        const results = { created: 0, skipped: 0, errors: [] };
+        const previewRows = [];
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            try {
+                // support flexible column names (lowercase)
+                const get = (keys) => {
+                    for (const k of keys) {
+                        if (r[k] !== undefined)
+                            return r[k];
+                    }
+                    // try lowercase
+                    for (const k of Object.keys(r)) {
+                        if (keys.includes(k.toLowerCase()))
+                            return r[k];
+                    }
+                    return undefined;
+                };
+                const nama = get(['nama', 'name']) || get(['Nama', 'Name']) || '';
+                if (!nama || String(nama).trim() === '') {
+                    results.skipped++;
+                    continue;
+                }
+                const kode = get(['kode', 'code']) || get(['Kode', 'Code']) || undefined;
+                const kode_alias = get(['kode_alias', 'kodealias', 'alias']) || undefined;
+                const serial_no = get(['serial_no', 'serial', 'serialno']) || undefined;
+                const jenisVal = get(['jenis', 'jenis_alat', 'jenis_alat_id']) || undefined;
+                const siteVal = get(['site', 'site_id', 'site_name']) || undefined;
+                const notes = get(['notes', 'note']) || undefined;
+                const status = get(['status']) || 'ACTIVE';
+                let jenis_alat = undefined;
+                if (jenisVal) {
+                    // try numeric id
+                    const num = Number(jenisVal);
+                    if (!isNaN(num) && num > 0) {
+                        jenis_alat = await jenisRepo.findOne({ where: { id: num } });
+                    }
+                    if (!jenis_alat) {
+                        // try by name (case-insensitive)
+                        const name = String(jenisVal).trim();
+                        jenis_alat = await jenisRepo.createQueryBuilder('j')
+                            .where('LOWER(j.nama) = LOWER(:name)', { name })
+                            .getOne();
+                    }
+                }
+                let site = undefined;
+                if (siteVal) {
+                    const num = Number(siteVal);
+                    if (!isNaN(num) && num > 0) {
+                        site = await siteRepo.findOne({ where: { id: num } });
+                    }
+                    if (!site) {
+                        const sname = String(siteVal).trim();
+                        site = await siteRepo.createQueryBuilder('s')
+                            .where('LOWER(s.name) = LOWER(:sname)', { sname })
+                            .getOne();
+                    }
+                }
+                // build preview row info
+                const previewRow = {
+                    row: i + 1,
+                    nama: String(nama).trim(),
+                    kode,
+                    kode_alias,
+                    serial_no,
+                    jenisVal,
+                    jenisFound: !!jenis_alat,
+                    jenis: jenis_alat ? { id: jenis_alat.id, nama: jenis_alat.nama } : null,
+                    siteVal,
+                    siteFound: !!site,
+                    site: site ? { id: site.id, name: site.name } : null,
+                    notes,
+                    status
+                };
+                if (isPreview) {
+                    previewRows.push(previewRow);
+                    continue;
+                }
+                // If jenis_alat is required by DB and not found, skip and record error
+                if (!jenis_alat) {
+                    results.errors.push({ row: i + 1, error: `jenis not found or invalid: ${jenisVal}` });
+                    results.skipped++;
+                    continue;
+                }
+                const ent = repo.create({ nama: String(nama).trim(), kode, kode_alias, serial_no, jenis_alat: jenis_alat, site: site || undefined, notes, status: status || 'ACTIVE' });
+                await repo.save(ent);
+                results.created++;
+            }
+            catch (e) {
+                results.errors.push({ row: i + 1, error: e instanceof Error ? e.message : e });
+            }
+        }
+        // clean up uploaded file
+        try {
+            fs.unlinkSync(path);
+        }
+        catch (e) { /* ignore */ }
+        // Include debug info to help troubleshooting empty imports
+        console.info('importAlats: parsedRows=', rows.length, 'created=', results.created, 'skipped=', results.skipped);
+        if (isPreview) {
+            return res.json({ message: 'preview parsed', parsedCount: rows.length, previewRows, errors: results.errors });
+        }
+        return res.json({ message: 'import complete', results, parsedCount: rows.length, errors: results.errors });
+    }
+    catch (err) {
+        console.error('importAlats error', err);
+        return res.status(500).json({ message: 'Failed to import alats', detail: err instanceof Error ? err.message : err });
+    }
+}
+exports.importAlats = importAlats;

@@ -197,23 +197,123 @@ export default function MonthlyChecklistScheduler(){
     setLoading(false);
   }
 
-  function handleAutoAssign(){
-    // Round-robin distribute assets among scheduled technicians for selectedDate
+  async function handleAutoAssign(){
+    // Fair distribution with asset rotation:
+    // 1) Technicians who were assigned more assets recently get fewer today (load balance).
+    // 2) Each asset is preferentially assigned to the technician who checked it LEAST recently
+    //    so no technician checks the same asset every day.
+    const HISTORY_DAYS = 7;
     const assets = (alats || []).map(a => a.id);
     if (assets.length === 0) return;
     const scheduled = previewItems
       .map((it, idx) => ({ idx, it }))
       .filter(({ it }) => assignmentsLoaded ? Boolean(it.scheduledByDay?.[selectedDate]) : true);
     if (scheduled.length === 0) return;
+
+    // historyCounts[techId]  -> total assets assigned in past N days (load fairness)
+    // assetLastTech[assetId] -> { techId, daysAgo } of the most-recent assignment for that asset
+    //                           used to avoid assigning same tech to same asset on consecutive days
+    const historyCounts = {};
+    const assetLastTech = {}; // assetId -> Map<techId, minDaysAgo> (lower = more recent)
+    for (const { it } of scheduled) historyCounts[String(it.techId)] = 0;
+
+    try {
+      const siteObj = sites.find(s => String(s.id) === String(site));
+      const siteIdParam = siteObj ? `&site_id=${encodeURIComponent(siteObj.id)}` : '';
+      const pastDates = [];
+      for (let i = 1; i <= HISTORY_DAYS; i++) {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() - i);
+        pastDates.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+      }
+      const histories = await Promise.all(
+        pastDates.map((d, dayIdx) =>
+          apiClient(`/daily-checklist-schedules?date=${encodeURIComponent(d)}${siteIdParam}`)
+            .then(res => Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []))
+            .then(list => ({ dayIdx: dayIdx + 1, sched: (list && list.length > 0) ? list[0] : null }))
+            .catch(() => ({ dayIdx: dayIdx + 1, sched: null }))
+        )
+      );
+      for (const { dayIdx, sched } of histories) {
+        if (!sched || !Array.isArray(sched.assignments)) continue;
+        for (const a of sched.assignments) {
+          const userId  = String(a.user?.id  ?? a.user_id  ?? '');
+          const assetId = String(a.asset?.id ?? a.asset_id ?? '');
+          if (userId && historyCounts[userId] !== undefined) historyCounts[userId]++;
+          if (userId && assetId) {
+            if (!assetLastTech[assetId]) assetLastTech[assetId] = {};
+            // keep the smallest daysAgo (most-recent occurrence) for each tech-asset pair
+            if (assetLastTech[assetId][userId] === undefined || dayIdx < assetLastTech[assetId][userId]) {
+              assetLastTech[assetId][userId] = dayIdx; // 1 = yesterday, 7 = 7 days ago
+            }
+          }
+        }
+      }
+    } catch(e) {
+      // history fetch failed — continue with zeroed counts (pure load-balance, no rotation penalty)
+    }
+
     setPreviewItems(prev => {
       const copy = prev.map(it => ({
         ...it,
         assignedAssetIdsByDay: { ...(it.assignedAssetIdsByDay || {}), [selectedDate]: [] },
       }));
-      for (let i = 0; i < assets.length; i++) {
-        const target = scheduled[i % scheduled.length].idx;
-        copy[target].assignedAssetIdsByDay[selectedDate].push(assets[i]);
+
+      // queue entry: idx into copy[], techId, historyCount, todayCount
+      const queue = scheduled.map(({ idx }) => ({
+        idx,
+        techId: String(copy[idx].techId),
+        historyCount: historyCounts[String(copy[idx].techId)] ?? 0,
+        todayCount: 0,
+      }));
+
+      const PENALTY_WEIGHT = 2;
+
+      // Score helper: lower = better candidate for this asset
+      function scoreFor(q, assetId) {
+        const loadScore = q.historyCount + q.todayCount;
+        const daysAgo = (assetLastTech[String(assetId)] || {})[q.techId];
+        const rotationPenalty = daysAgo !== undefined
+          ? PENALTY_WEIGHT * (HISTORY_DAYS + 1 - daysAgo)
+          : 0;
+        return loadScore + rotationPenalty;
       }
+
+      // Remaining assets to distribute (mutable list so we can reorder)
+      let remaining = [...assets];
+
+      // ── Pass 1: ensure every scheduled technician gets at least 1 asset ──
+      // Sort techs by historyCount asc so the most-loaded tech gets first pick of
+      // the best asset for them (still respects rotation).
+      const unassignedTechs = [...queue].sort((a, b) => a.historyCount - b.historyCount);
+
+      for (const q of unassignedTechs) {
+        if (remaining.length === 0) break;
+        // Find the best asset from remaining for this tech
+        let bestAssetIdx = 0;
+        let bestScore = Infinity;
+        for (let ai = 0; ai < remaining.length; ai++) {
+          const s = scoreFor(q, remaining[ai]);
+          if (s < bestScore) { bestScore = s; bestAssetIdx = ai; }
+        }
+        const [assetId] = remaining.splice(bestAssetIdx, 1);
+        copy[q.idx].assignedAssetIdsByDay[selectedDate].push(assetId);
+        q.todayCount++;
+      }
+
+      // ── Pass 2: distribute leftover assets using the scoring system ──
+      for (const assetId of remaining) {
+        let bestIdx = 0;
+        let bestScore = Infinity;
+        for (let qi = 0; qi < queue.length; qi++) {
+          const s = scoreFor(queue[qi], assetId);
+          if (s < bestScore) { bestScore = s; bestIdx = qi; }
+        }
+        const pick = queue[bestIdx];
+        copy[pick.idx].assignedAssetIdsByDay[selectedDate].push(assetId);
+        pick.todayCount++;
+      }
+
       return copy;
     });
   }
@@ -318,10 +418,14 @@ export default function MonthlyChecklistScheduler(){
         for (const a of schedule.assignments) {
           const assetId = a.asset?.id ?? a.asset_id;
           const userId  = a.user?.id  ?? a.user_id;
+          const _alatMaster = alats.find(al => String(al.id) === String(assetId));
           const assetName =
+            a.asset?.kode_alias || a.asset?.kodeAlias ||
+            _alatMaster?.kode_alias || _alatMaster?.kodeAlias ||
+            a.asset?.kode ||
+            _alatMaster?.kode ||
             a.asset?.nama || a.asset?.name ||
-            alats.find(al => String(al.id) === String(assetId))?.nama ||
-            alats.find(al => String(al.id) === String(assetId))?.name ||
+            _alatMaster?.nama || _alatMaster?.name ||
             String(assetId);
           if (userId == null) continue;
           const key = String(userId);
@@ -342,20 +446,33 @@ export default function MonthlyChecklistScheduler(){
 
       let bodyRows = '';
       let lastGroup = null;
+      let dataRowIdx = 0;
       for (const t of techList) {
         if (t.groupName && t.groupName !== lastGroup) {
-          bodyRows += `<tr><td colspan="${1 + weekDates.length}" class="group-header">${t.groupName}</td></tr>`;
+          bodyRows += `<tr class="group-header"><td colspan="${1 + weekDates.length}">${t.groupName}</td></tr>`;
           lastGroup = t.groupName;
+          dataRowIdx = 0; // reset alternating per group
         }
-        bodyRows += `<tr><td class="tech-name">${t.name}</td>${weekDates.map(d => {
+        const rowClass = dataRowIdx % 2 === 0 ? 'row-even' : 'row-odd';
+        dataRowIdx++;
+        bodyRows += `<tr class="${rowClass}"><td class="tech-name">${t.name}</td>${weekDates.map((d, i) => {
+          const isWeekend = i >= 5;
+          const tdClass = isWeekend ? ' class="weekend-col"' : '';
           const assets = t.dateAssets[d] || [];
-          if (assets.length === 0) return '<td><span class="empty">-</span></td>';
-          return `<td><ul class="asset-list">${assets.map(a => `<li>${a}</li>`).join('')}</ul></td>`;
+          if (assets.length === 0) return `<td${tdClass}><span class="empty">-</span></td>`;
+          return `<td${tdClass}><ul class="asset-list">${assets.map(a => `<li>${a}</li>`).join('')}</ul></td>`;
         }).join('')}</tr>`;
       }
       if (techList.length === 0) {
         bodyRows = `<tr><td colspan="${1 + weekDates.length}" style="text-align:center;color:#999;padding:12px">Tidak ada jadwal tersimpan untuk minggu ini.</td></tr>`;
       }
+
+      // Mark weekend columns (index 5=Sabtu, 6=Minggu)
+      const thCells = weekDates.map((d, i) => {
+        const isWeekend = i >= 5;
+        const bg = isWeekend ? '#8B1A1A' : '#1565c0';
+        return `<th style="background:${bg};color:#fff;text-align:center;font-size:10px;font-weight:700;letter-spacing:.3px">${dayNames[i]}<br>${d}</th>`;
+      }).join('');
 
       const html = `<!DOCTYPE html>
 <html>
@@ -363,29 +480,37 @@ export default function MonthlyChecklistScheduler(){
   <meta charset="UTF-8">
   <title>Jadwal Mingguan - ${siteName}</title>
   <style>
-    body { font-family: Arial, sans-serif; font-size: 11px; margin: 16px; }
-    h2 { text-align: center; margin-bottom: 4px; font-size: 14px; }
-    .subtitle { text-align: center; margin-bottom: 12px; font-size: 11px; color: #555; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 11px; margin: 16px; color: #212121; background: #fff; }
+    h2 { text-align: center; margin-bottom: 4px; font-size: 15px; color: #1565c0; letter-spacing: .5px; }
+    .subtitle { text-align: center; margin-bottom: 14px; font-size: 11px; color: #546e7a; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
-    th { background: #1565c0; color: #fff; text-align: center; font-size: 10px; }
-    .tech-name { font-weight: bold; white-space: nowrap; }
-    .group-header { background: #e3f2fd; font-weight: bold; font-size: 11px; }
+    th, td { border: 1px solid #b0bec5; padding: 4px 6px; vertical-align: top; }
+    thead th { background: #1565c0; color: #fff; text-align: center; font-size: 10px; font-weight: 700; }
+    .group-header td { background: #0d47a1; color: #fff; font-weight: 700; font-size: 11px; padding: 5px 10px; letter-spacing: .5px; }
+    tbody tr.row-even { background: #f0f7ff; }
+    tbody tr.row-odd  { background: #ffffff; }
+    .tech-name { font-weight: 700; white-space: nowrap; color: #1565c0; }
     .asset-list { list-style: none; padding: 0; margin: 0; }
-    .asset-list li { padding: 1px 0; }
-    .empty { color: #bbb; }
-    .footer { margin-top: 12px; font-size: 9px; color: #999; }
-    @media print { @page { size: landscape; margin: 8mm; } }
+    .asset-list li { padding: 1px 0; border-bottom: 1px dotted #cfd8dc; }
+    .asset-list li:last-child { border-bottom: none; }
+    td.weekend-col { background: #fff0f0; }
+    tbody tr.row-even td.weekend-col { background: #ffe8e8; }
+    .empty { color: #bdbdbd; }
+    .footer { margin-top: 14px; font-size: 9px; color: #9e9e9e; text-align: right; border-top: 1px solid #b0bec5; padding-top: 4px; }
+    @media print {
+      @page { size: landscape; margin: 8mm; }
+    }
   </style>
 </head>
 <body>
   <h2>Jadwal Daily Checklist Mingguan</h2>
-  <div class="subtitle">Site: <strong>${siteName}</strong> &nbsp;|&nbsp; Periode: ${weekDates[0]} &ndash; ${weekDates[6]}</div>
+  <div class="subtitle">Site: <strong>${siteName}</strong> &nbsp;&bull;&nbsp; Periode: ${weekDates[0]} &ndash; ${weekDates[6]}</div>
   <table>
     <thead>
       <tr>
-        <th style="width:110px">Teknisi</th>
-        ${weekDates.map((d, i) => `<th>${dayNames[i]}<br>${d}</th>`).join('')}
+        <th style="width:120px;background:#1565c0;color:#fff;text-align:center;font-size:10px;font-weight:700">Teknisi</th>
+        ${thCells}
       </tr>
     </thead>
     <tbody>${bodyRows}</tbody>

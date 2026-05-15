@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createEquipmentHourMeter = exports.listEquipmentHourMeter = exports.weeklyChecklistStatus = void 0;
+exports.updateEquipmentHourMeter = exports.createEquipmentHourMeter = exports.listEquipmentHourMeter = exports.weeklyChecklistStatus = void 0;
 const ormconfig_1 = require("../ormconfig");
 const MasterAlat_1 = require("../entities/MasterAlat");
 const DailyChecklist_1 = require("../entities/DailyChecklist");
@@ -157,6 +157,39 @@ async function weeklyChecklistStatus(req, res) {
             }
             return row;
         });
+        // ── Enrich OPEN slots with assigned technician names ──────────────────────
+        try {
+            if (alatIds.length > 0) {
+                // Use raw SQL to avoid TypeORM relation alias confusion
+                const assigns = await ormconfig_1.AppDataSource.query(`SELECT
+             a.asset_id,
+             s.date::text AS schedule_date,
+             u.name      AS user_name,
+             u.nipp      AS user_nipp
+           FROM daily_checklist_assignment a
+           JOIN daily_checklist_schedule s ON s.id = a.schedule_id
+           JOIN "user" u ON u.id = a.user_id
+           WHERE s.date BETWEEN $1 AND $2
+             AND a.asset_id = ANY($3)`, [days[0], days[6], alatIds]);
+                for (const assign of assigns) {
+                    const aId = assign.asset_id;
+                    const day = String(assign.schedule_date).slice(0, 10);
+                    const techName = assign.user_name || assign.user_nipp || 'Teknisi';
+                    const alat = resultAlats.find((r) => String(r.id) === String(aId));
+                    if (!alat)
+                        continue;
+                    const slot = alat.statuses[day];
+                    if (slot && !slot.done) {
+                        slot.assigned_teknisi = slot.assigned_teknisi
+                            ? slot.assigned_teknisi + ', ' + techName
+                            : techName;
+                    }
+                }
+            }
+        }
+        catch (assignErr) {
+            console.warn('weeklyChecklistStatus: failed to load assignments', assignErr);
+        }
         return res.json({ site_id: siteId ?? null, week_start: days[0], days, alats: resultAlats });
     }
     catch (err) {
@@ -169,6 +202,7 @@ exports.weeklyChecklistStatus = weeklyChecklistStatus;
 async function listEquipmentHourMeter(req, res) {
     try {
         const siteId = req.query.site_id ? Number(req.query.site_id) : undefined;
+        const alatId = req.query.alat_id ? Number(req.query.alat_id) : undefined;
         const jenisAlatId = req.query.jenis_alat_id ? Number(req.query.jenis_alat_id) : undefined;
         const dateQ = req.query.date || '';
         const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
@@ -182,6 +216,8 @@ async function listEquipmentHourMeter(req, res) {
             .orderBy('e.recorded_at', 'DESC');
         if (siteId)
             qb.andWhere('site.id = :sid', { sid: siteId });
+        if (alatId)
+            qb.andWhere('e.alat_id = :aid', { aid: alatId });
         if (jenisAlatId)
             qb.andWhere('jenis.id = :jid', { jid: jenisAlatId });
         if (dateQ) {
@@ -211,6 +247,8 @@ async function createEquipmentHourMeter(req, res) {
         // Validate required fields
         if (!body.alat_id)
             return res.status(400).json({ message: 'alat_id is required' });
+        // capture authenticated user (if any) so we can attribute teknisi automatically
+        const authUser = req.user || null;
         // determine date window (local date of recorded_at) to prevent duplicate per day
         const recordedAt = body.recorded_at ? new Date(body.recorded_at) : new Date();
         const dayStart = new Date(recordedAt);
@@ -224,12 +262,34 @@ async function createEquipmentHourMeter(req, res) {
             .getCount();
         if (existingCount > 0)
             return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
+        // determine site: prefer body.site_id, otherwise use authenticated user's site when available
+        let siteIdValue = undefined;
+        if (body.site_id) {
+            siteIdValue = Number(body.site_id);
+        }
+        else if (authUser) {
+            try {
+                if (authUser.site_id)
+                    siteIdValue = Number(authUser.site_id);
+                else if (authUser.site && authUser.site.id)
+                    siteIdValue = Number(authUser.site.id);
+                else if (Array.isArray(authUser.sites) && authUser.sites.length > 0) {
+                    const s0 = authUser.sites[0];
+                    if (s0 && (s0.id || s0.site_id))
+                        siteIdValue = Number(s0.id ?? s0.site_id);
+                }
+            }
+            catch (e) {
+                // ignore
+            }
+        }
         const ent = repo.create({
             alat: body.alat_id ? { id: Number(body.alat_id) } : undefined,
             jenis_alat: body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } : undefined,
-            site: body.site_id ? { id: Number(body.site_id) } : undefined,
+            site: siteIdValue ? { id: siteIdValue } : undefined,
             engine_hour: body.engine_hour !== undefined ? Number(body.engine_hour) : undefined,
-            teknisi: body.teknisi_id ? { id: String(body.teknisi_id) } : undefined,
+            // prefer explicit teknisi_id from body, otherwise attribute to authenticated user if available
+            teknisi: body.teknisi_id ? { id: String(body.teknisi_id) } : (authUser && authUser.id ? { id: String(authUser.id) } : undefined),
             recorded_at: recordedAt,
             notes: body.notes,
         });
@@ -242,3 +302,39 @@ async function createEquipmentHourMeter(req, res) {
     }
 }
 exports.createEquipmentHourMeter = createEquipmentHourMeter;
+// PATCH /api/monitor/equipment-hour-meter/:id
+async function updateEquipmentHourMeter(req, res) {
+    try {
+        const id = req.params.id ? Number(req.params.id) : undefined;
+        if (!id)
+            return res.status(400).json({ message: 'Missing id' });
+        const body = req.body || {};
+        const repo = ormconfig_1.AppDataSource.getRepository(DailyEquipmentHourMeter_1.DailyEquipmentHourMeter);
+        const existing = await repo.findOne({ where: { id }, relations: ['alat', 'jenis_alat', 'site', 'teknisi'] });
+        if (!existing)
+            return res.status(404).json({ message: 'Not found' });
+        // allow updating selected fields
+        if (body.engine_hour !== undefined)
+            existing.engine_hour = Number(body.engine_hour);
+        if (body.teknisi_id !== undefined)
+            existing.teknisi = body.teknisi_id ? { id: String(body.teknisi_id) } : undefined;
+        if (body.recorded_at !== undefined)
+            existing.recorded_at = body.recorded_at ? new Date(body.recorded_at) : existing.recorded_at;
+        if (body.notes !== undefined)
+            existing.notes = body.notes;
+        // optionally allow changing site/alarm references (only if provided)
+        if (body.site_id !== undefined)
+            existing.site = body.site_id ? { id: Number(body.site_id) } : undefined;
+        if (body.alat_id !== undefined)
+            existing.alat = body.alat_id ? { id: Number(body.alat_id) } : existing.alat;
+        if (body.jenis_alat_id !== undefined)
+            existing.jenis_alat = body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } : existing.jenis_alat;
+        const saved = await repo.save(existing);
+        return res.json({ data: saved });
+    }
+    catch (err) {
+        console.error('updateEquipmentHourMeter error', err);
+        return res.status(500).json({ message: 'Failed to update entry' });
+    }
+}
+exports.updateEquipmentHourMeter = updateEquipmentHourMeter;

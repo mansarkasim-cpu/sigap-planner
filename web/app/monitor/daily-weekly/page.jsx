@@ -677,7 +677,7 @@ export default function WeeklyMonitoring(){
                             color = 'default';
                           }
 
-                          const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? 'Missed (no checklist)' : (statusLabel === 'OPEN' ? (s?.assigned_teknisi ? `Assigned: ${s.assigned_teknisi}` : 'Not yet assigned') : ''));
+                          const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? (s?.assigned_teknisi ? `Missed (no checklist) • Assigned: ${s.assigned_teknisi}` : 'Missed (no checklist)') : (statusLabel === 'OPEN' ? (s?.assigned_teknisi ? `Assigned: ${s.assigned_teknisi}` : 'Not yet assigned') : ''));
                           const chipSx = (()=>{
                             return statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {};
                           })();

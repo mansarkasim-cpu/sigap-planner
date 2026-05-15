@@ -40,6 +40,14 @@ __decorate([
     __metadata("design:type", String)
 ], MasterSite.prototype, "timezone", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ length: 20, nullable: false, default: 'absolute' }),
+    __metadata("design:type", String)
+], MasterSite.prototype, "pm_mode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'integer', nullable: true }),
+    __metadata("design:type", Object)
+], MasterSite.prototype, "pm_base_interval", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', type: 'timestamptz' }),
     __metadata("design:type", Date)
 ], MasterSite.prototype, "created_at", void 0);

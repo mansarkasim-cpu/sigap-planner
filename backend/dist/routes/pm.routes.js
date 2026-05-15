@@ -30,7 +30,7 @@ const rulesCtrl = __importStar(require("../controllers/pmRulesController"));
 const historyCtrl = __importStar(require("../controllers/pmHistoryController"));
 const router = (0, express_1.Router)();
 // GET /api/pm/calendar?limit=
-router.get('/pm/calendar', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.getPMCalendar);
+router.get('/pm/calendar', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'terminal']), ctrl.getPMCalendar);
 // POST /api/pm/run -> trigger worker manually
 router.post('/pm/run', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), ctrl.runPmNow);
 // Assign/unassign workorder to equipment_status for PM schedule
@@ -44,9 +44,8 @@ router.get('/pm/rules/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['pla
 router.patch('/pm/rules/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), rulesCtrl.updatePmRule);
 router.delete('/pm/rules/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), rulesCtrl.deletePmRule);
 // PM history: list (planner/admin) and create (technician/planner/admin)
-router.get('/pm/history', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.listPmHistory);
+router.get('/pm/history', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin', 'terminal']), historyCtrl.listPmHistory);
 router.post('/pm/history', auth_1.authMiddleware, (0, auth_1.requireRole)(['technician', 'planner', 'admin']), historyCtrl.createPmHistory);
-router.put('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.updatePmHistory);
 router.patch('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.updatePmHistory);
 router.delete('/pm/history/:id', auth_1.authMiddleware, (0, auth_1.requireRole)(['planner', 'admin']), historyCtrl.deletePmHistory);
 exports.default = router;
