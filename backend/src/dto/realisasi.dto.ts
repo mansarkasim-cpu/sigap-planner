@@ -245,12 +245,6 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
     signatureUrl = baseForUploadsSig.endsWith('/') ? `${baseForUploadsSig}uploads/${filename}` : `${baseForUploadsSig}/uploads/${filename}`;
   }
 
-  const pending = new PendingRealisasi();
-  pending.task = task as any;
-  pending.notes = dto.notes || null;
-  pending.photoUrl = photoUrl || null;
-  pending.photoUrls = photoUrlsArr || null;
-  pending.signatureUrl = signatureUrl || null;
   // accept optional start/end times from client; if startTime missing, fallback to assignment.startedAt if available
   let resolvedPendingStart: Date | null = dto.startTime ? new Date(dto.startTime) : null;
   if (!resolvedPendingStart) {
@@ -267,6 +261,69 @@ export async function submitPendingRealisasi(req: Request, res: Response) {
       // ignore lookup errors
     }
   }
+
+  // Determine whether this task is the last task of its work order.
+  // Non-last tasks are auto-approved (Realisasi created directly, no pending).
+  // Only the last task goes through the pending_realisasi → lead approval flow.
+  const woIdForOrder = (task as any).workOrder?.id;
+  let isLastTask = true; // safe default: require lead approval
+  if (woIdForOrder) {
+    try {
+      const allTasks = await taskRepo()
+        .createQueryBuilder('t')
+        .where('t.work_order_id = :woId', { woId: woIdForOrder })
+        .orderBy('t.task_number', 'ASC')
+        .getMany();
+      if (allTasks.length > 0) {
+        const lastTask = allTasks[allTasks.length - 1];
+        isLastTask = String(lastTask.id) === String((task as any).id);
+      }
+    } catch (e) {
+      // ignore — default isLastTask=true keeps approval required for safety
+    }
+  }
+
+  if (!isLastTask) {
+    // Non-last task: create Realisasi directly (no lead approval required)
+    const autoReal = new Realisasi();
+    autoReal.task = task as any;
+    autoReal.notes = dto.notes || null;
+    autoReal.photoUrl = photoUrl || null;
+    autoReal.photoUrls = photoUrlsArr || null;
+    autoReal.signatureUrl = signatureUrl || null;
+    autoReal.startTime = resolvedPendingStart;
+    autoReal.endTime = dto.endTime ? new Date(dto.endTime) : new Date();
+    await realisasiRepo().save(autoReal);
+    // mark assignment complete
+    try {
+      const aRepo = assignmentRepo();
+      const maybe = await aRepo.createQueryBuilder('a')
+        .where('a.task_id = :tid', { tid: String((task as any).id) })
+        .andWhere('a.wo_id = :wo', { wo: String(woIdForOrder) })
+        .orderBy('a.created_at', 'DESC')
+        .getOne();
+      if (maybe) { maybe.status = 'COMPLETED'; await aRepo.save(maybe); }
+    } catch (e) { /* ignore */ }
+    // update workorder status
+    try {
+      const wo = task.workOrder;
+      if (wo) {
+        const prog = await computeWorkOrderProgress(String(wo.id));
+        const p = prog || 0;
+        if (p >= 0.999) { wo.status = 'COMPLETED'; await woRepo().save(wo); }
+        else if (p > 0 && wo.status !== 'COMPLETED') { wo.status = 'IN_PROGRESS'; await woRepo().save(wo); }
+      }
+    } catch (e) { /* ignore */ }
+    return res.status(201).json({ id: autoReal.id, auto_approved: true });
+  }
+
+  // Last task: create pending_realisasi record for lead approval
+  const pending = new PendingRealisasi();
+  pending.task = task as any;
+  pending.notes = dto.notes || null;
+  pending.photoUrl = photoUrl || null;
+  pending.photoUrls = photoUrlsArr || null;
+  pending.signatureUrl = signatureUrl || null;
   pending.startTime = resolvedPendingStart;
   pending.endTime = dto.endTime ? new Date(dto.endTime) : null;
   pending.submitterId = (req as any).user?.id || null;
@@ -348,7 +405,15 @@ export async function approvePendingRealisasi(req: Request, res: Response) {
   if (!user) return res.status(403).json({ message: 'Forbidden' });
   const id = req.params.id;
   const pending = await pendingRepo().findOne({ where: { id }, relations: ['task', 'task.workOrder'] as any });
-  if (!pending) return res.status(404).json({ message: 'Pending not found' });
+  if (!pending) {
+    // The id may refer to an auto-approved Realisasi (non-last task via /realisasi/submit).
+    // Return success so the mobile lead auto-approve flow does not show an error.
+    try {
+      const existing = await realisasiRepo().findOne({ where: { id } });
+      if (existing) return res.json({ id: existing.id, auto_approved: true });
+    } catch (e) { /* ignore */ }
+    return res.status(404).json({ message: 'Pending not found' });
+  }
   // If the pending item is already processed, return 409 to indicate conflict
   if (pending.status !== 'PENDING') {
     try { console.debug('approvePendingRealisasi: pending status not PENDING=', pending.status); } catch (_) {}
