@@ -679,7 +679,9 @@ export default function WeeklyMonitoring(){
 
                           const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? (s?.assigned_teknisi ? `Missed (no checklist) • Assigned: ${s.assigned_teknisi}` : 'Missed (no checklist)') : (statusLabel === 'OPEN' ? (s?.assigned_teknisi ? `Assigned: ${s.assigned_teknisi}` : 'Not yet assigned') : ''));
                           const chipSx = (()=>{
-                            return statusLabel === 'OPEN' ? { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 } : {};
+                            if (statusLabel === 'OPEN') return { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 };
+                            if (color === 'info') return { backgroundColor: '#f5c518', color: '#000', fontWeight:600 };
+                            return {};
                           })();
 
                           return (
@@ -688,7 +690,7 @@ export default function WeeklyMonitoring(){
                                 <span>
                                   <Chip
                                     label={statusLabel}
-                                    color={color === 'default' ? undefined : (color === 'info' ? 'warning' : color)}
+                                    color={color === 'default' ? undefined : (color === 'info' ? undefined : color)}
                                     size="medium"
                                     sx={chipSx}
                                     onClick={async () => {
