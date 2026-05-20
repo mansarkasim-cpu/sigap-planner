@@ -255,7 +255,7 @@ export default function DailyEquipmentHourMeter(){
                     </TableCell>
                     <TableCell>{it.alat?.kode || it.alat?.code || it.alat?.serial_no || '-'}</TableCell>
                     <TableCell>{it.alat?.nama || it.alat?.name || '-'}</TableCell>
-                    <TableCell>{it.jenis_alat?.nama || it.jenis_alat?.name || it.jenis || '-'}</TableCell>
+                    <TableCell>{it.jenis_alat?.nama || it.jenis_alat?.name || it.alat?.jenis_alat?.nama || it.alat?.jenis_alat?.name || it.jenis || '-'}</TableCell>
                     <TableCell>{it.engine_hour ?? it.hour_meter ?? it.value ?? '-'}</TableCell>
                     <TableCell>{it.teknisi?.name || it.teknisi?.nipp || '-'}</TableCell>
                     <TableCell>{formatDateWithTZ(it.recorded_at || it.created_at || it.time, it.site?.timezone)}</TableCell>

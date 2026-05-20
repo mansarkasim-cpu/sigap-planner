@@ -240,6 +240,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       const repo = AppDataSource.getRepository(DailyEquipmentHourMeter);
       const qb = repo.createQueryBuilder('e')
         .leftJoinAndSelect('e.alat', 'alat')
+        .leftJoinAndSelect('alat.jenis_alat', 'alatJenis')
         .leftJoinAndSelect('e.jenis_alat', 'jenis')
         .leftJoinAndSelect('e.site', 'site')
         .leftJoinAndSelect('e.teknisi', 'teknisi')
