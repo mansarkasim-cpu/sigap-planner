@@ -318,7 +318,7 @@ export async function listChecklists(req: Request, res: Response) {
     const qb = repo.createQueryBuilder('dc')
       .leftJoinAndSelect('dc.alat', 'alat')
       .leftJoinAndSelect('alat.jenis_alat', 'jenisAlat')
-      .leftJoin('alat.site', 'alatSite')         // used for site fallback filter
+      .leftJoinAndSelect('alat.site', 'alatSite')         // used for site fallback filter & display
       .leftJoinAndSelect('dc.site', 'site')
       .orderBy('dc.performed_at', 'DESC');
 
