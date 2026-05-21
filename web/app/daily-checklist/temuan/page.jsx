@@ -82,23 +82,12 @@ function groupFindings(rows) {
   return byAlat;
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-function getMondayYMD() {
-  const dt = new Date();
-  const day = dt.getDay();
-  const diff = (day + 6) % 7; // days since Monday
-  dt.setDate(dt.getDate() - diff);
-  return toYMD(dt);
-}
-
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function TemuanChecklistPage() {
   const today = toYMD(new Date());
 
-  const [dateFrom, setDateFrom] = useState(getMondayYMD);
-  const [dateTo, setDateTo] = useState(today);
+  const [date, setDate] = useState(today);
   const [siteId, setSiteId] = useState('');
   const [alatId, setAlatId] = useState('');
 
@@ -158,8 +147,7 @@ export default function TemuanChecklistPage() {
     setPage(0);
     try {
       const params = new URLSearchParams();
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo)   params.set('date_to', dateTo);
+      if (date) { params.set('date_from', date); params.set('date_to', date); }
       if (siteId) params.set('site_id', siteId);
       if (alatId) params.set('alat_id', alatId);
 
@@ -171,7 +159,7 @@ export default function TemuanChecklistPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, siteId, alatId]);
+  }, [date, siteId, alatId]);
 
   useEffect(() => { fetchData(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -196,11 +184,7 @@ export default function TemuanChecklistPage() {
     return s ? (s.name || s.nama || siteId) : siteId;
   }, [siteId, sites]);
 
-  const dateRangeLabel = dateFrom === dateTo
-    ? formatDate(dateFrom + 'T00:00:00')
-    : `${formatDate(dateFrom + 'T00:00:00')} s/d ${formatDate(dateTo + 'T00:00:00')}`;
-
-  const printTitle = `LAPORAN TEMUAN DAILY CHECKLIST — ${siteName} — ${dateRangeLabel}`;
+  const printTitle = `LAPORAN TEMUAN DAILY CHECKLIST — ${siteName} — ${formatDate(date + 'T00:00:00')}`;
 
   // ── export Excel ──────────────────────────────────────────────────────────
   const exportExcel = () => {
@@ -225,7 +209,7 @@ export default function TemuanChecklistPage() {
 
       const summaryData = [
         ['LAPORAN TEMUAN DAILY CHECKLIST'],
-        [`Periode: ${dateRangeLabel}`],
+        [`Tanggal: ${formatDate(date + 'T00:00:00')}`],
         [`Site: ${siteName}`],
         [`Dicetak: ${formatDateTime(new Date().toISOString())}`],
         [`Total Temuan: ${rows.length}`],
@@ -241,7 +225,7 @@ export default function TemuanChecklistPage() {
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Temuan Checklist');
-      XLSX.writeFile(wb, `laporan-temuan-checklist-${dateFrom || 'all'}-sd-${dateTo || 'all'}.xlsx`);
+      XLSX.writeFile(wb, `laporan-temuan-checklist-${date || 'all'}.xlsx`);
     } catch (e) {
       alert('Gagal export Excel: ' + (e?.message || String(e)));
     }
@@ -346,20 +330,11 @@ export default function TemuanChecklistPage() {
         <Paper elevation={2} sx={{ p: 2, mb: 3 }} className="no-print">
           <Stack direction="row" flexWrap="wrap" gap={2} alignItems="flex-end">
             <TextField
-              label="Dari Tanggal"
+              label="Tanggal"
               type="date"
               size="small"
-              value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: 160 }}
-            />
-            <TextField
-              label="Sampai Tanggal"
-              type="date"
-              size="small"
-              value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              value={date}
+              onChange={e => setDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 160 }}
             />
