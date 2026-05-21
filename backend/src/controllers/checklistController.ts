@@ -417,10 +417,12 @@ export async function listChecklistFindings(req: Request, res: Response) {
       .leftJoinAndSelect('dc.site', 'site')
       .leftJoinAndSelect('it.question', 'question')
       .leftJoinAndSelect('it.option', 'option')
-      // NOK items: boolean false OR numeric 0 (mirrors monitoring controller logic)
+      // NOK items: mirrors monitoring controller logic exactly
+      // - answer_text is a NOK value, OR
+      // - answer_number = 0 (regardless of answer_text, same as monitoring)
       .where(`(
         LOWER(TRIM(it.answer_text)) IN ('false','0','tidak','no','n','nok')
-        OR (COALESCE(TRIM(it.answer_text), '') = '' AND it.answer_number IS NOT NULL AND CAST(it.answer_number AS numeric) = 0)
+        OR (it.answer_number IS NOT NULL AND CAST(it.answer_number AS numeric) = 0)
       )`)
       .orderBy('dc.performed_at', 'DESC')
       .addOrderBy('alat.nama', 'ASC');
