@@ -310,13 +310,24 @@ export async function listChecklists(req: Request, res: Response) {
     const search = (req.query.q as string) || '';
     const page = Number(req.query.page || 0);
     const pageSize = Number(req.query.pageSize || 0);
+    const dateFrom = (req.query.date_from as string) || '';
+    const dateTo = (req.query.date_to as string) || '';
+    const siteId = req.query.site_id ? Number(req.query.site_id) : null;
+    const alatId = req.query.alat_id ? Number(req.query.alat_id) : null;
 
     const qb = repo.createQueryBuilder('dc')
       .leftJoinAndSelect('dc.alat', 'alat')
+      .leftJoinAndSelect('alat.jenis_alat', 'jenisAlat')
+      .leftJoin('alat.site', 'alatSite')         // used for site fallback filter
       .leftJoinAndSelect('dc.site', 'site')
       .orderBy('dc.performed_at', 'DESC');
 
-    if (search) qb.where('(dc.notes ILIKE :q OR dc.catatan ILIKE :q OR alat.nama ILIKE :q OR site.name ILIKE :q)', { q: `%${search}%` });
+    if (search) qb.andWhere('(dc.notes ILIKE :q OR alat.nama ILIKE :q OR site.name ILIKE :q OR dc.teknisi_name ILIKE :q)', { q: `%${search}%` });
+    if (dateFrom) qb.andWhere('DATE(dc.performed_at AT TIME ZONE \'UTC\' AT TIME ZONE \'Asia/Makassar\') >= :df', { df: dateFrom });
+    if (dateTo) qb.andWhere('DATE(dc.performed_at AT TIME ZONE \'UTC\' AT TIME ZONE \'Asia/Makassar\') <= :dt', { dt: dateTo });
+    // site filter: match checklist.site OR fall back to alat.site when checklist has no site set
+    if (siteId) qb.andWhere('(site.id = :sid OR (site.id IS NULL AND alatSite.id = :sid))', { sid: siteId });
+    if (alatId) qb.andWhere('alat.id = :aid', { aid: alatId });
 
     if (page > 0 && pageSize > 0) {
       const offset = (page - 1) * pageSize;
@@ -324,8 +335,8 @@ export async function listChecklists(req: Request, res: Response) {
       return res.json({ data: rows, meta: { page, pageSize, total } });
     }
 
-    const rows = await qb.limit(100).getMany();
-    return res.json(rows);
+    const [rows, total] = await qb.getManyAndCount();
+    return res.json({ data: rows, meta: { total } });
   } catch (err) {
     console.error('listChecklists error', err);
     return res.status(500).json({ message: 'Failed to list checklists' });
@@ -378,7 +389,7 @@ export async function getChecklistById(req: Request, res: Response) {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: 'id required' });
     const repo = AppDataSource.getRepository(DailyChecklist);
-    const row = await repo.findOne({ where: { id }, relations: ['alat', 'site'] });
+    const row = await repo.findOne({ where: { id }, relations: ['alat', 'alat.jenis_alat', 'alat.site', 'site'] });
     if (!row) return res.status(404).json({ message: 'not found' });
     const itemRepo = AppDataSource.getRepository(DailyChecklistItem);
     const items = await itemRepo.find({ where: { daily_checklist: { id } }, relations: ['question', 'option'] as any });
@@ -394,7 +405,7 @@ export async function getMobileChecklistById(req: Request, res: Response) {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ message: 'id required' });
     const repo = AppDataSource.getRepository(DailyChecklist);
-    const row = await repo.findOne({ where: { id }, relations: ['alat', 'site'] });
+    const row = await repo.findOne({ where: { id }, relations: ['alat', 'alat.jenis_alat', 'alat.site', 'site'] });
     if (!row) return res.status(404).json({ message: 'not found' });
 
     // enforce technician can only access their own checklist
