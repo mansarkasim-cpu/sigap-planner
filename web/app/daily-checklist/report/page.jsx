@@ -353,7 +353,7 @@ export default function DailyChecklistReport() {
         r.alat?.nama || r.alat?.name || '-',
         r.alat?.jenis_alat?.nama || r.alat?.jenis_alat?.name || '-',
         r.teknisi_name || (r.teknisi_id ? String(r.teknisi_id) : '-'),
-        r.site?.name || r.site?.nama || '-',
+        r.site?.name || r.site?.nama || r.alat?.site?.name || r.alat?.site?.nama || '-',
         r.notes || '-',
       ]);
 
@@ -560,7 +560,7 @@ export default function DailyChecklistReport() {
                     <TableCell>{r.alat?.nama || r.alat?.name || '-'}</TableCell>
                     <TableCell>{r.alat?.jenis_alat?.nama || r.alat?.jenis_alat?.name || '-'}</TableCell>
                     <TableCell>{r.teknisi_name || (r.teknisi_id ? String(r.teknisi_id) : '-')}</TableCell>
-                    <TableCell>{r.site?.name || r.site?.nama || '-'}</TableCell>
+                    <TableCell>{r.site?.name || r.site?.nama || r.alat?.site?.name || r.alat?.site?.nama || '-'}</TableCell>
                     <TableCell sx={{ maxWidth: 220 }}>
                       <Typography variant="caption" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {r.notes || '-'}
