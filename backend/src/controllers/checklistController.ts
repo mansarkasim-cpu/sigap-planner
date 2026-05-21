@@ -427,8 +427,8 @@ export async function listChecklistFindings(req: Request, res: Response) {
       .orderBy('dc.performed_at', 'DESC')
       .addOrderBy('alat.nama', 'ASC');
 
-    if (dateFrom) qb.andWhere("DATE(dc.performed_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Makassar') >= :df", { df: dateFrom });
-    if (dateTo)   qb.andWhere("DATE(dc.performed_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Makassar') <= :dt", { dt: dateTo });
+    if (dateFrom) qb.andWhere('DATE(dc.performed_at) >= :df', { df: dateFrom });
+    if (dateTo)   qb.andWhere('DATE(dc.performed_at) <= :dt', { dt: dateTo });
     if (siteId)   qb.andWhere('(site.id = :sid OR (site.id IS NULL AND alatSite.id = :sid))', { sid: siteId });
     if (alatId)   qb.andWhere('alat.id = :aid', { aid: alatId });
 
