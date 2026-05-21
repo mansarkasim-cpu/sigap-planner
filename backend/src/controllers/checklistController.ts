@@ -400,6 +400,68 @@ export async function getChecklistById(req: Request, res: Response) {
   }
 }
 
+export async function listChecklistFindings(req: Request, res: Response) {
+  try {
+    const dateFrom = (req.query.date_from as string) || (req.query.date as string) || '';
+    const dateTo   = (req.query.date_to   as string) || (req.query.date as string) || '';
+    const siteId   = req.query.site_id ? Number(req.query.site_id) : null;
+    const alatId   = req.query.alat_id ? Number(req.query.alat_id) : null;
+
+    const itemRepo = AppDataSource.getRepository(DailyChecklistItem);
+
+    const qb = itemRepo.createQueryBuilder('it')
+      .innerJoinAndSelect('it.daily_checklist', 'dc')
+      .innerJoinAndSelect('dc.alat', 'alat')
+      .leftJoinAndSelect('alat.jenis_alat', 'jenisAlat')
+      .leftJoinAndSelect('alat.site', 'alatSite')
+      .leftJoinAndSelect('dc.site', 'site')
+      .leftJoinAndSelect('it.question', 'question')
+      .leftJoinAndSelect('it.option', 'option')
+      // only NOK items: boolean false answers
+      .where(`(
+        LOWER(TRIM(it.answer_text)) IN ('false','0','tidak','no','n','nok')
+        OR (it.answer_text IS NULL AND it.answer_number IS NOT NULL AND it.answer_number = 0)
+      )`)
+      .orderBy('dc.performed_at', 'DESC')
+      .addOrderBy('alat.nama', 'ASC');
+
+    if (dateFrom) qb.andWhere("DATE(dc.performed_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Makassar') >= :df", { df: dateFrom });
+    if (dateTo)   qb.andWhere("DATE(dc.performed_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Makassar') <= :dt", { dt: dateTo });
+    if (siteId)   qb.andWhere('(site.id = :sid OR (site.id IS NULL AND alatSite.id = :sid))', { sid: siteId });
+    if (alatId)   qb.andWhere('alat.id = :aid', { aid: alatId });
+
+    const items = await qb.getMany();
+
+    const data = items.map(it => ({
+      id: it.id,
+      checklist_id: (it.daily_checklist as any)?.id ?? null,
+      performed_at: (it.daily_checklist as any)?.performed_at ?? null,
+      teknisi_name: (it.daily_checklist as any)?.teknisi_name ?? null,
+      alat: {
+        id:   (it.daily_checklist as any)?.alat?.id   ?? null,
+        nama: (it.daily_checklist as any)?.alat?.nama ?? null,
+        kode: (it.daily_checklist as any)?.alat?.kode ?? null,
+        jenis_alat: (it.daily_checklist as any)?.alat?.jenis_alat?.nama ?? null,
+        site: {
+          id:   (it.daily_checklist as any)?.site?.id   ?? (it.daily_checklist as any)?.alat?.site?.id   ?? null,
+          name: (it.daily_checklist as any)?.site?.name ?? (it.daily_checklist as any)?.alat?.site?.name ?? null,
+        },
+      },
+      question_text:       it.question?.question_text ?? null,
+      kelompok:            it.question?.kelompok ?? null,
+      answer_text:         it.answer_text ?? null,
+      answer_number:       it.answer_number ?? null,
+      evidence_note:       it.evidence_note ?? null,
+      evidence_photo_url:  it.evidence_photo_url ?? null,
+    }));
+
+    return res.json({ data, meta: { total: data.length } });
+  } catch (err) {
+    console.error('listChecklistFindings error', err);
+    return res.status(500).json({ message: 'Failed to list findings' });
+  }
+}
+
 export async function getMobileChecklistById(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);

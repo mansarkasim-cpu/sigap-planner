@@ -115,6 +115,7 @@ export default function Nav(){
             <ul className="sub-menu">
               <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
               <li><Link href="/daily-checklist/report" className="nav-link">Laporan</Link></li>
+              <li><Link href="/daily-checklist/temuan" className="nav-link">Laporan Temuan</Link></li>
             </ul>
           </li>
         )}
@@ -135,6 +136,7 @@ export default function Nav(){
                   {/* <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li> */}
                   <li><Link href="/monitor/daily-equipment-hour-meter" className="nav-link">Daily Equipment Hour Meter</Link></li>
                   <li><Link href="/daily-checklist/report" className="nav-link">Laporan</Link></li>
+                  <li><Link href="/daily-checklist/temuan" className="nav-link">Laporan Temuan</Link></li>
               </ul>
             </li>
             <li className="nav-item has-sub">
