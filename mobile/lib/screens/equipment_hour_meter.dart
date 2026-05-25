@@ -195,10 +195,25 @@ class _EquipmentHourMeterScreenState extends State<EquipmentHourMeterScreen> {
       // validate against previousEngineHour if exists
       try {
         final newVal = double.tryParse(engineHour);
-        if (newVal != null && previousEngineHour != null && newVal < previousEngineHour!) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Engine/hour value cannot be smaller than previous recorded value')));
-          setState(() => loading = false);
-          return;
+        if (newVal != null && previousEngineHour != null) {
+          if (newVal < previousEngineHour!) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Engine/hour value cannot be smaller than previous recorded value')));
+            setState(() => loading = false);
+            return;
+          }
+          final recordedAtTime = recordedAt ?? DateTime.now();
+          final int daysDiff = previousRecordedAt != null
+              ? (recordedAtTime.difference(previousRecordedAt!).inHours / 24).ceil().clamp(1, 9999)
+              : 1;
+          final double maxIncrease = daysDiff * 24.0;
+          if (newVal - previousEngineHour! > maxIncrease) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Kenaikan engine hour terlalu besar. Nilai sebelumnya: $previousEngineHour, maks kenaikan: ${maxIncrease.toInt()} jam ($daysDiff hari × 24 jam)'),
+              duration: const Duration(seconds: 4),
+            ));
+            setState(() => loading = false);
+            return;
+          }
         }
       } catch (_) {}
       await api.post('/monitor/equipment-hour-meter', payload);

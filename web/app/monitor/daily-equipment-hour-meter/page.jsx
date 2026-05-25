@@ -44,6 +44,10 @@ export default function DailyEquipmentHourMeter(){
   const [editForm, setEditForm] = useState({ site_id: '', alat_id: '', kode_alat: '', nama_alat: '', jenis_alat_id: '', engine_hour: '', teknisi_id: '', jam: '', notes: '' })
   const [form, setForm] = useState({ site_id: '', alat_id: '', kode_alat: '', nama_alat: '', jenis_alat_id: '', engine_hour: '', teknisi_id: '', jam: '' })
   const [formError, setFormError] = useState('')
+  const [prevEngineHour, setPrevEngineHour] = useState(null)
+  const [prevEngineHourEdit, setPrevEngineHourEdit] = useState(null)
+  const [prevRecordedAt, setPrevRecordedAt] = useState(null)
+  const [prevRecordedAtEdit, setPrevRecordedAtEdit] = useState(null)
 
   useEffect(()=>{ loadSites(); loadJenisAlats(); }, [])
 
@@ -83,6 +87,29 @@ export default function DailyEquipmentHourMeter(){
       const res = await apiClient(`/master/alats${qs}`)
       setAlats(res?.data || res || [])
     }catch(e){ console.error(e) }
+  }
+
+  async function fetchPrevEngineHour(alatId, setterHour, setterDate) {
+    if (!alatId) { setterHour(null); setterDate(null); return; }
+    try {
+      const res = await apiClient(`/monitor/equipment-hour-meter?alat_id=${encodeURIComponent(alatId)}&page=1&per_page=1`)
+      const rows = res?.items || res?.data || res || []
+      if (Array.isArray(rows) && rows.length > 0) {
+        const val = rows[0].engine_hour ?? rows[0].hour_meter ?? rows[0].value
+        setterHour(val != null ? Number(val) : null)
+        setterDate(rows[0].recorded_at || rows[0].created_at || null)
+      } else {
+        setterHour(null); setterDate(null)
+      }
+    } catch(_) { setterHour(null); setterDate(null) }
+  }
+
+  function calcMaxIncrease(newJam, prevDt) {
+    const newDate = newJam ? new Date(newJam) : new Date()
+    const prev = prevDt ? new Date(prevDt) : null
+    if (!prev) return null
+    const daysDiff = Math.max(1, Math.ceil((newDate.getTime() - prev.getTime()) / 86400000))
+    return { days: daysDiff, max: daysDiff * 24 }
   }
 
   async function loadUsers(siteFilter){
@@ -170,6 +197,7 @@ export default function DailyEquipmentHourMeter(){
               const val = e.target.value
               const selected = alats.find(a=>String(a.id)===String(val))
               setForm(f=>({ ...f, alat_id: val, kode_alat: selected?.kode || '', nama_alat: selected?.nama || '' }))
+              fetchPrevEngineHour(val, setPrevEngineHour, setPrevRecordedAt)
             }}>
               <MenuItem value="">-- Select alat --</MenuItem>
               {alats.filter(a=>{
@@ -178,7 +206,15 @@ export default function DailyEquipmentHourMeter(){
                 return matchJenis && matchSite
               }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
             </TextField>
-            <TextField size="small" label="Engine/Hour Meter" type="number" value={form.engine_hour} onChange={e=>setForm(f=>({...f, engine_hour: e.target.value}))} />
+            <TextField size="small" label="Engine/Hour Meter" type="number" value={form.engine_hour}
+              onChange={e=>setForm(f=>({...f, engine_hour: e.target.value}))}
+              helperText={(() => {
+                if (prevEngineHour == null) return 'Belum ada data sebelumnya'
+                const info = calcMaxIncrease(form.jam, prevRecordedAt)
+                return `Nilai sebelumnya: ${prevEngineHour} jam${info ? ` | Maks kenaikan: ${info.max} jam (${info.days} hari × 24 jam)` : ''}`
+              })()}
+              inputProps={{ min: 0 }}
+            />
             <TextField select size="small" label="Teknisi" value={form.teknisi_id || ''} onChange={e=>setForm(f=>({...f, teknisi_id: e.target.value}))}>
               <MenuItem value="">-- Select teknisi --</MenuItem>
               {users.map(u=> <MenuItem key={u.id} value={u.id}>{u.name} {u.nipp? `(${u.nipp})` : ''}</MenuItem>)}
@@ -192,8 +228,15 @@ export default function DailyEquipmentHourMeter(){
           <Button variant="contained" onClick={async ()=>{
             try{
               setFormError('')
-                if (!form.alat_id) return setFormError('Silakan pilih alat')
+              if (!form.alat_id) return setFormError('Silakan pilih alat')
               if (!form.engine_hour) return setFormError('Masukkan nilai engine/hour')
+              const newHour = Number(form.engine_hour)
+              if (isNaN(newHour) || newHour < 0) return setFormError('Engine hour tidak boleh negatif')
+              if (prevEngineHour != null) {
+                if (newHour < prevEngineHour) return setFormError(`Engine hour tidak boleh lebih kecil dari nilai sebelumnya (${prevEngineHour})`)
+                const info = calcMaxIncrease(form.jam, prevRecordedAt)
+                if (info && newHour - prevEngineHour > info.max) return setFormError(`Kenaikan engine hour terlalu besar. Nilai sebelumnya: ${prevEngineHour}, maks kenaikan: ${info.max} jam (${info.days} hari × 24 jam)`)
+              }
               const payload = {
                     site_id: form.site_id || siteId || undefined,
                 alat_id: form.alat_id,
@@ -248,6 +291,8 @@ export default function DailyEquipmentHourMeter(){
                           jam: it.recorded_at || it.created_at || it.time || '',
                           notes: it.notes || ''
                         })
+                        // fetch previous engine hour for this alat (excluding current entry)
+                        fetchPrevEngineHour(it.alat?.id || it.alat_id, setPrevEngineHourEdit, setPrevRecordedAtEdit)
                         // ensure teknisi list includes site technicians
                         loadUsers(it.site?.id || it.site_id || '')
                         setEditOpen(true)
@@ -294,7 +339,15 @@ export default function DailyEquipmentHourMeter(){
               }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
             </TextField>
 
-            <TextField size="small" label="Engine/Hour Meter" type="number" value={editForm.engine_hour} onChange={e=>setEditForm(f=>({...f, engine_hour: e.target.value}))} />
+            <TextField size="small" label="Engine/Hour Meter" type="number" value={editForm.engine_hour}
+              onChange={e=>setEditForm(f=>({...f, engine_hour: e.target.value}))}
+              helperText={(() => {
+                if (prevEngineHourEdit == null) return undefined
+                const info = calcMaxIncrease(editForm.jam, prevRecordedAtEdit)
+                return `Nilai sebelumnya: ${prevEngineHourEdit} jam${info ? ` | Maks kenaikan: ${info.max} jam (${info.days} hari × 24 jam)` : ''}`
+              })()}
+              inputProps={{ min: 0 }}
+            />
             <TextField select size="small" label="Teknisi" value={editForm.teknisi_id || ''} onChange={e=>setEditForm(f=>({...f, teknisi_id: e.target.value}))}>
               <MenuItem value="">-- Select teknisi --</MenuItem>
               {users.map(u=> <MenuItem key={u.id} value={u.id}>{u.name} {u.nipp? `(${u.nipp})` : ''}</MenuItem>)}
@@ -311,6 +364,13 @@ export default function DailyEquipmentHourMeter(){
               if (!editId) return setFormError('Missing id')
               if (!editForm.alat_id) return setFormError('Silakan pilih alat')
               if (!editForm.engine_hour) return setFormError('Masukkan nilai engine/hour')
+              const editHour = Number(editForm.engine_hour)
+              if (isNaN(editHour) || editHour < 0) return setFormError('Engine hour tidak boleh negatif')
+              if (prevEngineHourEdit != null) {
+                if (editHour < prevEngineHourEdit) return setFormError(`Engine hour tidak boleh lebih kecil dari nilai sebelumnya (${prevEngineHourEdit})`)
+                const info = calcMaxIncrease(editForm.jam, prevRecordedAtEdit)
+                if (info && editHour - prevEngineHourEdit > info.max) return setFormError(`Kenaikan engine hour terlalu besar. Nilai sebelumnya: ${prevEngineHourEdit}, maks kenaikan: ${info.max} jam (${info.days} hari × 24 jam)`)
+              }
               const payload = {
                 site_id: editForm.site_id || undefined,
                 alat_id: editForm.alat_id,
