@@ -328,6 +328,30 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
         .getCount();
       if (existingCount > 0) return res.status(409).json({ message: 'Entry for this equipment already exists for the selected date' });
 
+      // Validate engine_hour value against the previous recorded entry
+      if (body.engine_hour !== undefined) {
+        const newEngineHour = Number(body.engine_hour);
+        if (isNaN(newEngineHour) || newEngineHour < 0) {
+          return res.status(400).json({ message: 'Engine hour tidak boleh negatif' });
+        }
+        const prevRows: any[] = await AppDataSource.manager.query(
+          `SELECT engine_hour, recorded_at FROM daily_equipment_hour_meter WHERE alat_id = $1 AND recorded_at < $2 ORDER BY recorded_at DESC LIMIT 1`,
+          [Number(body.alat_id), recordedAt.toISOString()]
+        );
+        if (prevRows.length > 0 && prevRows[0].engine_hour != null) {
+          const prevHour = Number(prevRows[0].engine_hour);
+          const prevRecordedAt = new Date(prevRows[0].recorded_at);
+          const daysDiff = Math.max(1, Math.ceil((recordedAt.getTime() - prevRecordedAt.getTime()) / 86400000));
+          const maxIncrease = daysDiff * 24;
+          if (newEngineHour < prevHour) {
+            return res.status(400).json({ message: `Engine hour tidak boleh lebih kecil dari nilai sebelumnya (${prevHour})` });
+          }
+          if (newEngineHour - prevHour > maxIncrease) {
+            return res.status(400).json({ message: `Kenaikan engine hour terlalu besar. Nilai sebelumnya: ${prevHour}, maks kenaikan: ${maxIncrease} jam (${daysDiff} hari × 24 jam)` });
+          }
+        }
+      }
+
       const ent = repo.create({
         alat: body.alat_id ? { id: Number(body.alat_id) } : undefined,
         jenis_alat: body.jenis_alat_id ? { id: Number(body.jenis_alat_id) } : undefined,
@@ -358,7 +382,33 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       if (!existing) return res.status(404).json({ message: 'Not found' })
 
       // allow updating selected fields
-      if (body.engine_hour !== undefined) existing.engine_hour = Number(body.engine_hour)
+      if (body.engine_hour !== undefined) {
+        const newEngineHour = Number(body.engine_hour);
+        if (isNaN(newEngineHour) || newEngineHour < 0) {
+          return res.status(400).json({ message: 'Engine hour tidak boleh negatif' });
+        }
+        const alatIdForCheck = existing.alat ? (existing.alat as any).id ?? (existing.alat as any).alat_id : body.alat_id;
+        const recordedAtForCheck = body.recorded_at ? new Date(body.recorded_at) : existing.recorded_at;
+        if (alatIdForCheck) {
+          const prevRows: any[] = await AppDataSource.manager.query(
+            `SELECT engine_hour, recorded_at FROM daily_equipment_hour_meter WHERE alat_id = $1 AND recorded_at < $2 AND id != $3 ORDER BY recorded_at DESC LIMIT 1`,
+            [Number(alatIdForCheck), recordedAtForCheck.toISOString(), id]
+          );
+          if (prevRows.length > 0 && prevRows[0].engine_hour != null) {
+            const prevHour = Number(prevRows[0].engine_hour);
+            const prevRecordedAt = new Date(prevRows[0].recorded_at);
+            const daysDiff = Math.max(1, Math.ceil((recordedAtForCheck.getTime() - prevRecordedAt.getTime()) / 86400000));
+            const maxIncrease = daysDiff * 24;
+            if (newEngineHour < prevHour) {
+              return res.status(400).json({ message: `Engine hour tidak boleh lebih kecil dari nilai sebelumnya (${prevHour})` });
+            }
+            if (newEngineHour - prevHour > maxIncrease) {
+              return res.status(400).json({ message: `Kenaikan engine hour terlalu besar. Nilai sebelumnya: ${prevHour}, maks kenaikan: ${maxIncrease} jam (${daysDiff} hari × 24 jam)` });
+            }
+          }
+        }
+        existing.engine_hour = newEngineHour;
+      }
       if (body.teknisi_id !== undefined) existing.teknisi = body.teknisi_id ? { id: String(body.teknisi_id) } as any : undefined
       if (body.recorded_at !== undefined) existing.recorded_at = body.recorded_at ? new Date(body.recorded_at) : existing.recorded_at
       if (body.notes !== undefined) existing.notes = body.notes
