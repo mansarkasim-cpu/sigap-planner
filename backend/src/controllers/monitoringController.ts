@@ -442,19 +442,20 @@ export async function checklistCompliance(req: Request, res: Response) {
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     const params: any[] = [startDate, endDate];
-    const siteFilter = siteId ? `AND s.site_id = $3` : '';
+    const siteFilterAssign = siteId ? `AND s.site_id = $3` : '';
+    const siteFilterDC     = siteId ? `AND dc.site_id = $3` : '';
     if (siteId) params.push(siteId);
 
-    // One row per (schedule_date, user, assignment)
+    // One row per (schedule_date, user, asset) — includes assignments AND
+    // unassigned checklists submitted directly from mobile
     const rows: any[] = await AppDataSource.query(
-      `SELECT
+      `-- Part 1: scheduled assignments
+       SELECT
          s.date::text     AS schedule_date,
          u.id             AS user_id,
          u.name           AS user_name,
          u.nipp           AS user_nipp,
          a.status         AS assignment_status,
-         a.id             AS assignment_id,
-         a.completed_at   AS completed_at,
          al.nama          AS alat_nama,
          al.kode          AS alat_kode
        FROM daily_checklist_assignment a
@@ -462,8 +463,34 @@ export async function checklistCompliance(req: Request, res: Response) {
        JOIN "user" u ON u.id = a.user_id
        LEFT JOIN master_alat al ON al.id = a.asset_id
        WHERE s.date BETWEEN $1 AND $2
-         ${siteFilter}
-       ORDER BY u.name, s.date`,
+         ${siteFilterAssign}
+
+       UNION ALL
+
+       -- Part 2: unassigned but actually done (mobile self-submit)
+       SELECT
+         DATE(dc.performed_at)::text  AS schedule_date,
+         u.id                         AS user_id,
+         u.name                       AS user_name,
+         u.nipp                       AS user_nipp,
+         'DONE'                       AS assignment_status,
+         al.nama                      AS alat_nama,
+         al.kode                      AS alat_kode
+       FROM daily_checklist dc
+       JOIN "user" u ON u.nipp = dc.teknisi_id::text
+       LEFT JOIN master_alat al ON al.id = dc.alat_id
+       WHERE DATE(dc.performed_at) BETWEEN $1 AND $2
+         ${siteFilterDC}
+         AND NOT EXISTS (
+           SELECT 1
+           FROM daily_checklist_assignment a2
+           JOIN daily_checklist_schedule s2 ON s2.id = a2.schedule_id
+           WHERE s2.date = DATE(dc.performed_at)
+             AND a2.asset_id = dc.alat_id
+             AND a2.user_id = u.id
+         )
+
+       ORDER BY user_name, schedule_date`,
       params
     );
 
