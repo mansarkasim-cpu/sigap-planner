@@ -677,11 +677,11 @@ export default function WeeklyMonitoring(){
                           } else if (d < todayStr) {
                             statusLabel = 'MISS';
                             if (s?.assigned_teknisi) {
-                              // Teknisi sudah di-assign tapi tidak melakukan checklist → orange
-                              color = 'warning';
-                            } else {
-                              // Tidak ada yang di-assign → merah
+                              // Teknisi sudah di-assign tapi tidak melakukan checklist → merah
                               color = 'error';
+                            } else {
+                              // Tidak ada yang di-assign → orange
+                              color = 'warning';
                             }
                           } else {
                             statusLabel = 'OPEN';
