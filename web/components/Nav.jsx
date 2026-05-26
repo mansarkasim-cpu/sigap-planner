@@ -114,6 +114,7 @@ export default function Nav(){
             <span className="nav-link">Daily Checklist</span>
             <ul className="sub-menu">
               <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
+              <li><Link href="/monitor/checklist-compliance" className="nav-link">Monitoring Ketaatan Bulanan</Link></li>
               <li><Link href="/daily-checklist/report" className="nav-link">Laporan</Link></li>
               <li><Link href="/daily-checklist/temuan" className="nav-link">Laporan Temuan</Link></li>
             </ul>
@@ -135,6 +136,7 @@ export default function Nav(){
                 <li><Link href="/daily-checklist/scheduler" className="nav-link">Scheduler</Link></li>
                   {/* <li><Link href="/work-orders/daily" className="nav-link">Work Orders (Daily)</Link></li> */}
                   <li><Link href="/monitor/daily-equipment-hour-meter" className="nav-link">Daily Equipment Hour Meter</Link></li>
+                  <li><Link href="/monitor/checklist-compliance" className="nav-link">Monitoring Ketaatan Bulanan</Link></li>
                   <li><Link href="/daily-checklist/report" className="nav-link">Laporan</Link></li>
                   <li><Link href="/daily-checklist/temuan" className="nav-link">Laporan Temuan</Link></li>
               </ul>
