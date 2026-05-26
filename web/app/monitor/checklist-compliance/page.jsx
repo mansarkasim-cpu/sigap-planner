@@ -197,7 +197,7 @@ export default function ChecklistCompliancePage() {
       {/* Print-only header */}
       <Box className="print-header" sx={{ display: 'none' }}>
         <Typography variant="h6" fontWeight={700} align="center" gutterBottom>
-          Monitoring Ketaatan Daily Checklist Bulanan
+          Monitoring Performansi Daily Checklist
         </Typography>
         <Typography variant="body2" align="center" gutterBottom>
           Periode: {monthLabel(month)}{sites.find(s => String(s.id) === String(siteId)) ? ` · Site: ${sites.find(s => String(s.id) === String(siteId))?.name || siteId}` : ''}
@@ -208,7 +208,7 @@ export default function ChecklistCompliancePage() {
       </Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} mb={2}>
         <Typography variant="h5" fontWeight={700}>
-          Monitoring Ketaatan Daily Checklist Bulanan
+          Monitoring Performansi Daily Checklist
         </Typography>
         <Button
           variant="outlined"
