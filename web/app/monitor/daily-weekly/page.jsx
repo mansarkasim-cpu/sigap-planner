@@ -150,18 +150,20 @@ export default function WeeklyMonitoring(){
   const daySummaries = useMemo(()=>{
     const days = Array.isArray(data?.days) ? data.days : []
     return days.map(d => {
-      let done = 0, total = 0, doneWithNotes = 0
+      let done = 0, total = 0, doneWithNotes = 0, skipped = 0
       for (const a of filteredAlats) {
         total++
         const s = a?.statuses?.[d]
         if (s && s.done) {
           done++
           if (s.notes || s.catatan || s.has_false) doneWithNotes++
+        } else if (d < today && s?.assigned_teknisi) {
+          skipped++
         }
       }
-      return { date: d, done, total, doneWithNotes }
+      return { date: d, done, total, doneWithNotes, skipped }
     })
-  }, [data, filteredAlats])
+  }, [data, filteredAlats, today])
   const siteName = useMemo(()=>{
     try{
       if (!siteId) return 'All Sites'
@@ -526,7 +528,10 @@ export default function WeeklyMonitoring(){
                       {ds.done} / {ds.total}
                     </Typography>
                     {ds.doneWithNotes > 0 && (
-                      <Typography variant="caption" sx={{color:'warning.main'}}>{ds.doneWithNotes} w/ catatan</Typography>
+                      <Typography variant="caption" sx={{color:'warning.main', display:'block'}}>{ds.doneWithNotes} w/ catatan</Typography>
+                    )}
+                    {ds.skipped > 0 && (
+                      <Typography variant="caption" sx={{color:'warning.dark', display:'block'}}>{ds.skipped} skipped</Typography>
                     )}
                   </Paper>
                 ))}
@@ -632,7 +637,7 @@ export default function WeeklyMonitoring(){
                       const sy = y?.statuses?.[key]
                       const rank = (s) => {
                         if (s && s.done) return 0
-                        if (key < today) return 2 // missed
+                        if (key < today) return s?.assigned_teknisi ? 2 : 3 // MISS(orange) before MISS(red)
                         return 1 // open/not yet done
                       }
                       const rx = rank(sx), ry = rank(sy)
@@ -671,13 +676,27 @@ export default function WeeklyMonitoring(){
                             }
                           } else if (d < todayStr) {
                             statusLabel = 'MISS';
-                            color = 'error';
+                            if (s?.assigned_teknisi) {
+                              // Teknisi sudah di-assign tapi tidak melakukan checklist → orange
+                              color = 'warning';
+                            } else {
+                              // Tidak ada yang di-assign → merah
+                              color = 'error';
+                            }
                           } else {
                             statusLabel = 'OPEN';
                             color = 'default';
                           }
 
-                          const tip = s && s.checklist_id ? `ID: ${s.checklist_id} • ${s.performed_at || ''}` : (statusLabel === 'MISS' ? (s?.assigned_teknisi ? `Missed (no checklist) • Assigned: ${s.assigned_teknisi}` : 'Missed (no checklist)') : (statusLabel === 'OPEN' ? (s?.assigned_teknisi ? `Assigned: ${s.assigned_teknisi}` : 'Not yet assigned') : ''));
+                          const tip = s && s.checklist_id
+                            ? `ID: ${s.checklist_id} • ${s.performed_at || ''}`
+                            : statusLabel === 'MISS'
+                              ? (s?.assigned_teknisi
+                                  ? `Assigned to ${s.assigned_teknisi} but did not perform checklist`
+                                  : 'No technician assigned')
+                              : statusLabel === 'OPEN'
+                                ? (s?.assigned_teknisi ? `Assigned: ${s.assigned_teknisi}` : 'Not yet assigned')
+                                : '';
                           const chipSx = (()=>{
                             if (statusLabel === 'OPEN') return { backgroundColor: (theme)=>theme.palette.grey[300], color: (theme)=>theme.palette.text.primary, fontWeight:600 };
                             if (color === 'info') return { backgroundColor: '#f5c518', color: '#000', fontWeight:600 };
@@ -686,7 +705,7 @@ export default function WeeklyMonitoring(){
 
                           return (
                             <TableCell key={d} align="center" sx={{py:1}}>
-                              <Tooltip title={tip} arrow>
+                              <Tooltip title={tip} arrow PopperProps={isFullscreen ? { container: containerRef.current } : undefined}>
                                 <span>
                                   <Chip
                                     label={statusLabel}
