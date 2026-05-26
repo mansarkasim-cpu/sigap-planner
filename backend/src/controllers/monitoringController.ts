@@ -454,10 +454,13 @@ export async function checklistCompliance(req: Request, res: Response) {
          u.nipp           AS user_nipp,
          a.status         AS assignment_status,
          a.id             AS assignment_id,
-         a.completed_at   AS completed_at
+         a.completed_at   AS completed_at,
+         al.nama          AS alat_nama,
+         al.kode          AS alat_kode
        FROM daily_checklist_assignment a
        JOIN daily_checklist_schedule s ON s.id = a.schedule_id
        JOIN "user" u ON u.id = a.user_id
+       LEFT JOIN master_alat al ON al.id = a.asset_id
        WHERE s.date BETWEEN $1 AND $2
          ${siteFilter}
        ORDER BY u.name, s.date`,
@@ -467,7 +470,7 @@ export async function checklistCompliance(req: Request, res: Response) {
     // Group by technician
     const userMap: Record<string, {
       id: string; name: string; nipp: string | null;
-      days: Record<string, string[]>;
+      days: Record<string, { status: string; alat: string }[]>;
       total: number; done: number; skipped: number; pending: number;
     }> = {};
     const scheduleDatesSet = new Set<string>();
@@ -487,9 +490,10 @@ export async function checklistCompliance(req: Request, res: Response) {
       }
       const u = userMap[row.user_id];
       const status = String(row.assignment_status || 'PENDING').toUpperCase();
+      const alat = row.alat_nama || (row.alat_kode ? `Alat ${row.alat_kode}` : '-');
       // Collect ALL assignments per day as an array (one per asset)
       if (!u.days[date]) u.days[date] = [];
-      u.days[date].push(status);
+      u.days[date].push({ status, alat });
       u.total++;
       if (status === 'DONE') u.done++;
       else if (status === 'SKIPPED') u.skipped++;

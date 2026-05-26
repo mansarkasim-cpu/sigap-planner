@@ -47,7 +47,14 @@ function isSunday(ym, day) {
 
 function toYMD(ym, day) {
   const [y, m] = ym.split('-').map(Number)
-  return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+}
+
+function monthLabel(ym) {
+  if (!ym) return ''
+  const [y, m] = ym.split('-').map(Number)
+  const dt = new Date(y, m - 1, 1)
+  return dt.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
 }
 
 function complianceColor(pct) {
@@ -156,11 +163,15 @@ export default function ChecklistCompliancePage() {
       let done = 0, miss = 0, pending = 0
       const adjustedDays = {}
       for (const [ymd, statuses] of Object.entries(tech.days)) {
-        // statuses is now an array (one per assigned asset)
+        // statuses is now an array of {status, alat} objects
         const arr = Array.isArray(statuses) ? statuses : [statuses]
-        const effList = arr.map(s => effectiveStatus(s, ymd, today))
+        const effList = arr.map(item => {
+          const s = typeof item === 'object' ? item.status : item
+          const alat = typeof item === 'object' ? item.alat : '-'
+          return { status: effectiveStatus(s, ymd, today), alat }
+        })
         adjustedDays[ymd] = effList
-        for (const eff of effList) {
+        for (const { status: eff } of effList) {
           if (eff === 'DONE') done++
           else if (eff === 'MISS') miss++
           else pending++
@@ -183,7 +194,18 @@ export default function ChecklistCompliancePage() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      {/* Header */}
+      {/* Print-only header */}
+      <Box className="print-header" sx={{ display: 'none' }}>
+        <Typography variant="h6" fontWeight={700} align="center" gutterBottom>
+          Monitoring Ketaatan Daily Checklist Bulanan
+        </Typography>
+        <Typography variant="body2" align="center" gutterBottom>
+          Periode: {monthLabel(month)}{sites.find(s => String(s.id) === String(siteId)) ? ` · Site: ${sites.find(s => String(s.id) === String(siteId))?.name || siteId}` : ''}
+        </Typography>
+        <Typography variant="caption" align="center" display="block" sx={{ mb: 1, color: 'text.secondary' }}>
+          Dicetak: {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+        </Typography>
+      </Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} mb={2}>
         <Typography variant="h5" fontWeight={700}>
           Monitoring Ketaatan Daily Checklist Bulanan
@@ -303,7 +325,7 @@ export default function ChecklistCompliancePage() {
 
       {/* Compliance table */}
       {!loading && technicians.length > 0 && (
-        <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+        <Paper variant="outlined" sx={{ overflow: 'auto' }} className="print-table-wrapper">
           <Table size="small" stickyHeader sx={{ minWidth: 900 }}>
             <TableHead>
               <TableRow>
@@ -312,6 +334,7 @@ export default function ChecklistCompliancePage() {
                     fontWeight: 700, minWidth: 160, position: 'sticky', left: 0, zIndex: 3,
                     bgcolor: 'grey.100', borderRight: '2px solid #e0e0e0',
                   }}
+                  className="print-sticky-off"
                 >
                   Technician
                 </TableCell>
@@ -350,6 +373,7 @@ export default function ChecklistCompliancePage() {
                       position: 'sticky', left: 0, zIndex: 2, bgcolor: 'background.paper',
                       borderRight: '2px solid #e0e0e0', py: 0.75,
                     }}
+                    className="print-sticky-off"
                   >
                     <Typography variant="body2" fontWeight={600} noWrap>{tech.name}</Typography>
                     {tech.nipp && (
@@ -358,16 +382,16 @@ export default function ChecklistCompliancePage() {
                   </TableCell>
                   {daysList.map(d => {
                     const ymd = toYMD(month, d)
-                    const effList = tech.days[ymd] // string[] | undefined
+                    const effList = tech.days[ymd] // {status, alat}[] | undefined
                     const isScheduled = scheduledDatesSet.has(ymd)
                     return (
                       <TableCell key={d} align="center" sx={{ p: 0.25 }}>
                         {effList && effList.length > 0 ? (
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '2px', justifyContent: 'center' }}>
-                            {effList.map((eff, i) => {
+                            {effList.map(({ status: eff, alat }, i) => {
                               const style = STATUS_STYLE[eff] || STATUS_STYLE.MISS
                               return (
-                                <Tooltip key={i} title={`${ymd} #${i + 1}: ${STATUS_LABEL[eff] || eff}`} placement="top">
+                                <Tooltip key={i} title={`${alat} — ${STATUS_LABEL[eff] || eff}`} placement="top">
                                   <Box
                                     sx={{
                                       width: 18, height: 18, borderRadius: '3px',
@@ -413,6 +437,7 @@ export default function ChecklistCompliancePage() {
                           value={tech.compliance}
                           color={complianceColor(tech.compliance)}
                           sx={{ mt: 0.5, borderRadius: 1, height: 4 }}
+                          className="no-print"
                         />
                       </Box>
                     ) : (
@@ -436,9 +461,83 @@ export default function ChecklistCompliancePage() {
 
       {/* Print styles */}
       <style jsx global>{`
+        /* ── Print header (hidden on screen) ── */
+        .print-header { display: none; }
+
         @media print {
+          /* Page: A4 landscape, tight margins */
+          @page { size: A4 landscape; margin: 8mm 6mm; }
+
+          /* Hide everything we don't need */
           .no-print { display: none !important; }
-          body { font-size: 11px; }
+          header, nav, footer,
+          .site-header, .main-content > *:not(.print-root) { /* scoped below */ }
+
+          /* Force full-width white background */
+          html, body { background: #fff !important; font-size: 8px !important; }
+
+          /* Show the print-only header */
+          .print-header { display: block !important; margin-bottom: 6px; }
+
+          /* Remove Paper scrollable overflow so table expands */
+          .print-table-wrapper {
+            overflow: visible !important;
+            border: 1px solid #ccc !important;
+            box-shadow: none !important;
+            page-break-inside: avoid;
+          }
+
+          /* Scale the compliance table to fit the page */
+          .print-table-wrapper table {
+            width: 100% !important;
+            min-width: unset !important;
+            font-size: 7.5px !important;
+            border-collapse: collapse !important;
+          }
+
+          /* Compact cells */
+          .print-table-wrapper th,
+          .print-table-wrapper td {
+            padding: 1px 2px !important;
+            min-width: unset !important;
+          }
+
+          /* Remove sticky positioning (breaks print layout) */
+          .print-sticky-off {
+            position: static !important;
+            left: unset !important;
+            z-index: auto !important;
+          }
+
+          /* Keep background colors in print */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Status indicator boxes: slightly smaller */
+          .print-table-wrapper td > div > div {
+            width: 14px !important;
+            height: 14px !important;
+            font-size: 7px !important;
+          }
+
+          /* Chip (compliance %) — shrink */
+          .MuiChip-root {
+            height: 18px !important;
+            font-size: 7px !important;
+          }
+
+          /* Hide MUI Paper elevation shadow */
+          .MuiPaper-root {
+            box-shadow: none !important;
+          }
+
+          /* Avoid page breaks inside a technician row */
+          tbody tr { page-break-inside: avoid; }
+
+          /* Repeat table header on each printed page */
+          thead { display: table-header-group; }
         }
       `}</style>
     </Box>
