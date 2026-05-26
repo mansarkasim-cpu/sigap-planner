@@ -143,6 +143,64 @@ export default function PMHistoryPage(){
     }catch(e){ console.error(e); setError('Gagal menyimpan') }
   }
 
+  async function downloadExcel(){
+    if (!filterSiteId) return alert('Pilih site terlebih dahulu')
+    try{
+      // fetch all PM history for selected site (no alat filter)
+      const res = await apiClient(`/pm/history?site_id=${encodeURIComponent(filterSiteId)}&limit=10000`)
+      const historyAll = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : [])
+
+      // alats already loaded for the site — just sort them, no re-filter needed
+      const siteAlats = [...alats].sort((a,b) =>
+        (a.kode||'').localeCompare(b.kode||'') || (a.nama||a.name||'').localeCompare(b.nama||b.name||'')
+      )
+
+      // group history by alat_id
+      const histByAlat = {}
+      historyAll.forEach(h => {
+        const aid = String(h.alat_id ?? '')
+        if (!histByAlat[aid]) histByAlat[aid] = []
+        histByAlat[aid].push(h)
+      })
+
+      const statusLabel = { tepat_waktu:'Done (On Time)', terlambat:'Done (Late)', tidak_dikerjakan:'PM Missed' }
+      const fmt = d => { if (!d) return ''; const t = new Date(d); return `${String(t.getDate()).padStart(2,'0')}/${String(t.getMonth()+1).padStart(2,'0')}/${t.getFullYear()}` }
+
+      const rows = []
+      let no = 1
+      for (const alat of siteAlats){
+        const hists = histByAlat[String(alat.id)] || []
+        if (hists.length === 0){
+          rows.push({ 'No':no++, 'Kode Alat':alat.kode||'', 'Nama Alat':alat.nama||alat.name||'', 'Nomor Workorder':'', 'Engine Hour Meter':'', 'Status':'', 'Performed At':'', 'Notes':'' })
+        } else {
+          for (const h of hists){
+            rows.push({
+              'No': no++,
+              'Kode Alat': alat.kode || h.kode_alat || '',
+              'Nama Alat': alat.nama || alat.name || h.nama_alat || '',
+              'Nomor Workorder': h.workorder_no || h.workorder || '',
+              'Engine Hour Meter': h.engine_hour ?? '',
+              'Status': statusLabel[h.pm_tepat_waktu] || '-',
+              'Performed At': fmt(h.performed_at),
+              'Notes': h.notes || ''
+            })
+          }
+        }
+      }
+
+      if (rows.length === 0) return alert('Tidak ada data untuk diexport')
+
+      const XLSX = (await import('xlsx'))
+      const lib = XLSX.default || XLSX
+      const ws = lib.utils.json_to_sheet(rows)
+      ws['!cols'] = [8,16,30,20,18,18,16,30].map(w=>({wch:w}))
+      const wb = lib.utils.book_new()
+      lib.utils.book_append_sheet(wb, ws, 'PM History')
+      const siteName = sites.find(s=> String(s.id) === String(filterSiteId))?.name || filterSiteId
+      lib.writeFile(wb, `PM_History_${siteName}.xlsx`)
+    }catch(e){ console.error('[downloadExcel]', e); alert('Gagal export Excel: ' + (e?.message || e)) }
+  }
+
   async function handleDelete(id){
     try{
       if (!window.confirm('Yakin ingin menghapus record ini?')) return
@@ -194,6 +252,7 @@ export default function PMHistoryPage(){
               return (a.site && String(a.site.id) === String(filterSiteId)) || String(a.site_id) === String(filterSiteId)
             }).map(a=> <MenuItem key={a.id} value={a.id}>{a.nama || a.name} {a.kode? `(${a.kode})` : ''}</MenuItem>)}
           </TextField>
+          <Button variant="outlined" onClick={downloadExcel} disabled={!filterSiteId}>Download Excel</Button>
           <Button variant="contained" onClick={()=>{ setEditingId(null); setForm({ site_id:'', alat_id:'', pm_rule_id:'', engine_hour:'', performed_by:'', performed_at:'', workorder_no:'', notes:'' }); setOpen(true); }}>New PM History</Button>
         </div>
       </Box>
