@@ -425,3 +425,87 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       return res.status(500).json({ message: 'Failed to update entry' })
     }
   }
+
+// GET /api/monitor/checklist-compliance?month=YYYY-MM&site_id=X
+// Returns per-technician, per-day assignment status for the given month.
+export async function checklistCompliance(req: Request, res: Response) {
+  try {
+    const monthQ = (req.query.month as string) || '';
+    if (!monthQ || !/^\d{4}-\d{2}$/.test(monthQ)) {
+      return res.status(400).json({ message: 'month is required (format: YYYY-MM)' });
+    }
+    const siteId = req.query.site_id ? Number(req.query.site_id) : undefined;
+
+    const [year, month] = monthQ.split('-').map(Number);
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const params: any[] = [startDate, endDate];
+    const siteFilter = siteId ? `AND s.site_id = $3` : '';
+    if (siteId) params.push(siteId);
+
+    // One row per (schedule_date, user, assignment)
+    const rows: any[] = await AppDataSource.query(
+      `SELECT
+         s.date::text     AS schedule_date,
+         u.id             AS user_id,
+         u.name           AS user_name,
+         u.nipp           AS user_nipp,
+         a.status         AS assignment_status,
+         a.id             AS assignment_id,
+         a.completed_at   AS completed_at
+       FROM daily_checklist_assignment a
+       JOIN daily_checklist_schedule s ON s.id = a.schedule_id
+       JOIN "user" u ON u.id = a.user_id
+       WHERE s.date BETWEEN $1 AND $2
+         ${siteFilter}
+       ORDER BY u.name, s.date`,
+      params
+    );
+
+    // Group by technician
+    const userMap: Record<string, {
+      id: string; name: string; nipp: string | null;
+      days: Record<string, string[]>;
+      total: number; done: number; skipped: number; pending: number;
+    }> = {};
+    const scheduleDatesSet = new Set<string>();
+
+    for (const row of rows) {
+      const date = String(row.schedule_date).slice(0, 10);
+      scheduleDatesSet.add(date);
+
+      if (!userMap[row.user_id]) {
+        userMap[row.user_id] = {
+          id: row.user_id,
+          name: row.user_name || '',
+          nipp: row.user_nipp || null,
+          days: {},
+          total: 0, done: 0, skipped: 0, pending: 0,
+        };
+      }
+      const u = userMap[row.user_id];
+      const status = String(row.assignment_status || 'PENDING').toUpperCase();
+      // Collect ALL assignments per day as an array (one per asset)
+      if (!u.days[date]) u.days[date] = [];
+      u.days[date].push(status);
+      u.total++;
+      if (status === 'DONE') u.done++;
+      else if (status === 'SKIPPED') u.skipped++;
+      else u.pending++;
+    }
+
+    const technicians = Object.values(userMap).map(u => ({
+      ...u,
+      compliance: u.total > 0 ? Math.round((u.done / u.total) * 100) : null,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    const scheduleDates = Array.from(scheduleDatesSet).sort();
+
+    return res.json({ month: monthQ, site_id: siteId ?? null, scheduleDates, technicians });
+  } catch (err) {
+    console.error('checklistCompliance error', err);
+    return res.status(500).json({ message: 'Failed to compute checklist compliance' });
+  }
+}

@@ -11,5 +11,6 @@ router.get('/monitoring/daily-weekly', authMiddleware, requireRole(['planner','a
 router.get('/monitor/equipment-hour-meter', authMiddleware, requireRole(['planner','admin','technician']), ctrl.listEquipmentHourMeter);
 router.post('/monitor/equipment-hour-meter', authMiddleware, requireRole(['planner','admin','technician']), ctrl.createEquipmentHourMeter);
 router.patch('/monitor/equipment-hour-meter/:id', authMiddleware, requireRole(['planner','admin','technician']), ctrl.updateEquipmentHourMeter);
+router.get('/monitor/checklist-compliance', authMiddleware, requireRole(['planner','admin','terminal']), ctrl.checklistCompliance);
 
 export default router;
