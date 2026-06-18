@@ -69,6 +69,12 @@ export default function LoginPage(){
           try { document.cookie = `sigap_role=${encodeURIComponent(roleValue)}; Path=/; SameSite=Lax` } catch (e) {}
         }
       } catch (e) {}
+      // Trigger product tour for first-time login
+      try {
+        if (!localStorage.getItem('sigap_tour_done')) {
+          localStorage.setItem('sigap_tour_pending', '1')
+        }
+      } catch (e) {}
       router.replace('/dashboard')
     }catch(err){
       console.error('login error', err)

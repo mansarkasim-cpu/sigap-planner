@@ -19,6 +19,8 @@ import Alert from '@mui/material/Alert'
 import LinearProgress from '@mui/material/LinearProgress'
 import PrintIcon from '@mui/icons-material/Print'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import MapIcon from '@mui/icons-material/Map'
+import HelpTooltip from '../../../components/HelpTooltip'
 import apiClient from '../../../lib/api-client'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -192,6 +194,108 @@ export default function ChecklistCompliancePage() {
     return { total, done, miss, pending, compliance: total > 0 ? Math.round((done / total) * 100) : null }
   }, [technicians])
 
+  function startComplianceTour() {
+    Promise.all([
+      import('driver.js'),
+      // @ts-ignore
+      import('driver.js/dist/driver.css'),
+    ]).then(([{ driver }]) => {
+      const driverObj = driver({
+        animate: true,
+        showProgress: true,
+        progressText: 'Langkah {{current}} dari {{total}}',
+        nextBtnText: 'Lanjut →',
+        prevBtnText: '← Kembali',
+        doneBtnText: 'Selesai ✓',
+        allowClose: true,
+        overlayOpacity: 0.5,
+        smoothScroll: true,
+        steps: [
+          {
+            popover: {
+              title: '📊 Panduan Monitoring Performansi Daily Checklist',
+              description:
+                'Halaman ini menampilkan tingkat kepatuhan (<em>compliance</em>) pelaksanaan daily checklist ' +
+                'per teknisi selama satu bulan. Klik <strong>Lanjut</strong> untuk mempelajari setiap bagiannya.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+          {
+            element: '#cc-filters',
+            popover: {
+              title: '1️⃣ Filter Data',
+              description:
+                '<ul style="margin:4px 0;padding-left:18px">' +
+                '<li><strong>Bulan</strong> — pilih bulan dan tahun yang ingin dipantau.</li>' +
+                '<li><strong>Site</strong> — pilih lokasi/site yang akan dianalisis.</li>' +
+                '<li>Klik <strong>Refresh</strong> setelah mengubah filter untuk memuat ulang data.</li>' +
+                '</ul>',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#cc-summary',
+            popover: {
+              title: '2️⃣ Kartu Ringkasan Bulanan',
+              description:
+                'Ringkasan agregat seluruh teknisi untuk bulan yang dipilih:<br/><br/>' +
+                '• <strong>Total Tasks</strong> — total tugas checklist yang dijadwalkan selama sebulan.<br/>' +
+                '• <strong>Done</strong> (hijau) — jumlah checklist yang berhasil diselesaikan.<br/>' +
+                '• <strong>Pending</strong> (merah) — checklist terjadwal namun belum dikerjakan.<br/>' +
+                '• <strong>Miss</strong> (merah) — checklist yang terlewat (melewati tenggat tanpa dikerjakan).<br/>' +
+                '• <strong>Avg. Compliance</strong> — persentase rata-rata kepatuhan: <em>Done ÷ Total × 100%</em>. ' +
+                'Warna bar berubah: hijau ≥ 80%, kuning 60–79%, merah < 60%.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#cc-legend',
+            popover: {
+              title: '3️⃣ Legenda Warna Sel',
+              description:
+                'Setiap sel di tabel mewakili status checklist satu alat pada satu hari:<br/><br/>' +
+                '<span style="display:inline-block;background:#4caf50;color:#fff;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700">✓</span> <strong>Done</strong> — checklist sudah dikerjakan.<br/>' +
+                '<span style="display:inline-block;background:#f44336;color:#fff;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700">✗</span> <strong>Miss</strong> — checklist terlewat (tidak dikerjakan pada hari tersebut).<br/>' +
+                '<span style="display:inline-block;background:#ff9800;color:#fff;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700">?</span> <strong>Pending</strong> — jadwal ada tapi belum ada hasil (hari belum lewat).<br/>' +
+                '<span style="display:inline-block;background:#f5f5f5;border:1px solid #ddd;padding:1px 7px;border-radius:3px;font-size:11px">&nbsp;&nbsp;</span> <strong>Not Scheduled</strong> — tidak ada jadwal checklist pada hari ini.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#cc-table',
+            popover: {
+              title: '4️⃣ Tabel Compliance per Teknisi',
+              description:
+                'Setiap <strong>baris</strong> = satu teknisi. Setiap <strong>kolom</strong> = satu hari dalam bulan.<br/><br/>' +
+                '• Sel berisi kotak-kotak kecil berwarna — masing-masing kotak mewakili <strong>satu alat</strong> yang ditugaskan pada hari itu.<br/>' +
+                '• Hover/arahkan kursor ke kotak untuk melihat nama alat dan statusnya.<br/>' +
+                '• Kolom <strong>Compliance %</strong> di ujung kanan menampilkan persentase kepatuhan tiap teknisi beserta progress bar.<br/>' +
+                '• Gulir secara <strong>horizontal</strong> untuk melihat seluruh hari dalam bulan.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            popover: {
+              title: '🖨️ Cetak Laporan',
+              description:
+                'Gunakan tombol <strong>Cetak</strong> di pojok kanan atas untuk mencetak tabel ini sebagai laporan bulanan. ' +
+                'Header site dan periode akan otomatis muncul saat dicetak.<br/><br/>' +
+                'Klik <strong>Panduan Interaktif</strong> kapan saja untuk mengulang panduan ini.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+        ],
+      })
+      setTimeout(() => driverObj.drive(), 300)
+    })
+  }
+
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
       {/* Print-only header */}
@@ -207,22 +311,33 @@ export default function ChecklistCompliancePage() {
         </Typography>
       </Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} mb={2}>
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h5" fontWeight={700} sx={{ display:'flex', alignItems:'center', gap:0.5 }}>
           Monitoring Performansi Daily Checklist
+          <HelpTooltip title="Pantau tingkat kepatuhan (compliance) pelaksanaan daily checklist per teknisi selama satu bulan. Setiap sel menunjukkan status checklist per hari per alat." />
         </Typography>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<PrintIcon />}
-          onClick={() => window.print()}
-          className="no-print"
-        >
-          Cetak
-        </Button>
+        <Stack direction="row" gap={1} alignItems="center" className="no-print">
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<MapIcon />}
+            onClick={startComplianceTour}
+          >
+            Panduan Interaktif
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PrintIcon />}
+            onClick={() => window.print()}
+            className="no-print"
+          >
+            Cetak
+          </Button>
+        </Stack>
       </Stack>
 
       {/* Filters */}
-      <Paper variant="outlined" sx={{ p: 2, mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }} className="no-print">
+      <Paper id="cc-filters" variant="outlined" sx={{ p: 2, mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }} className="no-print">
         <TextField
           label="Bulan"
           type="month"
@@ -266,7 +381,7 @@ export default function ChecklistCompliancePage() {
 
       {/* Summary cards */}
       {totals && !loading && (
-        <Stack direction="row" gap={2} mb={2} flexWrap="wrap">
+        <Stack id="cc-summary" direction="row" gap={2} mb={2} flexWrap="wrap">
           <Paper variant="outlined" sx={{ p: 1.5, minWidth: 110, textAlign: 'center' }}>
             <Typography variant="caption" color="text.secondary">Total Tasks</Typography>
             <Typography variant="h6" fontWeight={700}>{totals.total}</Typography>
@@ -300,7 +415,7 @@ export default function ChecklistCompliancePage() {
 
       {/* Legend */}
       {!loading && technicians.length > 0 && (
-        <Stack direction="row" gap={1} mb={1.5} flexWrap="wrap" className="no-print">
+        <Stack id="cc-legend" direction="row" gap={1} mb={1.5} flexWrap="wrap" className="no-print">
           {[
             { key: 'DONE',    label: 'Done' },
             { key: 'MISS',    label: 'Miss' },
@@ -325,7 +440,7 @@ export default function ChecklistCompliancePage() {
 
       {/* Compliance table */}
       {!loading && technicians.length > 0 && (
-        <Paper variant="outlined" sx={{ overflow: 'auto' }} className="print-table-wrapper">
+        <Paper id="cc-table" variant="outlined" sx={{ overflow: 'auto' }} className="print-table-wrapper">
           <Table size="small" stickyHeader sx={{ minWidth: 900 }}>
             <TableHead>
               <TableRow>

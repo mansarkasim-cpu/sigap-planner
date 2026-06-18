@@ -13,11 +13,13 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import MapIcon from '@mui/icons-material/Map';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
+import HelpTooltip from '../../../components/HelpTooltip';
 
 function startOfMonth(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -478,10 +480,103 @@ export default function PMCalendarPage() {
     }
   }
 
+  function startPmCalendarTour() {
+    Promise.all([
+      import('driver.js'),
+      // @ts-ignore
+      import('driver.js/dist/driver.css'),
+    ]).then(([{ driver }]) => {
+      const driverObj = driver({
+        animate: true,
+        showProgress: true,
+        progressText: 'Langkah {{current}} dari {{total}}',
+        nextBtnText: 'Lanjut →',
+        prevBtnText: '← Kembali',
+        doneBtnText: 'Selesai ✓',
+        allowClose: true,
+        overlayOpacity: 0.5,
+        smoothScroll: true,
+        steps: [
+          {
+            popover: {
+              title: '🗓️ Panduan PM Calendar',
+              description:
+                'Halaman ini menampilkan kalender jadwal <strong>Preventive Maintenance (PM)</strong> untuk semua alat. ' +
+                'Klik <strong>Lanjut</strong> untuk mempelajari setiap bagiannya.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+          {
+            element: '#pm-header',
+            popover: {
+              title: '1️⃣ Filter Site & Navigasi',
+              description:
+                '<ul style="margin:4px 0;padding-left:18px">' +
+                '<li><strong>Site</strong> — pilih lokasi untuk menampilkan jadwal PM alat di site tersebut saja. Biarkan kosong untuk semua site.</li>' +
+                '<li><strong>⛶ Fullscreen</strong> — tampilkan kalender dalam mode layar penuh, cocok untuk ditampilkan di monitor ruang kontrol.</li>' +
+                '<li><strong>Refresh</strong> — muat ulang data PM dari server.</li>' +
+                '</ul>',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#pm-legend',
+            popover: {
+              title: '2️⃣ Navigasi Bulan & Legenda Warna',
+              description:
+                'Gunakan tombol <strong>&lt;</strong> dan <strong>&gt;</strong> untuk pindah bulan, atau <strong>Today</strong> untuk kembali ke bulan ini.<br/><br/>' +
+                'Legenda warna status PM:<br/>' +
+                '<span style="display:inline-block;background:#6f42c1;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">Forecast</span> — jadwal PM diprediksi jatuh pada hari ini berdasarkan jam mesin.<br/>' +
+                '<span style="display:inline-block;background:#0d6efd;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">WO Assigned</span> — Work Order PM sudah dibuat dan ditugaskan.<br/>' +
+                '<span style="display:inline-block;background:#fd7e14;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">In Progress</span> — PM sedang dikerjakan.<br/>' +
+                '<span style="display:inline-block;background:#198754;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">Done (On Time)</span> — PM selesai tepat waktu.<br/>' +
+                '<span style="display:inline-block;background:#ffc107;color:#000;padding:1px 8px;border-radius:10px;font-size:11px">Done (Late)</span> — PM selesai namun terlambat.<br/>' +
+                '<span style="display:inline-block;background:#dc3545;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">Overdue</span> — PM sudah jatuh tempo tapi belum selesai.<br/>' +
+                '<span style="display:inline-block;background:#adb5bd;color:#000;padding:1px 8px;border-radius:10px;font-size:11px">PM Missed</span> — PM terlewat tanpa dikerjakan.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#pm-calendar-grid',
+            popover: {
+              title: '3️⃣ Grid Kalender PM',
+              description:
+                'Setiap kotak = satu hari dalam bulan.<br/><br/>' +
+                '• Angka di pojok kiri = tanggal. Angka biru di pojok kanan = jumlah PM pada hari itu.<br/>' +
+                '• Setiap item PM ditampilkan dengan <strong>warna status</strong>-nya (lihat legenda).<br/>' +
+                '• <strong>Klik item PM</strong> untuk membuka detail: nama alat, engine hour, status WO, dan opsi aksi.<br/>' +
+                '• Jika ada lebih dari 3 item dalam satu hari, klik <strong>+N more</strong> untuk melihat semuanya.<br/>' +
+                '• Kotak dengan border biru = <strong>hari ini</strong>.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            popover: {
+              title: '🎉 Siap!',
+              description:
+                'Anda sudah memahami cara membaca PM Calendar. ' +
+                'Klik <strong>Panduan Interaktif</strong> kapan saja untuk mengulang panduan ini.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+        ],
+      });
+      setTimeout(() => driverObj.drive(), 300);
+    });
+  }
+
   return (
     <div id="pm-calendar-root" style={{ padding: 16, backgroundColor: isFull ? '#fff' : undefined, color: isFull ? '#000' : undefined, minHeight: isFull ? '100vh' : undefined }}>
-      <Box style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-        <h2 style={{ margin:0, color: isFull ? '#000' : undefined }}>PM Calendar</h2>
+      <Box id="pm-header" style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+        <h2 style={{ margin:0, color: isFull ? '#000' : undefined, display:'flex', alignItems:'center', gap:4 }}>
+          PM Calendar
+          <HelpTooltip title="Kalender jadwal Preventive Maintenance (PM) alat. Setiap kotak tanggal menampilkan alat yang memiliki jadwal PM pada hari tersebut." />
+        </h2>
         <div style={{ marginLeft: 12 }}>
           {isFull && siteId && (
             <Typography variant="h6" component="div" style={{ marginLeft: 8, color: '#000' }}>{(sites.find(s => String(s.id) === String(siteId)) || sites.find(s => String(s.site_id) === String(siteId)) || {}).nama_site || (sites.find(s => String(s.id) === String(siteId)) || {}).name || ''}</Typography>
@@ -506,6 +601,15 @@ export default function PMCalendarPage() {
           <IconButton size="small" onClick={toggleFullScreen} aria-label="fullscreen">
             {isFull ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
           </IconButton>
+          <Button
+            id="pm-tour-btn"
+            variant="outlined"
+            size="small"
+            startIcon={<MapIcon />}
+            onClick={startPmCalendarTour}
+          >
+            Panduan Interaktif
+          </Button>
           <Button variant="outlined" onClick={() => load()} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</Button>
         </div>
       </Box>
@@ -523,7 +627,7 @@ export default function PMCalendarPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 12, display:'flex', gap:12, alignItems:'center' }}>
+      <div id="pm-legend" style={{ marginBottom: 12, display:'flex', gap:12, alignItems:'center' }}>
         <div style={{ fontWeight:600 }}>{viewDate.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</div>
         <div style={{ display:'flex', gap:8 }}>
           <Button size="small" onClick={prevMonth}>&lt;</Button>
@@ -541,7 +645,7 @@ export default function PMCalendarPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap:16 }}>
+      <div id="pm-calendar-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap:16 }}>
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 140px)', gap: 6, width: 980, margin: '0 auto' }}>
             {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(h => (

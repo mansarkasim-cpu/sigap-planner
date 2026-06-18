@@ -23,6 +23,7 @@ import {
   Chip,
 } from '@mui/material';
 import ClearIcon from '@mui/icons-material/Clear';
+import HelpTooltip from './HelpTooltip';
 
 export default function MonthlyChecklistScheduler(){
   const [site, setSite] = useState('');
@@ -624,7 +625,7 @@ export default function MonthlyChecklistScheduler(){
 
   return (
     <Box>
-      <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+      <Stack id="scheduler-toolbar" direction="row" spacing={2} alignItems="center" mb={2}>
         <TextField select label="Site" size="small" value={site} onChange={e=>{ setSite(e.target.value); }} sx={{width:180, '& .MuiInputBase-input': { fontSize: '0.85rem' }}}>
           <MenuItem value="">-- Select site --</MenuItem>
           {sites.map(s => (<MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.id}</MenuItem>))}
@@ -648,7 +649,7 @@ export default function MonthlyChecklistScheduler(){
         </Button>
       </Stack>
 
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+      <Stack id="scheduler-summary" direction="row" justifyContent="space-between" alignItems="center" mb={1}>
         <Stack direction="row" spacing={1} alignItems="center">
           <Typography variant="body2">Technicians: <strong>{previewItems.length}</strong> — Assigned assets ({selectedDate}): <strong>{totalAssigned}</strong> / <strong>{alats.length}</strong></Typography>
           {existingSchedule && (
@@ -658,7 +659,7 @@ export default function MonthlyChecklistScheduler(){
         <Pagination count={totalPages} page={page} onChange={(e,v)=>setPage(v)} color="primary" />
       </Stack>
 
-      <Paper variant="outlined">
+      <Paper id="scheduler-table" variant="outlined">
         <TableContainer sx={{ maxHeight: '60vh' }}>
           <Table stickyHeader size="small">
             <TableHead>

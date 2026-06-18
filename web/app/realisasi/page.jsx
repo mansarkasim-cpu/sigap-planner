@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import apiClient from '../../lib/api-client'
 import { formatUtcToZone, toInputDatetime } from '../../lib/date-utils'
+import HelpTooltip from '../../components/HelpTooltip'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
@@ -471,7 +472,10 @@ export default function Page() {
 
   return (
     <main style={{ padding: 24 }}>
-      <h1>Realisasi — Completed Work Orders</h1>
+      <h1 style={{ display:'flex', alignItems:'center', gap:4 }}>
+        Realisasi — Completed Work Orders
+        <HelpTooltip title="Rekap work order yang telah selesai dikerjakan. Sertakan foto bukti pekerjaan dan catatan temuan di sini." placement="right" />
+      </h1>
       {loading ? <div>Loading...</div> : null}
 
       <Box sx={{ mb: 2 }}>

@@ -89,7 +89,7 @@ export default function Nav(){
   return (
     <nav className="nav">
       <ul className="nav-menu">
-        <li className="nav-item"><Link href="/dashboard" className="nav-link">Dashboard</Link></li>
+        <li className="nav-item" id="nav-dashboard"><Link href="/dashboard" className="nav-link">Dashboard</Link></li>
 
         {showMaster && (
           <li className="nav-item has-sub">
@@ -110,7 +110,7 @@ export default function Nav(){
           <li className="nav-item"><Link href="/monitor/pm-calendar" className="nav-link">PM Calendar</Link></li>
         )}
         {isTerminal && (
-          <li className="nav-item has-sub">
+          <li className="nav-item has-sub" id="nav-daily-checklist">
             <span className="nav-link">Daily Checklist</span>
             <ul className="sub-menu">
               <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
@@ -122,14 +122,14 @@ export default function Nav(){
         )}
         {!isTerminal && (
           <>
-            <li className="nav-item has-sub">
+            <li className="nav-item has-sub" id="nav-konfigurasi">
               <span className="nav-link">Konfigurasi</span>
               <ul className="sub-menu">
                 <li><Link href="/shifts" className="nav-link">Shift</Link></li>
               </ul>
             </li>
 
-            <li className="nav-item has-sub">
+            <li className="nav-item has-sub" id="nav-daily-checklist">
               <span className="nav-link">Daily Checklist</span>
               <ul className="sub-menu">
                   <li><Link href="/monitor/daily-weekly" className="nav-link">Weekly Monitoring</Link></li>
@@ -141,7 +141,7 @@ export default function Nav(){
                   <li><Link href="/daily-checklist/temuan" className="nav-link">Laporan Temuan</Link></li>
               </ul>
             </li>
-            <li className="nav-item has-sub">
+            <li className="nav-item has-sub" id="nav-monitor">
               <span className="nav-link">Monitor</span>
               <ul className="sub-menu">
                 <li><Link href="/monitor/pm-history" className="nav-link">PM History</Link></li>
@@ -151,7 +151,7 @@ export default function Nav(){
           </>
         )}
 
-        <li className="nav-item has-sub">
+        <li className="nav-item has-sub" id="nav-work-order">
           <span className="nav-link">Work Order</span>
             <ul className="sub-menu">
               {!isTerminal && (<li><Link href="/work-orders" className="nav-link">List</Link></li>)}
@@ -161,6 +161,20 @@ export default function Nav(){
            </ul>
         </li>
 
+        <li className="nav-item auth-item">
+          <button
+            className="nav-link"
+            style={{ background:'none', border:'none', cursor:'pointer', fontSize:'inherit', opacity:0.75 }}
+            title="Tampilkan panduan tour lagi"
+            onClick={() => {
+              try {
+                localStorage.removeItem('sigap_tour_done')
+                localStorage.setItem('sigap_tour_pending', '1')
+                window.location.href = '/dashboard'
+              } catch(e) {}
+            }}
+          >❓ Tour</button>
+        </li>
         <li className="nav-item auth-item"><AuthButton /></li>
       </ul>
     </nav>

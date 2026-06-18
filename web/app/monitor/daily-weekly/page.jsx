@@ -17,6 +17,7 @@ import apiClient from '../../../lib/api-client'
 import IconButton from '@mui/material/IconButton'
 import Link from 'next/link'
 import Tooltip from '@mui/material/Tooltip'
+import HelpTooltip from '../../../components/HelpTooltip'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -30,6 +31,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import PrintIcon from '@mui/icons-material/Print'
 import SortIcon from '@mui/icons-material/Sort'
 
+import MapIcon from '@mui/icons-material/Map'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
@@ -414,13 +416,118 @@ export default function WeeklyMonitoring(){
     }
   };
 
+  function startWeeklyMonitoringTour() {
+    Promise.all([
+      import('driver.js'),
+      // @ts-ignore
+      import('driver.js/dist/driver.css'),
+    ]).then(([{ driver }]) => {
+      const driverObj = driver({
+        animate: true,
+        showProgress: true,
+        progressText: 'Langkah {{current}} dari {{total}}',
+        nextBtnText: 'Lanjut →',
+        prevBtnText: '← Kembali',
+        doneBtnText: 'Selesai ✓',
+        allowClose: true,
+        overlayOpacity: 0.5,
+        smoothScroll: true,
+        steps: [
+          {
+            popover: {
+              title: '📋 Panduan Weekly Monitoring',
+              description:
+                'Halaman ini menampilkan rekap status daily checklist seluruh alat dalam satu minggu. ' +
+                'Klik <strong>Lanjut</strong> untuk mempelajari setiap bagiannya.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+          {
+            element: '#dw-filters',
+            popover: {
+              title: '1️⃣ Filter Data',
+              description:
+                '<ul style="margin:4px 0;padding-left:18px">' +
+                '<li><strong>Site</strong> — pilih lokasi yang ingin dipantau.</li>' +
+                '<li><strong>Jenis Alat</strong> — saring berdasarkan kategori alat.</li>' +
+                '<li><strong>Alat</strong> — pilih alat spesifik jika perlu.</li>' +
+                '<li><strong>Week Start</strong> — pilih tanggal awal minggu (Senin). Data akan menampilkan 7 hari ke depan.</li>' +
+                '<li>Klik <strong>Refresh</strong> setelah mengubah filter.</li>' +
+                '</ul>',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#dw-tour-btn',
+            popover: {
+              title: '2️⃣ Kontrol Tampilan',
+              description:
+                '• <strong>⛶ Fullscreen</strong> — perluas tampilan ke layar penuh, cocok untuk ditampilkan di monitor ruang kontrol.<br/>' +
+                '• <strong>▶ / ⏸ Auto-advance</strong> — gulir otomatis antar halaman alat (berguna saat display board).<br/>' +
+                '• <strong>↻ Auto-refresh</strong> — data diperbarui otomatis setiap 1 menit bila diaktifkan.<br/>' +
+                '• <strong>Rows</strong> — atur jumlah baris alat yang ditampilkan per halaman.',
+              side: 'bottom',
+              align: 'end',
+            },
+          },
+          {
+            element: '#dw-table',
+            popover: {
+              title: '3️⃣ Kartu Ringkasan Harian',
+              description:
+                'Di bagian atas terdapat kartu ringkasan per hari dalam minggu:<br/><br/>' +
+                '• <strong>Angka besar</strong> (misal <em>12 / 49</em>) — jumlah checklist yang sudah selesai dari total alat terjadwal.<br/>' +
+                '• <strong>n w/ catatan</strong> (kuning) — checklist selesai namun teknisi menambahkan catatan atau ada item yang tidak sesuai.<br/>' +
+                '• <strong>n skipped</strong> — checklist yang sengaja dilewati.<br/><br/>' +
+                'Klik kartu hari untuk langsung melihat detail hari tersebut.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            element: '#dw-table',
+            popover: {
+              title: '4️⃣ Tabel & Arti Warna Status',
+              description:
+                'Setiap sel menampilkan status checklist alat untuk satu hari:<br/><br/>' +
+                '<span style="display:inline-block;background:#4caf50;color:#fff;padding:1px 8px;border-radius:12px;font-weight:700;font-size:12px">DONE</span> <strong>Hijau</strong> — checklist selesai, semua item OK.<br/>' +
+                '<span style="display:inline-block;background:#f5c518;color:#000;padding:1px 8px;border-radius:12px;font-weight:700;font-size:12px">DONE</span> <strong>Kuning</strong> — selesai, tapi ada catatan atau item tidak sesuai.<br/>' +
+                '<span style="display:inline-block;background:#ff9800;color:#fff;padding:1px 8px;border-radius:12px;font-weight:700;font-size:12px">MISS</span> <strong>Oranye</strong> — terlewat, teknisi sudah ditugaskan tapi belum mengisi.<br/>' +
+                '<span style="display:inline-block;background:#f44336;color:#fff;padding:1px 8px;border-radius:12px;font-weight:700;font-size:12px">MISS</span> <strong>Merah</strong> — terlewat dan tidak ada teknisi yang ditugaskan.<br/>' +
+                '<span style="display:inline-block;background:#e0e0e0;color:#333;padding:1px 8px;border-radius:12px;font-weight:700;font-size:12px">OPEN</span> <strong>Abu-abu</strong> — belum dikerjakan (jadwal hari ini atau mendatang).<br/><br/>' +
+                'Klik chip <strong>DONE</strong> untuk melihat detail item checklist beserta foto bukti.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            popover: {
+              title: '🎉 Siap!',
+              description:
+                'Anda sudah memahami cara menggunakan Weekly Monitoring. ' +
+                'Klik ikon <strong>🗺</strong> di pojok kanan atas kapan saja untuk mengulang panduan ini.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+        ],
+      });
+      setTimeout(() => driverObj.drive(), 300);
+    });
+  }
+
   return (
     <Box sx={{p:2}}>
       <Box sx={{mb:2, position:'sticky', top:0, backgroundColor:'background.paper', zIndex:9, py:1}}>
         {/* Row 1: title + action buttons */}
-        <Box sx={{display:'flex', justifyContent:'space-between', alignItems:'center', mb:1}}>
+        <Box id="dw-header" sx={{display:'flex', justifyContent:'space-between', alignItems:'center', mb:1}}>
           <Box sx={{display:'flex',flexDirection:'column'}}>
-            <Typography variant="h5">Daily Checklist &gt; Weekly Monitoring</Typography>
+            <Typography variant="h5" sx={{display:'flex', alignItems:'center', gap:0.5}}>
+              Daily Checklist &gt; Weekly Monitoring
+              <HelpTooltip title="Pantau status pelaksanaan daily checklist seluruh alat dalam satu minggu. Warna sel menunjukkan apakah checklist sudah dikerjakan, belum, atau ada temuan." />
+            </Typography>
             <Typography variant="caption" sx={{color:'text.secondary'}}>Week: {data?.week_start || weekStart}</Typography>
           </Box>
           <Stack direction="row" spacing={0.5} alignItems="center">
@@ -456,6 +563,11 @@ export default function WeeklyMonitoring(){
                 </IconButton>
               </span>
             </Tooltip>
+            <Tooltip title="Panduan interaktif">
+              <IconButton id="dw-tour-btn" size="small" onClick={startWeeklyMonitoringTour}>
+                <MapIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <TextField
               size="small"
               label="Rows"
@@ -473,7 +585,7 @@ export default function WeeklyMonitoring(){
           </Stack>
         </Box>
         {/* Row 2: filters */}
-        <Box sx={{display:'flex', gap:1, alignItems:'center', flexWrap:'wrap'}}>
+        <Box id="dw-filters" sx={{display:'flex', gap:1, alignItems:'center', flexWrap:'wrap'}}>
           <TextField select size="small" label="Site" value={siteId} onChange={e=>setSiteId(e.target.value)} sx={{minWidth:200}}>
             <MenuItem value="">All Sites</MenuItem>
             {sites.map(s=> <MenuItem key={s.id} value={s.id}>{s.name || s.nama || s.id}</MenuItem>)}
@@ -491,7 +603,7 @@ export default function WeeklyMonitoring(){
         </Box>
       </Box>
 
-      <Paper ref={containerRef} sx={{p:2, height: '70vh', overflow: 'auto'}}>
+      <Paper id="dw-table" ref={containerRef} sx={{p:2, height: '70vh', overflow: 'auto'}}>
         {loading && <Box sx={{display:'flex',justifyContent:'center',p:4}}><CircularProgress/></Box>}
         {!loading && !data && <Typography>No data</Typography>}
         {!loading && data && (
