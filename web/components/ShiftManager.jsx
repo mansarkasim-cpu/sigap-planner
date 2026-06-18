@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import apiClient from '../lib/api-client';
 import { Button, TextField, MenuItem, Paper, IconButton, Chip, Box, Typography, Checkbox } from '@mui/material';
 import MonthlyShiftPlanner from './MonthlyShiftPlanner';
+import HelpTooltip from './HelpTooltip';
 const SITE_SHIFT_SCHEMAS = {
   MAKASSAR_NEW_PORT: [
     { id: 1, label: 'Shift 1', time: '07:00 - 15:00' },
@@ -329,8 +330,11 @@ export default function ShiftManager() {
         
       </Box>
       <Box sx={{ width: 420 }}>
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Site</Typography>
+        <Box id="shift-section-site" sx={{ mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ mb: 0.5, display: 'flex', alignItems: 'center' }}>
+            Site
+            <HelpTooltip title="Pilih site (lokasi kerja) yang ingin dikelola. Data grup dan jadwal shift akan disesuaikan dengan site yang dipilih." />
+          </Typography>
           {sites.length === 0 ? (
             <Paper sx={{ p: 2, border: '1px dashed', borderColor: 'divider', borderRadius: 1, color: 'text.secondary' }}>Tidak ada site terdaftar. Pastikan pengguna memiliki field `site` pada profil mereka.</Paper>
           ) : (
@@ -341,8 +345,22 @@ export default function ShiftManager() {
           )}
         </Box>
 
-        <Paper sx={{ p: 2, borderRadius: 2, mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>Create Group</Typography>
+        <Paper id="shift-section-create-group" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+          <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+            Create Group
+            <HelpTooltip
+              placement="right"
+              title={
+                <span>
+                  <strong>Cara membuat grup teknisi:</strong><br />
+                  1. Isi nama grup (misal: "Tim A").<br />
+                  2. Centang teknisi yang menjadi anggota grup.<br />
+                  3. (Opsional) Tentukan leader dari anggota yang dipilih.<br />
+                  4. Klik <strong>Create</strong>.
+                </span>
+              }
+            />
+          </Typography>
           <TextField placeholder="Group name" value={groupName} onChange={e => setGroupName(e.target.value)} fullWidth size="small" sx={{ mb: 1 }} />
 
           <Box sx={{ maxHeight: 260, overflow: 'auto', border: 1, borderColor: 'divider', p: 1, borderRadius: 1 }}>
@@ -378,8 +396,20 @@ export default function ShiftManager() {
           </Box>
         </Paper>
 
-        <Paper sx={{ p: 2, borderRadius: 2, mb: 2 }}>
-          <Typography variant="h6">Existing Groups</Typography>
+        <Paper id="shift-section-groups" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+            Existing Groups
+            <HelpTooltip
+              placement="right"
+              title={
+                <span>
+                  Daftar grup yang sudah dibuat untuk site ini.<br />
+                  Klik <strong>Edit</strong> untuk mengubah nama, anggota, atau leader.<br />
+                  Klik <strong>Delete</strong> untuk menghapus grup beserta semua penugasan shift-nya.
+                </span>
+              }
+            />
+          </Typography>
           {groups.length === 0 ? (
             <Typography color="text.secondary">No groups created yet.</Typography>
           ) : (
@@ -454,8 +484,23 @@ export default function ShiftManager() {
           )}
         </Paper>
 
-        <Paper sx={{ p: 2, borderRadius: 2, background: 'background.paper' }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>Assign Group to Shift</Typography>
+        <Paper id="shift-section-assign" sx={{ p: 2, borderRadius: 2, background: 'background.paper' }}>
+          <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+            Assign Group to Shift
+            <HelpTooltip
+              placement="right"
+              title={
+                <span>
+                  <strong>Cara menugaskan grup ke shift:</strong><br />
+                  1. Pilih tanggal shift yang diinginkan.<br />
+                  2. Pilih shift (Shift 1 / 2 / 3) beserta jam kerjanya.<br />
+                  3. Pilih grup yang akan bertugas.<br />
+                  4. Klik <strong>Assign</strong>.<br /><br />
+                  Hasilnya akan muncul di panel <em>Schedule</em> atau <em>Calendar</em> di kanan.
+                </span>
+              }
+            />
+          </Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
             <TextField type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} size="small" />
             <TextField select value={selectedShift} onChange={e => setSelectedShift(Number(e.target.value))} size="small">
@@ -473,9 +518,21 @@ export default function ShiftManager() {
         </Paper>
       </Box>
 
-      <Box sx={{ flex: 1 }}>
+      <Box id="shift-section-view" sx={{ flex: 1 }}>
         <Box sx={{ mb: 1.5, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ m: 0 }}>{viewMode === 'calendar' ? 'Calendar' : viewMode === 'monthly' ? 'Monthly Planner' : `Schedule — ${selectedDate}`}</Typography>
+          <Typography variant="h6" sx={{ m: 0, display: 'flex', alignItems: 'center' }}>
+            {viewMode === 'calendar' ? 'Calendar' : viewMode === 'monthly' ? 'Monthly Planner' : `Schedule — ${selectedDate}`}
+            <HelpTooltip
+              placement="bottom"
+              title={
+                <span>
+                  <strong>Schedule</strong> — lihat penugasan shift per hari yang dipilih.<br />
+                  <strong>Calendar</strong> — tampilan kalender bulanan; klik tanggal untuk pindah ke Schedule-nya.<br />
+                  <strong>Monthly Planner</strong> — atur penugasan shift untuk seluruh bulan sekaligus.
+                </span>
+              }
+            />
+          </Typography>
           <Box sx={{ ml: 1.5, display: 'flex', gap: 1 }}>
             <Button variant={viewMode === 'schedule' ? 'contained' : 'outlined'} size="small" onClick={() => setViewMode('schedule')}>Schedule</Button>
             <Button variant={viewMode === 'calendar' ? 'contained' : 'outlined'} size="small" onClick={() => setViewMode('calendar')}>Calendar</Button>

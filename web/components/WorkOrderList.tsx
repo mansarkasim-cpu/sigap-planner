@@ -616,6 +616,128 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
     }
   }
 
+  function startTaskModalTour() {
+    Promise.all([
+      import('driver.js'),
+      // @ts-ignore
+      import('driver.js/dist/driver.css'),
+    ]).then(([{ driver }]) => {
+      const driverObj = (driver as any)({
+        animate: true,
+        showProgress: true,
+        progressText: 'Langkah {{current}} dari {{total}}',
+        nextBtnText: 'Lanjut \u2192',
+        prevBtnText: '\u2190 Kembali',
+        doneBtnText: 'Selesai \u2713',
+        allowClose: true,
+        overlayOpacity: 0.45,
+        smoothScroll: true,
+        steps: [
+          {
+            popover: {
+              title: '\uD83D\uDCCB Panduan Modal Task',
+              description:
+                'Modal ini menampilkan daftar task yang harus dikerjakan untuk work order ini. ' +
+                'Di sini Anda bisa melakukan planning: menugaskan teknisi ke setiap task dan memantau status pengerjaannya.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+          {
+            element: '#task-modal-header',
+            popover: {
+              title: '1\uFE0F\u20E3 Informasi Work Order & Aksi',
+              description:
+                'Bagian atas menampilkan nomor dokumen (Doc No) dan deskripsi WO.<br/><br/>' +
+                '\u2022 <strong>Deploy</strong> \u2014 muncul saat status WO adalah ASSIGNED. Klik untuk mengubah status menjadi DEPLOYED sehingga teknisi bisa mulai mengisi realisasi.<br/>' +
+                '\u2022 <strong>Undeploy</strong> \u2014 muncul saat status DEPLOYED. Klik untuk membatalkan deploy jika ada perubahan.<br/>' +
+                '\u2022 <strong>Close</strong> \u2014 tutup modal.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#task-modal-table',
+            popover: {
+              title: '2\uFE0F\u20E3 Tabel Daftar Task',
+              description:
+                'Setiap baris = satu task dalam WO ini. Kolom yang tersedia:<br/><br/>' +
+                '\u2022 <strong>No</strong> \u2014 nomor urut task.\n' +
+                '\u2022 <strong>Task Name</strong> \u2014 nama pekerjaan yang harus dilakukan.<br/>' +
+                '\u2022 <strong>Duration</strong> \u2014 estimasi waktu pengerjaan dalam menit.<br/>' +
+                '\u2022 <strong>Assign Technicians</strong> \u2014 kolom untuk menugaskan teknisi (muncul saat WO sudah di-assign).',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            element: '#task-modal-table',
+            popover: {
+              title: '3\uFE0F\u20E3 Status Realisasi Task',
+              description:
+                'Setiap task memiliki badge status realisasi:<br/><br/>' +
+                '<span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">Realisasi \u2713</span> \u2014 task sudah dikerjakan dan realisasi sudah diisi oleh teknisi.<br/><br/>' +
+                '<span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">Pending</span> \u2014 ada realisasi yang sedang menunggu verifikasi.<br/><br/>' +
+                '<span style="background:#64748b;color:#fff;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700">Belum Realisasi</span> \u2014 task belum dikerjakan. Teknisi perlu mengisi realisasi melalui aplikasi mobile. Tombol <strong>Add Realisasi</strong> muncul di sini jika Anda memiliki akses.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            element: '#task-modal-table',
+            popover: {
+              title: '4\uFE0F\u20E3 Cara Assign Teknisi (Planning)',
+              description:
+                '<strong>Alur planning penugasan teknisi:</strong><br/><br/>' +
+                '<ol style="margin:4px 0;padding-left:18px">' +
+                '<li>Pastikan status WO sudah <strong>ASSIGNED</strong> (bukan PREPARATION).</li>' +
+                '<li>Di kolom <strong>Assign Technicians</strong>, gunakan kolom pencarian atau klik nama teknisi dari daftar chip yang dikelompokkan per shift/grup.</li>' +
+                '<li>Teknisi yang dipilih akan ditandai dengan chip berwarna biru.</li>' +
+                '<li>Klik tombol <strong>Assign</strong> untuk menyimpan penugasan.</li>' +
+                '<li>Nama teknisi yang sudah di-assign akan muncul di bawah nama task dengan tombol <strong>Unassign</strong> jika perlu dibatalkan.</li>' +
+                '</ol>',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            element: '#task-modal-actions',
+            popover: {
+              title: '5\uFE0F\u20E3 Setelah Assign: Deploy WO',
+              description:
+                'Setelah semua task memiliki teknisi yang ditugaskan:<br/><br/>' +
+                '<ol style="margin:4px 0;padding-left:18px">' +
+                '<li>Klik tombol <strong>Deploy</strong> (ungu) untuk mengubah status WO menjadi DEPLOYED.</li>' +
+                '<li>Teknisi akan menerima notifikasi dan bisa mulai mengisi realisasi melalui aplikasi mobile.</li>' +
+                '<li>Jika ada perubahan, klik <strong>Undeploy</strong> untuk kembali ke status sebelumnya.</li>' +
+                '</ol>',
+              side: 'bottom',
+              align: 'end',
+            },
+          },
+          {
+            popover: {
+              title: '\uD83C\uDF89 Siap!',
+              description:
+                'Ringkasan alur planning:<br/>' +
+                '<ol style="margin:6px 0;padding-left:18px">' +
+                '<li>Buka modal Task dari tombol \u{1F4CB} di daftar WO.</li>' +
+                '<li>Pilih teknisi di kolom <strong>Assign Technicians</strong> tiap task.</li>' +
+                '<li>Klik <strong>Assign</strong> per task.</li>' +
+                '<li>Klik <strong>Deploy</strong> untuk mengaktifkan WO.</li>' +
+                '<li>Pantau badge <strong>Realisasi \u2713</strong> saat teknisi selesai mengerjakan.</li>' +
+                '</ol>' +
+                'Klik tombol <strong>\u2753 Panduan</strong> kapan saja untuk mengulang.',
+              side: 'over',
+              align: 'center',
+            },
+          },
+        ],
+      });
+      setTimeout(() => driverObj.drive(), 200);
+    });
+  }
+
   function openCreateDialog(task: any) {
     setCreateTask(task);
     // default start/end to WO start/end or now
@@ -882,7 +1004,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+      <div id="wo-filter-bar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2 }}>
             <Select
               value={locationFilter}
@@ -960,7 +1082,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
           {error ? <Typography variant="body2" color="error">{error}</Typography> : null}
         </div>
 
-      <div>
+      <div id="wo-list">
         {isSmallScreen ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {list.map(w => {
@@ -1114,7 +1236,7 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
       {taskModal.open && taskModal.wo && (
         <Dialog open={Boolean(taskModal.open && taskModal.wo)} onClose={closeTaskModal} fullWidth maxWidth="md">
           <div style={{ background: 'white', padding: 16, width: '100%', maxWidth: 900, borderRadius: 8, maxHeight: '86vh', overflow: 'auto', boxShadow: '0 6px 30px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+            <div id="task-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Task - {taskModal.wo.doc_no ?? taskModal.wo.id}</h2>
                 <div style={{ color: '#666', fontSize: 13 }}>{resolveDescription(taskModal.wo)}</div>
@@ -1132,19 +1254,24 @@ export default function WorkOrderList({ onRefreshRequested, excludeWorkType }: P
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <div id="task-modal-actions" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'ASSIGNED' && (
                     <button onClick={() => { if (confirm('Deploy Work Order ini? Lanjutkan deploy?')) handleDeploy(taskModal.wo!.id); }} style={{ padding: '6px 10px', background: '#7c3aed', color: 'white', borderRadius: 6 }}>Deploy</button>
                   )}
                   {normalizeStatusRaw((taskModal.wo as any)?.status ?? taskModal.wo?.raw?.status ?? '').toString() === 'DEPLOYED' && (
                     <button onClick={() => handleUndeploy(taskModal.wo!.id)} style={{ padding: '6px 10px', background: '#ef4444', color: 'white', borderRadius: 6 }}>Undeploy</button>
                   )}
+                  <button
+                    onClick={() => startTaskModalTour()}
+                    style={{ padding: '6px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+                    title="Panduan interaktif modal ini"
+                  >❓ Panduan</button>
                   <button onClick={closeTaskModal} style={{ padding: '6px 10px' }}>Close</button>
                 </div>
               </div>
             </div>
 
-            <div style={{ marginBottom: 8 }}>
+            <div id="task-modal-table" style={{ marginBottom: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: '50px' }} />

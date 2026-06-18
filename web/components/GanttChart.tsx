@@ -1069,14 +1069,14 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
   return (
     <div style={{ padding: 18, fontFamily: 'Inter, system-ui, -apple-system, Roboto, "Helvetica Neue", Arial' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 30 }}>
-        <Paper elevation={1} style={{ background: '#f7fafc', padding: 12, borderBottom: '1px solid #eee' }}>
+        <Paper id="gantt-toolbar" elevation={1} style={{ background: '#f7fafc', padding: 12, borderBottom: '1px solid #eee' }}>
           <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
             <Box sx={{ minWidth: 0, pr: 2 }}>
               <Typography variant="h6" component="h2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Work Orders (per-hari)</Typography>
             </Box>
 
             <Box display="flex" alignItems="center" gap={1} sx={{ flexWrap: 'wrap' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, background: '#ffffff', padding: '6px', borderRadius: 1, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.03)' }}>
+              <Box id="gantt-filters" sx={{ display: 'flex', alignItems: 'center', gap: 1, background: '#ffffff', padding: '6px', borderRadius: 1, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.03)' }}>
                 <TextField
                   label="Tanggal"
                   type="date"
@@ -1130,7 +1130,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
                 {/* show/planned toggle hidden per UX request */}
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box id="gantt-zoom-controls" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Tooltip title="Zoom out">
                   <IconButton size="small" onClick={() => setScale(s => Math.max(0.5, s * 0.9))}><ZoomOutIcon /></IconButton>
                 </Tooltip>
@@ -1158,7 +1158,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
       </div> */}
 
       {/* status legend (color mapping for bars) */}
-      <Box display="flex" gap={1} alignItems="center" flexWrap="wrap" sx={{ mt: 1, mb: 2 }}>
+      <Box id="gantt-legend" display="flex" gap={1} alignItems="center" flexWrap="wrap" sx={{ mt: 1, mb: 2 }}>
         <Typography sx={{ fontWeight: 700, mr: 1 }}>Status colors:</Typography>
         {STATUS_ORDER.map((status) => {
           const color = STATUS_COLORS[status] || '#999';
@@ -1177,6 +1177,7 @@ export default function GanttChart({ pageSize = 2000 }: { pageSize?: number }) {
 
       {/* svg wrapper: used for fullscreen request */}
       <div
+        id="gantt-chart-body"
         ref={svgWrapperRef}
         className="gantt-svg-wrapper"
         style={{

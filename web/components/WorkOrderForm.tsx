@@ -31,7 +31,7 @@ export default function WorkOrderForm({ onCreated }: Props) {
   }
 
   return (
-    <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
+    <Paper id="wo-form" elevation={2} sx={{ p: 2, mb: 2 }}>
       <form onSubmit={handleSubmit}>
         <Stack direction="row" spacing={2} alignItems="center">
           <TextField

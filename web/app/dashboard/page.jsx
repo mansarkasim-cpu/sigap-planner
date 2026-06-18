@@ -19,6 +19,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 
 import apiClient from '../../lib/api-client'
+import HelpTooltip from '../../components/HelpTooltip'
 // Gantt preview removed from dashboard
 
 export default function Dashboard(){
@@ -84,9 +85,12 @@ export default function Dashboard(){
   return (
     <Box className="dashboard">
       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:2}}>
-        <Typography variant="h5">Planner Dashboard</Typography>
+        <Typography variant="h5">
+          Planner Dashboard
+          <HelpTooltip title="Ringkasan status seluruh work order di site Anda. Data diperbarui otomatis setiap 5 menit." />
+        </Typography>
         <Box sx={{display:'flex',gap:1,alignItems:'center'}}>
-          <Button size="small" variant="contained" onClick={() => router.push('/alats-readiness')}>Kesiapan Alat</Button>
+          <Button id="btn-alat-readiness" size="small" variant="contained" onClick={() => router.push('/alats-readiness')}>Kesiapan Alat</Button>
           <Typography>Halo, <strong>{user}</strong></Typography>
           <IconButton size="small" onClick={logout} aria-label="Logout">
             <LogoutIcon fontSize="small" />
@@ -94,7 +98,7 @@ export default function Dashboard(){
         </Box>
       </Box>
 
-      <Grid container spacing={2} sx={{mb:2}}>
+      <Grid id="tour-stats" container spacing={2} sx={{mb:2}}>
         {/* colorful stat cards */}
         <Grid item xs={12} md={3}>
           <Paper sx={{p:2, color:'#fff', background:'linear-gradient(135deg,#7b2ff7,#f107a3)', borderRadius:2, boxShadow:'0 6px 18px rgba(0,0,0,0.08)'}}>
@@ -142,11 +146,14 @@ export default function Dashboard(){
         </Grid>
       </Grid>
 
-      <Grid container spacing={2}>
+      <Grid id="tour-upcoming" container spacing={2}>
         <Grid item xs={12} md={6}>
           <Paper sx={{p:2}}>
             <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <Typography variant="h6">Upcoming (7 days)</Typography>
+              <Typography variant="h6">
+                Upcoming (7 days)
+                <HelpTooltip title="Work order yang jatuh tempo dalam 7 hari ke depan. Klik item untuk melihat detail." />
+              </Typography>
               <Button size="small" onClick={loadDashboard}>Refresh</Button>
             </Box>
             <Divider sx={{my:1}} />
