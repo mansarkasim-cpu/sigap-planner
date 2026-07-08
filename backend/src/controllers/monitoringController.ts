@@ -234,6 +234,7 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       const alatId = req.query.alat_id ? Number(req.query.alat_id) : undefined;
       const jenisAlatId = req.query.jenis_alat_id ? Number(req.query.jenis_alat_id) : undefined;
       const dateQ = (req.query.date as string) || '';
+      const beforeDateQ = (req.query.before_date as string) || '';
       const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
       const perPage = req.query.per_page ? Math.max(1, Number(req.query.per_page)) : 10;
 
@@ -249,6 +250,12 @@ export async function weeklyChecklistStatus(req: Request, res: Response) {
       if (siteId) qb.andWhere('site.id = :sid', { sid: siteId });
       if (alatId) qb.andWhere('e.alat_id = :aid', { aid: alatId });
       if (jenisAlatId) qb.andWhere('jenis.id = :jid', { jid: jenisAlatId });
+      if (beforeDateQ) {
+        const beforeParsed = new Date(beforeDateQ);
+        if (!isNaN(beforeParsed.getTime())) {
+          qb.andWhere('e.recorded_at < :beforeDate', { beforeDate: beforeParsed.toISOString() });
+        }
+      }
       if (dateQ) {
         // Expect YYYY-MM-DD. Use the site's local timezone so that dates align with
         // what users see (e.g. WIB entries before 07:00 UTC aren't shifted to the previous day).

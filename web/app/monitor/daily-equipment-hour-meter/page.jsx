@@ -89,10 +89,12 @@ export default function DailyEquipmentHourMeter(){
     }catch(e){ console.error(e) }
   }
 
-  async function fetchPrevEngineHour(alatId, setterHour, setterDate) {
+  async function fetchPrevEngineHour(alatId, setterHour, setterDate, beforeDate = null) {
     if (!alatId) { setterHour(null); setterDate(null); return; }
     try {
-      const res = await apiClient(`/monitor/equipment-hour-meter?alat_id=${encodeURIComponent(alatId)}&page=1&per_page=1`)
+      let qs = `/monitor/equipment-hour-meter?alat_id=${encodeURIComponent(alatId)}&page=1&per_page=1`
+      if (beforeDate) qs += `&before_date=${encodeURIComponent(new Date(beforeDate).toISOString())}`
+      const res = await apiClient(qs)
       const rows = res?.items || res?.data || res || []
       if (Array.isArray(rows) && rows.length > 0) {
         const val = rows[0].engine_hour ?? rows[0].hour_meter ?? rows[0].value
@@ -291,8 +293,8 @@ export default function DailyEquipmentHourMeter(){
                           jam: it.recorded_at || it.created_at || it.time || '',
                           notes: it.notes || ''
                         })
-                        // fetch previous engine hour for this alat (excluding current entry)
-                        fetchPrevEngineHour(it.alat?.id || it.alat_id, setPrevEngineHourEdit, setPrevRecordedAtEdit)
+                        // fetch previous engine hour for this alat before the edited entry's recorded_at
+                        fetchPrevEngineHour(it.alat?.id || it.alat_id, setPrevEngineHourEdit, setPrevRecordedAtEdit, it.recorded_at || it.created_at || it.time)
                         // ensure teknisi list includes site technicians
                         loadUsers(it.site?.id || it.site_id || '')
                         setEditOpen(true)
